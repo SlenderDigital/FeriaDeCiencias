@@ -1,0 +1,186 @@
+[gd_scene load_steps=5 format=3 uid="uid://gameplay_scene_v1"]
+
+[ext_resource type="Theme" uid="uid://c8neon_theme_res" path="res://resources/neon_theme.tres" id="1_theme"]
+[ext_resource type="Script" path="res://scripts/Gameplay.gd" id="2_game_script"]
+[ext_resource type="Script" path="res://scripts/NeonBackground.gd" id="3_bg_script"]
+
+[node name="Gameplay" type="Node2D"]
+script = ExtResource("2_game_script")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="Background" type="Control" parent="CanvasLayer"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("3_bg_script")
+
+[node name="HUD" type="VBoxContainer" parent="CanvasLayer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = 16.0
+offset_right = -24.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Header" type="HBoxContainer" parent="CanvasLayer/HUD"]
+layout_mode = 2
+
+[node name="TrackTitle" type="Label" parent="CanvasLayer/HUD/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = ExtResource("1_theme")
+theme_override_font_sizes/font_size = 20
+text = "CANCIÓN: CYBER GENESIS | BPM: 128"
+
+[node name="ScoreLabel" type="Label" parent="CanvasLayer/HUD/Header"]
+layout_mode = 2
+theme = ExtResource("1_theme")
+theme_override_colors/font_color = Color(1, 0.85, 0, 1)
+theme_override_font_sizes/font_size = 20
+text = "PUNTAJE: 0  |  COMBO: x0"
+
+[node name="Bottom" type="VBoxContainer" parent="CanvasLayer/HUD"]
+layout_mode = 2
+size_flags_vertical = 10
+
+[node name="ProgressBar" type="ProgressBar" parent="CanvasLayer/HUD/Bottom"]
+custom_minimum_size = Vector2(0, 12)
+layout_mode = 2
+show_percentage = false
+
+[node name="HealthBar" type="TextureProgressBar" parent="CanvasLayer/HUD/Bottom"]
+custom_minimum_size = Vector2(0, 12)
+layout_mode = 2
+value = 100.0
+
+[node name="PauseOverlay" type="Control" parent="CanvasLayer"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("1_theme")
+
+[node name="Dim" type="ColorRect" parent="CanvasLayer/PauseOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.75)
+
+[node name="Panel" type="PanelContainer" parent="CanvasLayer/PauseOverlay"]
+custom_minimum_size = Vector2(360, 320)
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -180.0
+offset_top = -160.0
+offset_right = 180.0
+offset_bottom = 160.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="CanvasLayer/PauseOverlay/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 16
+alignment = 1
+
+[node name="Title" type="Label" parent="CanvasLayer/PauseOverlay/Panel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0.94, 1, 1)
+theme_override_font_sizes/font_size = 28
+text = "JUEGO PAUSADO"
+horizontal_alignment = 1
+
+[node name="BtnResume" type="Button" parent="CanvasLayer/PauseOverlay/Panel/VBox"]
+layout_mode = 2
+text = "CONTINUAR"
+
+[node name="BtnRestart" type="Button" parent="CanvasLayer/PauseOverlay/Panel/VBox"]
+layout_mode = 2
+text = "REINICIAR NIVEL"
+
+[node name="BtnMainMenu" type="Button" parent="CanvasLayer/PauseOverlay/Panel/VBox"]
+layout_mode = 2
+text = "MENÚ PRINCIPAL"
+
+[node name="ResultsOverlay" type="Control" parent="CanvasLayer"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("1_theme")
+
+[node name="Dim" type="ColorRect" parent="CanvasLayer/ResultsOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.82)
+
+[node name="Panel" type="PanelContainer" parent="CanvasLayer/ResultsOverlay"]
+custom_minimum_size = Vector2(400, 300)
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -150.0
+offset_right = 200.0
+offset_bottom = 150.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="CanvasLayer/ResultsOverlay/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 16
+alignment = 1
+
+[node name="Title" type="Label" parent="CanvasLayer/ResultsOverlay/Panel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 1, 0.5, 1)
+theme_override_font_sizes/font_size = 28
+text = "¡CANCIÓN COMPLETADA!"
+horizontal_alignment = 1
+
+[node name="ScoreDetails" type="Label" parent="CanvasLayer/ResultsOverlay/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Puntaje Final: 0"
+horizontal_alignment = 1
+
+[node name="BtnRestartRes" type="Button" parent="CanvasLayer/ResultsOverlay/Panel/VBox"]
+layout_mode = 2
+text = "REINICIAR"
+
+[node name="BtnMainMenuRes" type="Button" parent="CanvasLayer/ResultsOverlay/Panel/VBox"]
+layout_mode = 2
+text = "MENÚ PRINCIPAL"
+
+[connection signal="pressed" from="CanvasLayer/PauseOverlay/Panel/VBox/BtnResume" to="." method="_on_btn_resume_pressed"]
+[connection signal="pressed" from="CanvasLayer/PauseOverlay/Panel/VBox/BtnRestart" to="." method="_on_btn_restart_pressed"]
+[connection signal="pressed" from="CanvasLayer/PauseOverlay/Panel/VBox/BtnMainMenu" to="." method="_on_btn_main_menu_pressed"]
+[connection signal="pressed" from="CanvasLayer/ResultsOverlay/Panel/VBox/BtnRestartRes" to="." method="_on_btn_restart_pressed"]
+[connection signal="pressed" from="CanvasLayer/ResultsOverlay/Panel/VBox/BtnMainMenuRes" to="." method="_on_btn_main_menu_pressed"]

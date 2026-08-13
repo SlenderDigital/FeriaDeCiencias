@@ -1,0 +1,412 @@
+[gd_scene load_steps=5 format=3 uid="uid://main_menu_scene_v1"]
+
+[ext_resource type="Theme" uid="uid://c8neon_theme_res" path="res://resources/neon_theme.tres" id="1_theme"]
+[ext_resource type="Script" path="res://scripts/MainMenu.gd" id="2_menu_script"]
+[ext_resource type="Script" path="res://scripts/NeonBackground.gd" id="3_bg_script"]
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("1_theme")
+script = ExtResource("2_menu_script")
+
+[node name="Background" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("3_bg_script")
+
+[node name="Layout" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 32.0
+offset_top = 24.0
+offset_right = -32.0
+offset_bottom = -24.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 20
+
+[node name="Header" type="HBoxContainer" parent="Layout"]
+custom_minimum_size = Vector2(0, 80)
+layout_mode = 2
+alignment = 1
+
+[node name="TitleContainer" type="VBoxContainer" parent="Layout/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+alignment = 1
+
+[node name="Title" type="Label" parent="Layout/Header/TitleContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0.94, 1, 1)
+theme_override_font_sizes/font_size = 42
+text = "ABSTRACT PULSE"
+
+[node name="Subtitle" type="Label" parent="Layout/Header/TitleContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.8, 0.95, 0.8)
+theme_override_font_sizes/font_size = 14
+text = "RHYTHM ACTION  //  FERIA DE CIENCIAS 2026"
+
+[node name="StatusContainer" type="VBoxContainer" parent="Layout/Header"]
+layout_mode = 2
+alignment = 2
+
+[node name="ControlBadge" type="Label" parent="Layout/Header/StatusContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0.94, 1, 1)
+theme_override_font_sizes/font_size = 14
+text = "[ TECLADO + MOUSE ]"
+horizontal_alignment = 2
+
+[node name="StatusLabel" type="Label" parent="Layout/Header/StatusContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.5, 0.9, 0.5, 0.9)
+theme_override_font_sizes/font_size = 12
+text = "● Sistema listo"
+horizontal_alignment = 2
+
+[node name="Content" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 24
+
+[node name="SideNav" type="VBoxContainer" parent="Layout/Content"]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="BtnNavPlay" type="Button" parent="Layout/Content/SideNav"]
+layout_mode = 2
+text = "JUGAR / CANCIONES"
+
+[node name="BtnNavControls" type="Button" parent="Layout/Content/SideNav"]
+layout_mode = 2
+text = "CONTROLES Y CÁMARA"
+
+[node name="BtnNavUpgrades" type="Button" parent="Layout/Content/SideNav"]
+layout_mode = 2
+text = "UPGRADES Y ESTÉTICA"
+
+[node name="BtnNavSettings" type="Button" parent="Layout/Content/SideNav"]
+layout_mode = 2
+text = "CONFIGURACIÓN"
+
+[node name="BtnNavCredits" type="Button" parent="Layout/Content/SideNav"]
+layout_mode = 2
+text = "CRÉDITOS Y FERIA"
+
+[node name="BtnNavExit" type="Button" parent="Layout/Content/SideNav"]
+layout_mode = 2
+text = "SALIR DEL JUEGO"
+
+[node name="Panels" type="PanelContainer" parent="Layout/Content"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="SongSelectPanel" type="Control" parent="Layout/Content/Panels"]
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="Layout/Content/Panels/SongSelectPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 16
+
+[node name="Header" type="Label" parent="Layout/Content/Panels/SongSelectPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0.94, 1, 1)
+theme_override_font_sizes/font_size = 22
+text = "SELECCIÓN DE CANCIÓN"
+
+[node name="TrackList" type="VBoxContainer" parent="Layout/Content/Panels/SongSelectPanel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="HSeparator" type="HSeparator" parent="Layout/Content/Panels/SongSelectPanel/VBox"]
+layout_mode = 2
+
+[node name="Details" type="VBoxContainer" parent="Layout/Content/Panels/SongSelectPanel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 10
+
+[node name="TrackTitle" type="Label" parent="Layout/Content/Panels/SongSelectPanel/VBox/Details"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0.94, 1, 1)
+theme_override_font_sizes/font_size = 26
+text = "CYBER GENESIS"
+
+[node name="TrackInfo" type="Label" parent="Layout/Content/Panels/SongSelectPanel/VBox/Details"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.85, 0.95, 0.9)
+theme_override_font_sizes/font_size = 14
+text = "Artista: SynthPulse | BPM: 128 | Duración: 2:15"
+
+[node name="TrackDesc" type="Label" parent="Layout/Content/Panels/SongSelectPanel/VBox/Details"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.75, 0.85, 0.8)
+theme_override_font_sizes/font_size = 14
+text = "Patrones rítmicos estables ideales para acostumbrarse al control por gestos."
+autowrap_mode = 3
+
+[node name="HighScoreLabel" type="Label" parent="Layout/Content/Panels/SongSelectPanel/VBox/Details"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.85, 0, 1)
+theme_override_font_sizes/font_size = 16
+text = "RÉCORD PERSONAL: 12500 PTS"
+
+[node name="BtnPlayLevel" type="Button" parent="Layout/Content/Panels/SongSelectPanel/VBox/Details"]
+custom_minimum_size = Vector2(0, 54)
+layout_mode = 2
+size_flags_vertical = 10
+theme_override_font_sizes/font_size = 20
+text = "▶ INICIAR NIVEL"
+
+[node name="ControlsPanel" type="Control" parent="Layout/Content/Panels"]
+visible = false
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="Layout/Content/Panels/ControlsPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 16
+
+[node name="Header" type="Label" parent="Layout/Content/Panels/ControlsPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0.94, 1, 1)
+theme_override_font_sizes/font_size = 22
+text = "CONFIGURACIÓN DE CONTROLES Y CÁMARA"
+
+[node name="ModeContainer" type="HBoxContainer" parent="Layout/Content/Panels/ControlsPanel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="BtnMediaPipe" type="Button" parent="Layout/Content/Panels/ControlsPanel/VBox/ModeContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "MEDIAPIPE HAND TRACKING"
+
+[node name="BtnKeyboard" type="Button" parent="Layout/Content/Panels/ControlsPanel/VBox/ModeContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "✓ TECLADO + MOUSE"
+
+[node name="Instructions" type="Label" parent="Layout/Content/Panels/ControlsPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.85, 0.95, 0.9)
+theme_override_font_sizes/font_size = 14
+text = "• Mano Izquierda / WASD: Controla el movimiento espacial de la nave.
+• Mano Derecha / Mouse: Define la orientación de apuntado y el disparo rítmico."
+autowrap_mode = 3
+
+[node name="TestBoxContainer" type="VBoxContainer" parent="Layout/Content/Panels/ControlsPanel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="LabelTest" type="Label" parent="Layout/Content/Panels/ControlsPanel/VBox/TestBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "ÁREA DE PRUEBA EN VIVO (Mueve el puntero/mano aquí):"
+
+[node name="TestBox" type="ColorRect" parent="Layout/Content/Panels/ControlsPanel/VBox/TestBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+color = Color(0.02, 0.04, 0.08, 0.9)
+
+[node name="HandCursor" type="ColorRect" parent="Layout/Content/Panels/ControlsPanel/VBox/TestBoxContainer/TestBox"]
+layout_mode = 0
+offset_right = 24.0
+offset_bottom = 24.0
+color = Color(0, 0.94, 1, 1)
+
+[node name="UpgradesPanel" type="Control" parent="Layout/Content/Panels"]
+visible = false
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="Layout/Content/Panels/UpgradesPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 16
+
+[node name="Header" type="Label" parent="Layout/Content/Panels/UpgradesPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0.94, 1, 1)
+theme_override_font_sizes/font_size = 22
+text = "PERSONALIZACIÓN VISUAL Y UPGRADES"
+
+[node name="PaletteContainer" type="HBoxContainer" parent="Layout/Content/Panels/UpgradesPanel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="BtnPaletteCyan" type="Button" parent="Layout/Content/Panels/UpgradesPanel/VBox/PaletteContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Cyan Neon"
+
+[node name="BtnPaletteMagenta" type="Button" parent="Layout/Content/Panels/UpgradesPanel/VBox/PaletteContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Cyber Magenta"
+
+[node name="BtnPaletteGold" type="Button" parent="Layout/Content/Panels/UpgradesPanel/VBox/PaletteContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Gold Flare"
+
+[node name="BtnPaletteEmerald" type="Button" parent="Layout/Content/Panels/UpgradesPanel/VBox/PaletteContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Emerald Matrix"
+
+[node name="PreviewContainer" type="VBoxContainer" parent="Layout/Content/Panels/UpgradesPanel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+alignment = 1
+
+[node name="LabelPreview" type="Label" parent="Layout/Content/Panels/UpgradesPanel/VBox/PreviewContainer"]
+layout_mode = 2
+text = "VISTA PREVIA DEL PERSONAJE / ESTELA:"
+horizontal_alignment = 1
+
+[node name="ShipPreview" type="ColorRect" parent="Layout/Content/Panels/UpgradesPanel/VBox/PreviewContainer"]
+custom_minimum_size = Vector2(100, 100)
+layout_mode = 2
+size_flags_horizontal = 4
+color = Color(0, 0.94, 1, 1)
+
+[node name="SettingsPanel" type="Control" parent="Layout/Content/Panels"]
+visible = false
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="Layout/Content/Panels/SettingsPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 16
+
+[node name="Header" type="Label" parent="Layout/Content/Panels/SettingsPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0.94, 1, 1)
+theme_override_font_sizes/font_size = 22
+text = "CONFIGURACIÓN DEL SISTEMA"
+
+[node name="Grid" type="GridContainer" parent="Layout/Content/Panels/SettingsPanel/VBox"]
+layout_mode = 2
+theme_override_constants/h_separation = 20
+theme_override_constants/v_separation = 16
+columns = 2
+
+[node name="LabelMaster" type="Label" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid"]
+layout_mode = 2
+text = "Volumen Master:"
+
+[node name="SliderMaster" type="HSlider" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid"]
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+max_value = 1.0
+step = 0.05
+value = 0.8
+
+[node name="LabelMusic" type="Label" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid"]
+layout_mode = 2
+text = "Volumen Música:"
+
+[node name="SliderMusic" type="HSlider" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid"]
+layout_mode = 2
+max_value = 1.0
+step = 0.05
+value = 0.8
+
+[node name="LabelSFX" type="Label" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid"]
+layout_mode = 2
+text = "Volumen Efectos (SFX):"
+
+[node name="SliderSFX" type="HSlider" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid"]
+layout_mode = 2
+max_value = 1.0
+step = 0.05
+value = 0.9
+
+[node name="LabelFS" type="Label" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid"]
+layout_mode = 2
+text = "Pantalla Completa:"
+
+[node name="CheckFullscreen" type="CheckButton" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid"]
+layout_mode = 2
+
+[node name="CreditsPanel" type="Control" parent="Layout/Content/Panels"]
+visible = false
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="Layout/Content/Panels/CreditsPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 14
+
+[node name="Header" type="Label" parent="Layout/Content/Panels/CreditsPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0.94, 1, 1)
+theme_override_font_sizes/font_size = 22
+text = "ACERCA DEL PROYECTO Y CRÉDITOS"
+
+[node name="InfoText" type="Label" parent="Layout/Content/Panels/CreditsPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85, 0.9, 0.98, 0.9)
+theme_override_font_sizes/font_size = 14
+text = "ABSTRACT PULSE
+Juego rítmico de acción con estética minimalista, abstracta y neón.
+
+• Referente: Bautista Prieto
+• Evento: Feria de Ciencias 2026
+• Motor de Desarrollo: Godot Engine 4.7
+• Sistema de Detección: MediaPipe Hand Tracking (WebSockets / Cámara)
+• Repositorio: https://github.com/SlenderDigital/FeriaDeCiencias.git"
+autowrap_mode = 3
+
+[connection signal="pressed" from="Layout/Content/SideNav/BtnNavPlay" to="." method="_on_btn_nav_play_pressed"]
+[connection signal="pressed" from="Layout/Content/SideNav/BtnNavControls" to="." method="_on_btn_nav_controls_pressed"]
+[connection signal="pressed" from="Layout/Content/SideNav/BtnNavUpgrades" to="." method="_on_btn_nav_upgrades_pressed"]
+[connection signal="pressed" from="Layout/Content/SideNav/BtnNavSettings" to="." method="_on_btn_nav_settings_pressed"]
+[connection signal="pressed" from="Layout/Content/SideNav/BtnNavCredits" to="." method="_on_btn_nav_credits_pressed"]
+[connection signal="pressed" from="Layout/Content/SideNav/BtnNavExit" to="." method="_on_btn_nav_exit_pressed"]
+[connection signal="pressed" from="Layout/Content/Panels/SongSelectPanel/VBox/Details/BtnPlayLevel" to="." method="_on_btn_play_level_pressed"]
+[connection signal="pressed" from="Layout/Content/Panels/ControlsPanel/VBox/ModeContainer/BtnMediaPipe" to="." method="_on_btn_mode_mediapipe_pressed"]
+[connection signal="pressed" from="Layout/Content/Panels/ControlsPanel/VBox/ModeContainer/BtnKeyboard" to="." method="_on_btn_mode_keyboard_pressed"]
+[connection signal="pressed" from="Layout/Content/Panels/UpgradesPanel/VBox/PaletteContainer/BtnPaletteCyan" to="." method="_on_btn_palette_cyan_pressed"]
+[connection signal="pressed" from="Layout/Content/Panels/UpgradesPanel/VBox/PaletteContainer/BtnPaletteMagenta" to="." method="_on_btn_palette_magenta_pressed"]
+[connection signal="pressed" from="Layout/Content/Panels/UpgradesPanel/VBox/PaletteContainer/BtnPaletteGold" to="." method="_on_btn_palette_gold_pressed"]
+[connection signal="pressed" from="Layout/Content/Panels/UpgradesPanel/VBox/PaletteContainer/BtnPaletteEmerald" to="." method="_on_btn_palette_emerald_pressed"]
+[connection signal="value_changed" from="Layout/Content/Panels/SettingsPanel/VBox/Grid/SliderMaster" to="." method="_on_slider_master_value_changed"]
+[connection signal="value_changed" from="Layout/Content/Panels/SettingsPanel/VBox/Grid/SliderMusic" to="." method="_on_slider_music_value_changed"]
+[connection signal="value_changed" from="Layout/Content/Panels/SettingsPanel/VBox/Grid/SliderSFX" to="." method="_on_slider_sfx_value_changed"]
+[connection signal="toggled" from="Layout/Content/Panels/SettingsPanel/VBox/Grid/CheckFullscreen" to="." method="_on_check_fullscreen_toggled"]

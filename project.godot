@@ -12,9 +12,15 @@ config_version=5
 
 config/name="Abstract Pulse"
 config/description="Juego rítmico de acción con estética minimalista, abstracta y neón. Control por manos con MediaPipe."
-run/main_scene="res://scenes/Main.tscn"
+run/main_scene="res://scenes/MainMenu.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
+
+[autoload]
+
+GameManager="*res://scripts/GameManager.gd"
+SoundManager="*res://scripts/SoundManager.gd"
+_mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [display]
 
