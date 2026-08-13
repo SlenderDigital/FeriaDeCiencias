@@ -21,6 +21,10 @@ config/icon="res://icon.svg"
 window/size/viewport_width=1280
 window/size/viewport_height=720
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg")
+
 [rendering]
 
 environment/defaults/default_clear_color=Color(0.05, 0.05, 0.08, 1)
