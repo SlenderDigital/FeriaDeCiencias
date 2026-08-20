@@ -1,115 +1,115 @@
-# Workplan — Abstract Pulse
-*Last updated: 2026-08-20*
+# Plan de Trabajo — Abstract Pulse
+*Última actualización: 2026-08-20*
 
-## Today's Completed Work (Anti-Slop UI Redesign)
+## Trabajo Completado Hoy (Rediseño Anti-Slop de la UI)
 
-### Visual World Replacement
-**Before**: Generic "neon cyberpunk" template — dark synth gradient, cyan perspective grid, magenta secondary, glow-bordered panels, floating particles. Read as AI-slop category template.
+### Reemplazo del Mundo Visual
+**Antes**: Plantilla genérica "neon cyberpunk" — gradiente synth oscuro, cuadrícula perspectiva cian, magenta secundario, paneles con bordes brillantes, partículas flotantes. Se leía como plantilla de categoría IA.
 
-**After**: **Modular Synth Patchbay** — the actual instrument paradigm behind the music.
-- Each track = a Eurorack module panel (rack-mounted side by side)
-- Selection = patching a cable from clock source → module's GATE jack
-- "PATCH IN" = completing the patch, launching the sequence
-- Per-track color = data, not decor (only on selected module's LED ring + jack nut)
+**Después**: **Patchbay de Sintetizador Modular** — el paradigma real del instrumento detrás de la música.
+- Cada pista = un panel de módulo Eurorack (montados en rack uno al lado del otro)
+- Selección = parchear un cable desde la fuente de clock → jack GATE del módulo
+- "PATCH IN" = completar el parche, lanzar la secuencia
+- Color por pista = dato, no decoración (solo en anillo LED del módulo seleccionado + tuerca del jack)
 
-### Files Created
+### Archivos Creados
 
-| File | Purpose |
-|------|---------|
-| `PRODUCT.md` | Product truth: users, purpose, positioning, capabilities, constraints |
-| `DESIGN.md` | Durable visual world rules: palette, typography, components, topology, motion |
-| `resources/patchbay_theme.tres` | 4-role theme: panel/silkscreen/signal/track; themed Button, ProgressBar, TextureProgressBar, HSlider, CheckButton |
-| `scripts/MenuBackground.gd` | Fresh background script (replaces corrupted NeonBackground.gd) |
-| `scripts/PatchbayModule.gd` | Self-building module panel: model/BPM/stars/jack + LED ring beat pulse |
-| `scripts/PatchCable.gd` | Animated bezier cable with voltage dash flow on beat |
-| `scripts/SettingsOverlay.gd` / `.tscn` | Slide-down settings (volume, fullscreen) |
-| `scripts/CreditsOverlay.gd` / `.tscn` | Slide-down credits |
+| Archivo | Propósito |
+|---------|-----------|
+| `PRODUCT.md` | Verdad del producto: usuarios, propósito, posicionamiento, capacidades, restricciones |
+| `DESIGN.md` | Reglas duraderas del mundo visual: paleta, tipografía, componentes, topología, movimiento |
+| `resources/patchbay_theme.tres` | Tema de 4 roles: panel/silkscreen/signal/track; Button, ProgressBar, TextureProgressBar, HSlider, CheckButton tematizados |
+| `scripts/MenuBackground.gd` | Script de fondo fresco (reemplaza NeonBackground.gd corrupto) |
+| `scripts/PatchbayModule.gd` | Panel de módulo auto-construido: modelo/BPM/estrellas/jack + anillo LED con pulso en beat |
+| `scripts/PatchCable.gd` | Cable bezier animado con flujo de voltaje (dashes) en el beat |
+| `scripts/SettingsOverlay.gd` / `.tscn` | Panel deslizante de ajustes (volumen, pantalla completa) |
+| `scripts/CreditsOverlay.gd` / `.tscn` | Panel deslizante de créditos |
 
-### Files Rewritten
+### Archivos Reescritos
 
-| File | Changes |
-|------|---------|
-| `scenes/MainMenu.tscn` | Track-list-first hero: 3 rack modules + top rail icons + expandable PATCH IN panel |
-| `scenes/Gameplay.tscn` | Patchbay HUD: top rail (track + score), bottom rail (HEALTH red + PROGRESS green) |
-| `scripts/MainMenu.gd` | Module selection, patch cable animation, overlay management |
-| `scripts/Gameplay.gd` | New HUD node paths, patchbay grammar |
-| `scripts/GameManager.gd` | Removed unused `camera_flipped` |
+| Archivo | Cambios |
+|---------|---------|
+| `scenes/MainMenu.tscn` | Hero track-list-first: 3 módulos en rack + top rail con iconos + panel PATCH IN expandible |
+| `scenes/Gameplay.tscn` | HUD patchbay: top rail (pista + score), bottom rail (HEALTH rojo + PROGRESS verde) |
+| `scripts/MainMenu.gd` | Selección de módulos, animación cable de parche, gestión de overlays |
+| `scripts/Gameplay.gd` | Nuevos paths de nodos HUD, gramática patchbay |
+| `scripts/GameManager.gd` | Eliminado `camera_flipped` sin usar |
 
-### Files Deleted
-- `scenes/Main.tscn` + `scripts/Main.gd` (vestigial)
-- `scripts/NeonBackground.gd` (corrupted cache source)
-- `scripts/GameplayBackground.gd` (unused copy)
+### Archivos Eliminados
+- `scenes/Main.tscn` + `scripts/Main.gd` (vestigiales)
+- `scripts/NeonBackground.gd` (fuente de caché corrupto)
+- `scripts/GameplayBackground.gd` (copia sin usar)
 
-### Key Design Decisions
-1. **4-role palette only**: `panel` (canvas), `silkscreen` (text), `signal` (primary CTA + beat only), `track` (per-song data)
-2. **No cyan monoculture**: Cyan appears only as track data on its own module
-3. **Primary action prominent**: Green "PATCH IN" is the only filled button; EXIT is ghost
-4. **Focus ≠ Hover**: Distinct 2px signal ring for keyboard accessibility (WCAG)
-5. **One authored motion**: Patch cable seating + beat pulse on LED ring (no ambient flicker)
-6. **No placeholder art**: Ship preview = drawn module; hand cursor = vector crosshair
+### Decisiones Clave de Diseño
+1. **Paleta de 4 roles únicamente**: `panel` (canvas), `silkscreen` (texto), `signal` (CTA primario + beat), `track` (dato por canción)
+2. **Sin monocultivo cian**: El cian aparece solo como dato de pista en su propio módulo
+3. **Acción principal prominente**: Botón verde "PATCH IN" es el único botón relleno; SALIR es ghost
+4. **Foco ≠ Hover**: Anillo signal 2px distinto para accesibilidad teclado (WCAG)
+5. **Una sola animación autorada**: Animación de encaje del cable + pulso en anillo LED (sin flicker ambiental)
+6. **Sin arte placeholder**: Preview nave = módulo dibujado; cursor mano = crosshair vectorial
 
-### Verification Status
-- ✅ MainMenu runs with helper live, zero errors
-- ✅ Three modules show correct data: CYBER GENESIS (128 BPM ★), NEON RUSH (145 BPM ★★), OVERDRIVE PULSE (170 BPM ★★★)
-- ✅ Selected module: cyan outline, LED ring pulse on beat, green patch cable → GATE jack
-- ✅ Each GATE jack shows track color (cyan/pink/yellow)
-- ✅ Top rail icons (⚙/i/✕) open slide-down overlays
-- ✅ Bottom panel: description + high score + green PATCH IN button
-- ✅ No NeonBackground.gd cache errors (clean editor state after plugin reload)
-
----
-
-## Partner Work: Facundo Guinazu — MediaPipe Controls
-*Status: In progress (not tracked in this repo yet)*
-
-**Scope**: Hand tracking via MediaPipe for hand-controlled gameplay
-- Left hand → ship movement (spatial displacement)
-- Right hand → aim orientation + rhythmic fire
-- Camera input → MediaPipe landmarks → Godot via WebSocket / local bridge
-- Fallback: keyboard+mouse already implemented and tested
-
-**Integration Points Needed**:
-- `GameManager.control_mode` = "MediaPipe" | "KeyboardMouse" (already exposed)
-- MediaPipe data → ship `player_pos` + aim angle + fire trigger in `Gameplay.gd`
-- Calibration UI (already stubbed in MainMenu Controls panel)
-
-**Next Steps for Integration**:
-1. MediaPipe Python/JS service sending landmark data
-2. Bridge (WebSocket / UDP / local pipe) to Godot autoload
-3. Map landmarks → normalized screen coordinates → game actions
-4. Test at Feria booth (2×2m space, camera position, lighting)
+### Estado de Verificación
+- ✅ MainMenu corre con helper live, cero errores
+- ✅ Tres módulos muestran datos correctos: CYBER GENESIS (128 BPM ★), NEON RUSH (145 BPM ★★), OVERDRIVE PULSE (170 BPM ★★★)
+- ✅ Módulo seleccionado: borde cian, anillo LED pulsa en beat, cable verde patch cable → jack GATE
+- ✅ Cada jack GATE muestra color de pista (cian/rosa/amarillo)
+- ✅ Iconos top rail (⚙/i/✕) abren overlays deslizantes
+- ✅ Panel inferior: descripción + récord + botón verde PATCH IN
+- ✅ Sin errores de caché NeonBackground.gd (estado limpio tras reload plugin)
 
 ---
 
-## Remaining / Future Work
+## Trabajo del Compañero: Facundo Guinazu — Controles MediaPipe
+*Estado: En progreso (no trackeado en este repo aún)*
 
-| Priority | Task | Owner |
-|----------|------|-------|
-| High | MediaPipe hand-tracking integration | Facundo |
-| High | Real song audio + beat-synced spawn patterns | TBD |
-| Medium | Procedural level generation per-track | TBD |
-| Medium | High-score persistence (file/JSON) | TBD |
-| Low | Custom font (requires .ttf asset) | TBD |
-| Low | Export templates (Linux/Windows/Web) | TBD |
+**Alcance**: Tracking de manos via MediaPipe para gameplay controlado por manos
+- Mano izquierda → movimiento nave (desplazamiento espacial)
+- Mano derecha → orientación puntería + disparo rítmico
+- Entrada cámara → landmarks MediaPipe → Godot via WebSocket / bridge local
+- Fallback: teclado+ratón ya implementado y testeado
+
+**Puntos de Integración Necesarios**:
+- `GameManager.control_mode` = "MediaPipe" | "KeyboardMouse" (ya expuesto)
+- Datos MediaPipe → `player_pos` nave + ángulo puntería + trigger disparo en `Gameplay.gd`
+- UI calibración (ya stubbed en panel Controles MainMenu)
+
+**Próximos Pasos para Integración**:
+1. Servicio MediaPipe Python/JS enviando landmarks
+2. Bridge (WebSocket / UDP / pipe local) a autoload Godot
+3. Mapear landmarks → coordenadas pantalla normalizadas → acciones juego
+4. Test en stand Feria (espacio 2×2m, posición cámara, iluminación)
 
 ---
 
-## Quick Commands
+## Trabajo Pendiente / Futuro
+
+| Prioridad | Tarea | Responsable |
+|-----------|-------|-------------|
+| Alta | Integración hand-tracking MediaPipe | Facundo |
+| Alta | Audio real canciones + patrones spawn sincronizados beat | TBD |
+| Media | Generación procedural niveles por pista | TBD |
+| Media | Persistencia high-scores (archivo/JSON) | TBD |
+| Baja | Fuente custom (requiere asset .ttf) | TBD |
+| Baja | Templates export (Linux/Windows/Web) | TBD |
+
+---
+
+## Comandos Rápidos
 ```bash
-# Run main menu
+# Ejecutar menú principal
 godot --path /home/slender/Projects/FeriaDeCiencias
 
-# Run gameplay scene directly
+# Ejecutar escena gameplay directo
 godot --path /home/slender/Projects/FeriaDeCiencias --scene res://scenes/Gameplay.tscn
 
-# Check for script errors
+# Verificar errores script
 godot --path /home/slender/Projects/FeriaDeCiencias --script res://scripts/MainMenu.gd
 ```
 
 ---
 
-## Notes for Next Session
-- MediaPipe integration is the critical path for Feria demo
-- Gameplay HUD bars (HEALTH/PROGRESS) need real-time updates verified in playtest
-- "PATCH IN" → Gameplay transition works but needs end-to-end test with MediaPipe controls
-- Consider adding a brief "HOW TO PLAY" overlay for first-time booth visitors
+## Notas para Próxima Sesión
+- Integración MediaPipe es ruta crítica para demo Feria
+- Barras HUD gameplay (HEALTH/PROGRESS) necesitan verificación tiempo real en playtest
+- Transición "PATCH IN" → Gameplay funciona pero necesita test end-to-end con controles MediaPipe
+- Considerar overlay breve "CÓMO JUGAR" para visitantes primerizos del stand
