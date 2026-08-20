@@ -59,7 +59,7 @@
 
 ---
 
-## Trabajo del Compañero: Facundo Guinazu — Controles MediaPipe
+## Controles MediaPipe
 *Estado: En progreso (no trackeado en este repo aún)*
 
 **Alcance**: Tracking de manos via MediaPipe para gameplay controlado por manos
