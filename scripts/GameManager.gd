@@ -79,7 +79,6 @@ const SHIP_PALETTES: Dictionary = {
 var current_track_index: int = 0
 var control_mode: String = MODE_KEYBOARD
 var hand_sensitivity: float = 1.2
-var camera_flipped: bool = true
 
 # Upgrades Equipped
 var equipped_ship_palette: String = "cyan_neon"

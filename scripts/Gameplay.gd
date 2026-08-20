@@ -2,11 +2,10 @@ extends Node2D
 ## Gameplay — Rhythm Action Gameplay Scene for Abstract Pulse
 ## Runs the selected track, controls player ship, spawns rhythm beat targets, handles score/health, and pause overlay.
 
-@onready var bg_control: Control = $CanvasLayer/Background
-@onready var track_title_lbl: Label = $CanvasLayer/HUD/Header/TrackTitle
-@onready var score_lbl: Label = $CanvasLayer/HUD/Header/ScoreLabel
-@onready var health_bar: TextureProgressBar = $CanvasLayer/HUD/Bottom/HealthBar
-@onready var progress_bar: ProgressBar = $CanvasLayer/HUD/Bottom/ProgressBar
+@onready var track_title_lbl: Label = $CanvasLayer/HUD/TopRail/TrackTitle
+@onready var score_lbl: Label = $CanvasLayer/HUD/TopRail/ScoreLabel
+@onready var health_bar: ProgressBar = $CanvasLayer/HUD/BottomRail/HealthBar
+@onready var progress_bar: ProgressBar = $CanvasLayer/HUD/BottomRail/ProgressBar
 @onready var pause_overlay: Control = $CanvasLayer/PauseOverlay
 @onready var results_overlay: Control = $CanvasLayer/ResultsOverlay
 @onready var results_title_lbl: Label = $CanvasLayer/ResultsOverlay/Panel/VBox/Title

@@ -1,0 +1,116 @@
+[gd_resource type="Theme" format=3 uid="uid://c1s6la5cgxauj"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_icon_btn"]
+bg_color = Color(0.08, 0.08, 0.12, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+shadow_color = Color(0, 0, 0, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_icon_btn_focus"]
+bg_color = Color(0.08, 0.08, 0.12, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.55, 0.9, 0.15, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+shadow_color = Color(0, 0, 0, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_icon_btn_hover"]
+bg_color = Color(0.12, 0.12, 0.18, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+shadow_color = Color(0, 0, 0, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hslider_groove"]
+bg_color = Color(0.12, 0.12, 0.18, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+shadow_color = Color(0, 0, 0, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hslider_fill"]
+bg_color = Color(0.55, 0.9, 0.15, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+shadow_color = Color(0, 0, 0, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+bg_color = Color(0.08, 0.08, 0.12, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.85, 0.85, 0.9, 0.3)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+shadow_color = Color(0, 0, 0, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_progress_bg"]
+bg_color = Color(0.12, 0.12, 0.18, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+shadow_color = Color(0, 0, 0, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_progress_fill"]
+bg_color = Color(0.55, 0.9, 0.15, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+shadow_color = Color(0, 0, 0, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_health_bg"]
+bg_color = Color(0.12, 0.12, 0.18, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+shadow_color = Color(0, 0, 0, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_health_fill"]
+bg_color = Color(0.9, 0.2, 0.2, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+shadow_color = Color(0, 0, 0, 0)
+
+[resource]
+default_font_size = 16
+Button/colors/font_color = Color(0.85, 0.85, 0.9, 1)
+Button/colors/font_disabled_color = Color(0.85, 0.85, 0.9, 0.4)
+Button/colors/font_focus_color = Color(0.55, 0.9, 0.15, 1)
+Button/colors/font_hover_color = Color(0.55, 0.9, 0.15, 1)
+Button/colors/font_pressed_color = Color(0.08, 0.08, 0.12, 1)
+Button/styles/disabled = SubResource("StyleBoxFlat_icon_btn")
+Button/styles/focus = SubResource("StyleBoxFlat_icon_btn_focus")
+Button/styles/hover = SubResource("StyleBoxFlat_icon_btn_hover")
+Button/styles/normal = SubResource("StyleBoxFlat_icon_btn")
+Button/styles/pressed = SubResource("StyleBoxFlat_icon_btn_hover")
+CheckButton/colors/font_color = Color(0.85, 0.85, 0.9, 1)
+HSeparator/styles/separator = SubResource("StyleBoxFlat_hslider_groove")
+HSlider/styles/background = SubResource("StyleBoxFlat_hslider_groove")
+HSlider/styles/fill = SubResource("StyleBoxFlat_hslider_fill")
+HSlider/styles/grabber = SubResource("StyleBoxFlat_hslider_fill")
+HSlider/styles/grabber_highlight = SubResource("StyleBoxFlat_hslider_fill")
+Label/colors/font_color = Color(0.85, 0.85, 0.9, 1)
+PanelContainer/styles/panel = SubResource("StyleBoxFlat_panel")
+ProgressBar/styles/background = SubResource("StyleBoxFlat_progress_bg")
+ProgressBar/styles/fill = SubResource("StyleBoxFlat_progress_fill")
+TextureProgressBar/styles/background = SubResource("StyleBoxFlat_health_bg")
+TextureProgressBar/styles/fill = SubResource("StyleBoxFlat_health_fill")
