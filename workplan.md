@@ -83,14 +83,14 @@
 
 ## Trabajo Pendiente / Futuro
 
-| Prioridad | Tarea | Responsable |
-|-----------|-------|-------------|
-| Alta | Integración hand-tracking MediaPipe | Facundo |
-| Alta | Audio real canciones + patrones spawn sincronizados beat | TBD |
-| Media | Generación procedural niveles por pista | TBD |
-| Media | Persistencia high-scores (archivo/JSON) | TBD |
-| Baja | Fuente custom (requiere asset .ttf) | TBD |
-| Baja | Templates export (Linux/Windows/Web) | TBD |
+| Prioridad | Tarea |
+|-----------|-------|
+| Alta | Integración hand-tracking MediaPipe | 
+| Alta | Audio real canciones + patrones spawn sincronizados beat |
+| Media | Generación procedural niveles por pista | 
+| Media | Persistencia high-scores (archivo/JSON) |
+| Baja | Fuente custom (requiere asset .ttf) |
+| Baja | Templates export (Linux/Windows/Web) | 
 
 ---
 
