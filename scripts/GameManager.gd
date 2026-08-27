@@ -10,9 +10,23 @@ signal volume_changed(bus: String, value: float)
 # Control Modes
 const MODE_MEDIAPIPE: String = "MediaPipe"
 const MODE_KEYBOARD: String = "KeyboardMouse"
+const MODE_ARROWS: String = "KeyboardMouse"
+const MODE_HANDS: String = "MediaPipe"
 
 # Tracks Data
 const TRACKS: Array[Dictionary] = [
+	{
+		"id": "procedural_mvp",
+		"name": "Nivel Procedural MVP",
+		"artist": "Algoritmo Neón",
+		"bpm": 132,
+		"difficulty": "Procedural",
+		"difficulty_stars": 2,
+		"duration": "1:00",
+		"color": Color(0.0, 0.94, 1.0, 1.0),
+		"secondary_color": Color(0.6, 0.0, 1.0, 1.0),
+		"description": "Nivel generado proceduralmente en tiempo real. Esquivá peligros y capturá nodos rítmicos usando las flechitas o teclado."
+	},
 	{
 		"id": "track_1",
 		"name": "Cyber Genesis",
@@ -21,9 +35,9 @@ const TRACKS: Array[Dictionary] = [
 		"difficulty": "Principiante",
 		"difficulty_stars": 1,
 		"duration": "2:15",
-		"color": Color(0.0, 0.94, 1.0, 1.0), # Cyan
+		"color": Color(0.2, 0.8, 1.0, 1.0), # Cyan
 		"secondary_color": Color(0.1, 0.4, 0.9, 1.0),
-		"description": "Patrones rítmicos estables ideales para acostumbrarse al control por gestos."
+		"description": "Patrones rítmicos estables ideales para acostumbrarse al control."
 	},
 	{
 		"id": "track_2",
@@ -77,9 +91,10 @@ const SHIP_PALETTES: Dictionary = {
 
 # Current State
 var current_track_index: int = 0
-var control_mode: String = MODE_KEYBOARD
+var control_mode: String = MODE_ARROWS
 var hand_sensitivity: float = 1.2
 var camera_flipped: bool = true
+var procedural_seed: int = 1337
 
 # Upgrades Equipped
 var equipped_ship_palette: String = "cyan_neon"

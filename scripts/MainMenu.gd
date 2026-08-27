@@ -177,15 +177,15 @@ func _update_control_badge() -> void:
 	if not GameManager or not control_mode_badge:
 		return
 	if GameManager.control_mode == GameManager.MODE_MEDIAPIPE:
-		control_mode_badge.text = "[ MEDIAPIPE HAND TRACKING ]"
-		control_mode_badge.add_theme_color_override("font_color", Color(0.0, 1.0, 0.5, 1.0))
-		if btn_mode_mediapipe: btn_mode_mediapipe.text = "✓ MEDIAPIPE (ACTIVO)"
-		if btn_mode_keyboard: btn_mode_keyboard.text = "TECLADO + MOUSE"
+		control_mode_badge.text = "[ MODO: MANOS / MEDIAPIPE (PRÓXIMAMENTE) ]"
+		control_mode_badge.add_theme_color_override("font_color", Color(1.0, 0.7, 0.2, 1.0))
+		if btn_mode_mediapipe: btn_mode_mediapipe.text = "✓ MANOS / MEDIAPIPE (SELECCIONADO)"
+		if btn_mode_keyboard: btn_mode_keyboard.text = "FLECHITAS / TECLADO (MVP)"
 	else:
-		control_mode_badge.text = "[ TECLADO + MOUSE ]"
+		control_mode_badge.text = "[ MODO: FLECHITAS / TECLADO (ACTIVO) ]"
 		control_mode_badge.add_theme_color_override("font_color", Color(0.0, 0.94, 1.0, 1.0))
-		if btn_mode_mediapipe: btn_mode_mediapipe.text = "MEDIAPIPE HAND TRACKING"
-		if btn_mode_keyboard: btn_mode_keyboard.text = "✓ TECLADO + MOUSE (ACTIVO)"
+		if btn_mode_mediapipe: btn_mode_mediapipe.text = "MANOS / MEDIAPIPE (PRÓXIMAMENTE)"
+		if btn_mode_keyboard: btn_mode_keyboard.text = "✓ FLECHITAS / TECLADO (ACTIVO)"
 
 # --- Upgrades Handlers ---
 
