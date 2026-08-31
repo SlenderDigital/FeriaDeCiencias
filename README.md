@@ -3,10 +3,6 @@
 Juego rítmico de acción con estética minimalista, abstracta y neón, desarrollado en **Godot 4** para la Feria de Ciencias.
 
 El jugador controla una nave o personaje luminoso con ambas manos mediante **MediaPipe** (tracking de manos por cámara), esquivando obstáculos, apuntando y disparando al ritmo de la música. Cada canción define la dificultad, la velocidad de los ataques y la intensidad visual del nivel.
-
-> Referente: Bautista Prieto
-> Repositorio: https://github.com/SlenderDigital/FeriaDeCiencias.git
-
 ---
 
 ## Características principales
@@ -42,6 +38,8 @@ Movimiento y apuntado por manos con MediaPipe:
 
 ## Requisitos para la feria
 
+https://drive.google.com/drive/folders/1jKupoyUeg05_fikUqCsfOjz1TXjJIltl?usp=drive_link
+
 | Recurso                       | Detalle                                              |
 | ----------------------------- | ---------------------------------------------------- |
 | Monitor                       | 1 monitor grande                                     |
@@ -49,6 +47,7 @@ Movimiento y apuntado por manos con MediaPipe:
 | Espacio libre                 | ~2x2 m a 3x3 m para moverse frente a la cámara      |
 | Mobiliario                    | Mesa o soporte para el equipo                        |
 | Electricidad                  | Zapatilla para conectar todo                          |
+
 
 ## Configuración del proyecto
 
