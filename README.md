@@ -63,6 +63,35 @@ https://drive.google.com/drive/folders/1jKupoyUeg05_fikUqCsfOjz1TXjJIltl?usp=dri
 
 > El proyecto usa Godot 4; los archivos `.godot/` e `.import/` están ignorados por git.
 
+## Control por mano — cómo correrlo
+
+El control por manos **no depende de ningún proyecto externo**: su lógica vive dentro de este repositorio en dos partes que se comunican por UDP:
+
+1. `tracker_server/` — un servicio **Python** (MediaPipe + OpenCV) que captura la cámara, detecta los 21 puntos (landmarks) de la mano y los manda por **UDP a `127.0.0.1:5005`**. Es el reimplementación del `Player.cpp` original.
+2. `scripts/HandTrackingClient.gd` — autoload de Godot que escucha ese puerto y expone `has_hand`, `get_palm_center()` y `get_hand_angle_deg()` para mover y rotar la nave.
+
+### Que pasa si el juego no detecta la mano
+
+`HandTrackingClient` cae automáticamente al control por **teclado (flechas / WASD)** cuando no recibe datos del tracker — así el juego siempre es jugable, con mano o sin ella.
+
+### Requisitos para el tracking por mano
+
+- **Python ≥ 3.12** y `uv` (Arch: `sudo pacman -S uv`).
+- Una **webcam** (el tracker usa la cámara `/dev/video0`).
+- En el primer arranque se descargan `mediapipe` y `opencv` automáticamente.
+
+### Pasos para jugar con la mano
+
+1. **Levantar el tracker** (desde la raíz del repo):
+   ```bash
+   ./run_tracker.sh
+   ```
+   Esto crea `.venv` y descarga las dependencias la primera vez, abre la ventana de tracking de la cámara y empieza a mandar landmarks. Cerrá con `q` o `ESC`.
+
+2. **Correr el juego** en Godot 4.x (escena `MainMenu.tscn`).
+
+> El tracker se comunica solo con esta máquina (`127.0.0.1:5005`), así que Godot y el tracker deben correr en el mismo equipo.
+
 ## Stack tecnológico
 
 - **Motor**: Godot 4.x

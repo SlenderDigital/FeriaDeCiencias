@@ -2,6 +2,12 @@
 .godot/
 .nomedia
 
+# Python tracker server
+tracker_server/.venv/
+tracker_server/hand_landmarker.task
+__pycache__/
+*.pyc
+
 # Godot-specific ignores
 .import/
 export.cfg
