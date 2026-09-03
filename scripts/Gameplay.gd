@@ -3,10 +3,10 @@ extends Node2D
 ## Runs the procedural MVP level, handles arrow key movement, spawns algorithmic beats/hazards, tracks score/health, and manages game loop overlays.
 
 @onready var bg_control: Control = $BackgroundLayer/Background
-@onready var track_title_lbl: Label = $HUDLayer/HUD/Header/TrackTitle
-@onready var score_lbl: Label = $HUDLayer/HUD/Header/ScoreLabel
-@onready var health_bar: TextureProgressBar = $HUDLayer/HUD/Bottom/HealthBar
-@onready var progress_bar: ProgressBar = $HUDLayer/HUD/Bottom/ProgressBar
+@onready var track_title_lbl: Label = $HUDLayer/HUD/TopBar/TrackTitle
+@onready var score_lbl: Label = $HUDLayer/HUD/TopBar/ScoreLabel
+@onready var health_bar: TextureProgressBar = $HUDLayer/HUD/BottomBar/HealthBar
+@onready var progress_bar: ProgressBar = $HUDLayer/HUD/BottomBar/ProgressBar
 @onready var pause_overlay: Control = $HUDLayer/PauseOverlay
 @onready var results_overlay: Control = $HUDLayer/ResultsOverlay
 @onready var results_title_lbl: Label = $HUDLayer/ResultsOverlay/Panel/VBox/Title
