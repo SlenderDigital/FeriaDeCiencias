@@ -3,10 +3,10 @@ extends Node2D
 ## Runs the procedural MVP level, handles arrow key movement, spawns algorithmic beats/hazards, tracks score/health, and manages game loop overlays.
 
 @onready var bg_control: Control = $BackgroundLayer/Background
-@onready var track_title_lbl: Label = $HUDLayer/HUD/Header/TrackTitle
-@onready var score_lbl: Label = $HUDLayer/HUD/Header/ScoreLabel
-@onready var health_bar: TextureProgressBar = $HUDLayer/HUD/Bottom/HealthBar
-@onready var progress_bar: ProgressBar = $HUDLayer/HUD/Bottom/ProgressBar
+@onready var track_title_lbl: Label = $HUDLayer/HUD/TopBar/TrackTitle
+@onready var score_lbl: Label = $HUDLayer/HUD/TopBar/ScoreLabel
+@onready var health_bar: TextureProgressBar = $HUDLayer/HUD/BottomBar/HealthBar
+@onready var progress_bar: ProgressBar = $HUDLayer/HUD/BottomBar/ProgressBar
 @onready var pause_overlay: Control = $HUDLayer/PauseOverlay
 @onready var results_overlay: Control = $HUDLayer/ResultsOverlay
 @onready var results_title_lbl: Label = $HUDLayer/ResultsOverlay/Panel/VBox/Title
@@ -21,6 +21,7 @@ var beat_interval: float = 60.0 / 132.0
 var beat_timer: float = 0.0
 
 var player_pos: Vector2 = Vector2(640, 560)
+var ship_rotation: float = 0.0    # grados; 0 = proa hacia +X (derecha)
 var player_speed: float = 550.0
 var health: float = 100.0
 var score: int = 0
@@ -113,9 +114,20 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 func _update_player_movement(delta: float) -> void:
+	# Con mano: posicion absoluta de la palma + rotacion pulgar->indice (port de Player.cpp)
+	if HandTrackingClient and HandTrackingClient.has_hand:
+		var target: Vector2 = HandTrackingClient.get_palm_center() * Vector2(1280, 720)
+		var alpha: float = 1.0 - exp(-25.0 * delta)
+		player_pos = player_pos.lerp(target, alpha)
+		var ang := HandTrackingClient.get_hand_angle_deg()
+		if ang < 9990.0:
+			_smooth_rotation_toward(ang, delta)
+		player_pos.x = clamp(player_pos.x, 50, 1230)
+		player_pos.y = clamp(player_pos.y, 80, 670)
+		return
+
+	# Fallback sin mano: flechas / WASD (movimiento por velocidad)
 	var move_dir: Vector2 = Vector2.ZERO
-	
-	# Arrow Keys & WASD input handling
 	if Input.is_key_pressed(KEY_LEFT) or Input.is_key_pressed(KEY_A):
 		move_dir.x -= 1.0
 	if Input.is_key_pressed(KEY_RIGHT) or Input.is_key_pressed(KEY_D):
@@ -132,6 +144,11 @@ func _update_player_movement(delta: float) -> void:
 	player_pos.x = clamp(player_pos.x, 50, 1230)
 	player_pos.y = clamp(player_pos.y, 80, 670)
 
+func _smooth_rotation_toward(target_deg: float, delta: float) -> void:
+	var diff := wrapf(target_deg - ship_rotation, -180.0, 180.0)
+	var alpha: float = 1.0 - exp(-22.0 * delta)
+	ship_rotation += diff * alpha
+
 func _spawn_procedural_wave() -> void:
 	if not generator:
 		return
@@ -142,15 +159,17 @@ func _spawn_procedural_wave() -> void:
 		targets.append(item)
 
 func _shoot_laser() -> void:
-	# Double laser pulse
+	# Doble pulso de laser en la direccion en que apunta la nave
+	var dir: Vector2 = Vector2.from_angle(deg_to_rad(ship_rotation))
+	var perp := Vector2(-dir.y, dir.x)
 	projectiles.append({
-		"pos": player_pos + Vector2(-12, -22),
-		"vel": Vector2(0, -850),
+		"pos": player_pos + dir * 22.0 + perp * 12.0,
+		"vel": dir * 850.0,
 		"color": Color(1.0, 0.0, 0.55, 1.0)
 	})
 	projectiles.append({
-		"pos": player_pos + Vector2(12, -22),
-		"vel": Vector2(0, -850),
+		"pos": player_pos + dir * 22.0 - perp * 12.0,
+		"vel": dir * 850.0,
 		"color": Color(1.0, 0.0, 0.55, 1.0)
 	})
 	if SoundManager: SoundManager.play_hover()
@@ -305,12 +324,16 @@ func _on_btn_main_menu_pressed() -> void:
 		get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
 
 func _draw() -> void:
-	# Draw player ship (Glowing neon ship)
+	# Draw player ship (neon, rotada por la mano; 0deg = derecha)
 	var ship_col: Color = track_data.get("color", Color(0, 0.94, 1, 1))
-	var p1: Vector2 = player_pos + Vector2(0, -20)
-	var p2: Vector2 = player_pos + Vector2(-18, 16)
-	var p3: Vector2 = player_pos + Vector2(18, 16)
-	draw_polyline(PackedVector2Array([p1, p2, p3, p1]), ship_col, 3.5)
+	var rad: float = deg_to_rad(ship_rotation)
+	var fwd := Vector2.from_angle(rad)          # linea de proa
+	var perp := Vector2(-fwd.y, fwd.x)          # perpendicular
+	var nose: Vector2 = player_pos + fwd * 20.0
+	var p2: Vector2 = player_pos + (-fwd * 9.0 + perp * 15.0)
+	var p3: Vector2 = player_pos + (-fwd * 9.0 - perp * 15.0)
+	draw_polyline(PackedVector2Array([nose, p2, p3, nose]), ship_col, 3.5)
+	draw_line(player_pos, player_pos + fwd * 24.0, Color(1, 1, 1, 0.25), 1.5)
 	draw_circle(player_pos, 4.0, Color.WHITE)
 	
 	# Draw spark particles
@@ -322,7 +345,8 @@ func _draw() -> void:
 		
 	# Draw projectiles
 	for proj in projectiles:
-		draw_line(proj["pos"], proj["pos"] + Vector2(0, 18), proj["color"], 4.0)
+		var pdir := (proj["vel"] as Vector2).normalized()
+		draw_line(proj["pos"], proj["pos"] + pdir * 18.0, proj["color"], 4.0)
 		
 	# Draw targets & hazards
 	for t in targets:
