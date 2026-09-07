@@ -20,6 +20,7 @@ config/icon="res://icon.svg"
 
 GameManager="*res://scripts/GameManager.gd"
 SoundManager="*res://scripts/SoundManager.gd"
+HandTrackingClient="*res://scripts/HandTrackingClient.gd"
 _mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [display]
