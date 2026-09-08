@@ -14,6 +14,7 @@ set -euo pipefail
 cd "$(dirname "$0")/tracker_server"
 
 LOCK=".tracker.pid"
+STATUS=".tracker.status"   # fase para la barra del juego (installing/starting/ready)
 
 # Idempotente: si ya hay una instancia viva (la levantó el juego o corriste este
 # script antes), no duplicar la cámara ni el proceso.
@@ -24,20 +25,27 @@ fi
 
 if ! command -v uv >/dev/null 2>&1; then
     echo "[tracker] ERROR: 'uv' no está instalado (Arch: sudo pacman -S uv)." >&2
+    echo "error:nouv" > "$STATUS"
     exit 1
 fi
 
 # Crea/sincroniza el .venv con mediapipe + opencv la primera vez (o tras un pull).
 if [ ! -d ".venv" ]; then
+    echo "installing" > "$STATUS"
     echo "[tracker] Creando .venv y descargando dependencias (mediapipe, opencv)..."
-    uv sync
+    if ! uv sync; then
+        echo "error:sync" > "$STATUS"
+        exit 1
+    fi
 fi
+echo "starting" > "$STATUS"
 
 echo $$ > "$LOCK"
 
 child_pid=""
 _cleanup() {
     rm -f "$LOCK"
+    rm -f "$STATUS"
     # Baja también al hijo (uv → python/mediapipe) para no dejar la cámara abierta.
     if [ -n "$child_pid" ]; then
         kill "$child_pid" 2>/dev/null || true

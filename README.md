@@ -85,7 +85,8 @@ El control por manos **no depende de ningún proyecto externo**: su lógica vive
 1. **Correr el juego** en Godot 4.x (escena `MainMenu.tscn`). Al abrirse, el autoload `HandTrackingClient` **levanta solo el tracker**: captura la cámara y manda los landmarks por UDP al puerto `5005`. No hay que correr nada a mano.
    - La primera vez se descargan `mediapipe` y `opencv` (necesita unos segundos e internet).
    - Al cerrar el juego, el tracker se apaga solo.
-2. Mové la mano frente a la cámara: la palma desplaza la nave y la rotación pulgar→índice la orienta. Tirá disparos con espacio/click o con la otra mano.
+2. Al abrir, verás arriba al centro una **barra de estado del control por mano**: *"Instalando control por mano (primera vez)…"* → *"Iniciando…"* → *"Listo — mostrá la mano"* (verde). Se oculta sola cuando la mano ya controla la nave; así nunca parece que no anda: si algo falla muestra un aviso en rojo en vez de quedarse en silencio.
+3. Mové la mano frente a la cámara: la palma desplaza la nave y la rotación pulgar→índice la orienta. Tirá disparos con espacio/click o con la otra mano.
 
 > Opcional — correr el tracker a mano (por ejemplo para ver la ventana de tracking):
 > ```bash

@@ -7,6 +7,15 @@ from mediapipe_py.landmarker import Landmarker
 import os
 os.environ["QT_QPA_PLATFORM"] = "xcb"
 
+STATUS_FILE = ".tracker.status"   # mismo archivo de fase que lee el juego
+
+def _write_status(fase: str) -> None:
+    try:
+        with open(STATUS_FILE, "w") as f:
+            f.write(fase)
+    except OSError:
+        pass
+
 UDP_IP = "127.0.0.1"
 UDP_PORT = 5005
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -15,7 +24,12 @@ landmarker = Landmarker()
 landmarker.init()
 
 cap = cv2.VideoCapture(0)
+if not cap.isOpened():
+    print("ERROR: no se pudo abrir la cámara /dev/video0", flush=True)
+    _write_status("error:camera")
 cap.set(cv2.CAP_PROP_FPS, 60)
+
+_write_status("ready")
 
 while cap.isOpened():
     success, image = cap.read()

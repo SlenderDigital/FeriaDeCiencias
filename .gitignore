@@ -5,6 +5,8 @@
 # Python tracker server
 tracker_server/.venv/
 tracker_server/hand_landmarker.task
+tracker_server/.tracker.pid
+tracker_server/.tracker.status
 __pycache__/
 *.pyc
 
