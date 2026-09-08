@@ -82,15 +82,18 @@ El control por manos **no depende de ningún proyecto externo**: su lógica vive
 
 ### Pasos para jugar con la mano
 
-1. **Levantar el tracker** (desde la raíz del repo):
-   ```bash
-   ./run_tracker.sh
-   ```
-   Esto crea `.venv` y descarga las dependencias la primera vez, abre la ventana de tracking de la cámara y empieza a mandar landmarks. Cerrá con `q` o `ESC`.
+1. **Correr el juego** en Godot 4.x (escena `MainMenu.tscn`). Al abrirse, el autoload `HandTrackingClient` **levanta solo el tracker**: captura la cámara y manda los landmarks por UDP al puerto `5005`. No hay que correr nada a mano.
+   - La primera vez se descargan `mediapipe` y `opencv` (necesita unos segundos e internet).
+   - Al cerrar el juego, el tracker se apaga solo.
+2. Mové la mano frente a la cámara: la palma desplaza la nave y la rotación pulgar→índice la orienta. Tirá disparos con espacio/click o con la otra mano.
 
-2. **Correr el juego** en Godot 4.x (escena `MainMenu.tscn`).
+> Opcional — correr el tracker a mano (por ejemplo para ver la ventana de tracking):
+> ```bash
+> ./run_tracker.sh
+> ```
+> Si ya está en marcha (lo levantó el juego), el script sale solo y no duplica la cámara.
 
-> El tracker se comunica solo con esta máquina (`127.0.0.1:5005`), así que Godot y el tracker deben correr en el mismo equipo.
+> El tracker se comunica solo con esta máquina (`127.0.0.1:5005`), así que Godot y el tracker deben correr en el mismo equipo (cosa que ocurre cuando el juego lo auto-levanta).
 
 ## Stack tecnológico
 

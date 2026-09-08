@@ -2,22 +2,46 @@ extends Node
 ## HandTrackingClient — escucha landmarks de MediaPipe por UDP (127.0.0.1:5005)
 ## y expone: has_hand, get_palm_center() (normalizado 0-1, X espejada) y
 ## get_hand_angle_deg(). El emisor es tracker_server/ (dentro de este repo).
+##
+## Al abrir el juego, levanta automáticamente el tracker (run_tracker.sh) si el
+## puerto está libre, y lo cierra al salir. No requiere que se corra a mano.
 
 signal hand_updated
 
 const UDP_PORT := 5005
 const LANDMARK_COUNT := 21
 const NO_HAND_TIMEOUT := 0.5   # segundos sin datagrama -> se corta el tracking
+const TRACKER_SCRIPT := "res://run_tracker.sh"
 
 var _udp := PacketPeerUDP.new()
 var _points := PackedVector3Array()   # 21 landmarks normalizados (x,y,z)
 var has_hand := false
 var _last_packet_time := 0.0
+var _tracker_pid := 0    # PID del tracker lanzado por el juego (0 = ninguno)
 
 func _ready() -> void:
 	var err := _udp.bind(UDP_PORT)
 	if err != OK:
 		push_warning("[HandTracking] No pudo bindear UDP %d: %s" % [UDP_PORT, err])
+	else:
+		# Puerto libre => nadie más lo usa; levantamos el tracker de mano de fondo.
+		_start_tracker_server()
+
+func _start_tracker_server() -> void:
+	var script_path := ProjectSettings.globalize_path(TRACKER_SCRIPT)
+	print("[HandTracking] Levantando tracker de mano (MediaPipe): ", script_path)
+	_tracker_pid = OS.create_process(script_path, [])
+	if _tracker_pid > 0:
+		print("[HandTracking] Tracker lanzado (PID=%d). Esperando landmarks por UDP %d." % [_tracker_pid, UDP_PORT])
+	else:
+		push_warning("[HandTracking] No se pudo lanzar el tracker (código=%d). Control por teclado." % _tracker_pid)
+
+func _exit_tree() -> void:
+	# Al cerrar el juego, apagamos el tracker que levantamos para no dejar la cámara abierta.
+	if _tracker_pid > 0:
+		print("[HandTracking] Cerrando tracker (PID=%d)" % _tracker_pid)
+		OS.kill(_tracker_pid)
+		_tracker_pid = 0
 
 func _process(_delta: float) -> void:
 	# Timeout: si no llega datagrama, caer a teclado.
