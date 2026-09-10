@@ -1,3 +1,6 @@
+# Tracker runtime status (regenerado al arrancar el tracker)
+.tracker.status
+
 # Godot 4+ specific ignores
 .godot/
 .nomedia
@@ -5,8 +8,14 @@
 # Python tracker server
 tracker_server/.venv/
 tracker_server/hand_landmarker.task
+tracker_server/.tracker.pid
+tracker_server/.tracker.status
+tracker_server/.tracker.log
 __pycache__/
 *.pyc
+
+# Hermes agent internal (no del projecto)
+.hermes/
 
 # Godot-specific ignores
 .import/

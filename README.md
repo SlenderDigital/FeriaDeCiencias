@@ -82,15 +82,22 @@ El control por manos **no depende de ningún proyecto externo**: su lógica vive
 
 ### Pasos para jugar con la mano
 
-1. **Levantar el tracker** (desde la raíz del repo):
-   ```bash
-   ./run_tracker.sh
-   ```
-   Esto crea `.venv` y descarga las dependencias la primera vez, abre la ventana de tracking de la cámara y empieza a mandar landmarks. Cerrá con `q` o `ESC`.
+El juego **levanta solo el tracker** al abrirse (`run_tracker.sh --detach`), y si ya estaba corriendo no lo duplica. Solo conecta y listo.
 
-2. **Correr el juego** en Godot 4.x (escena `MainMenu.tscn`).
+1. **Correr el juego** en Godot 4.x (escena `MainMenu.tscn`). Al abrir, se levanta el tracker: abre la ventana de tracking y manda los landmarks por UDP a `127.0.0.1:5005`.
+2. Arriba al centro verás la **barra de estado del control por mano**:
+   - 🔵 *"Iniciando control por mano…"* → el tracker está cargando (1–8s la primera vez).
+   - 🟢 *"Control por mano listo — mostrá la mano"* → tracker conectado, mové la mano.
+   - 🟠 *"Tracker no instalado — corré ./run_tracker.sh una vez"* → falta la instalación única (abajo).
+   - Se oculta sola cuando la mano ya controla la nave.
+   - **Al cerrar el juego, el tracker se apaga solo** (libera la cámara).
+3. Mové la mano frente a la cámara: la palma desplaza la nave y la rotación pulgar→índice la orienta. Tirá disparos con espacio/click o con la otra mano.
 
-> El tracker se comunica solo con esta máquina (`127.0.0.1:5005`), así que Godot y el tracker deben correr en el mismo equipo.
+> **Instalación única de dependencias** (solo la primera vez): `cd tracker_server && uv sync` (descarga `mediapipe` y `opencv`). Se hace una vez; el juego no instala nada al abrir.
+>
+> Opcional — correr el tracker a mano: `./run_tracker.sh` (primer plano) o `./run_tracker.sh --detach` (segundo plano).
+>
+> El tracker se comunica solo con esta máquina (`127.0.0.1:5005`).
 
 ## Stack tecnológico
 
