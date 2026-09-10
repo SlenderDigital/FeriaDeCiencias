@@ -1,12 +1,15 @@
 extends Node
 ## HandTrackingClient — escucha landmarks de MediaPipe por UDP (127.0.0.1:5005)
 ## y expone: has_hand, get_palm_center() (normalizado 0-1, X espejada) y
-## get_hand_angle_deg(). El emisor es tracker_server/ (dentro de este repo).
+## get_hand_angle_deg().
 ##
-## Al abrir el juego, levanta automáticamente el tracker (run_tracker.sh) si el
-## puerto está libre, y muestra una barra de estado para que sepas cuándo el
-## control por mano está listo (evita que parezca que no funciona durante la
-## carga, sobre todo la primera vez que se descargan las dependencias).
+## Al abrir el juego:
+##  - Si el tracker (tracker_server/) no está corriendo y ya está instalado
+##    (.venv existe), lo levanta solo (run_tracker.sh), sin reinstalar.
+##  - Si no está instalado, avisa cómo hacerlo (instalación única, a mano).
+##  - Si ya estaba corriendo, no duplica: solo se conecta.
+## Muestra una barra de estado arriba para que sepas cuándo el control por mano
+## está listo. Si el tracker no anda, queda el control por teclado.
 
 signal hand_updated
 
@@ -14,55 +17,99 @@ const UDP_PORT := 5005
 const LANDMARK_COUNT := 21
 const NO_HAND_TIMEOUT := 0.5   # segundos sin datagrama -> se corta el tracking
 const TRACKER_SCRIPT := "res://run_tracker.sh"
-const STATUS_FILE := "res://tracker_server/.tracker.status"
-const NO_DATA_WARN_SEC := 25.0   # si tras esto sigue sin llegar nada, algo falló
+const TRACKER_DIR := "res://tracker_server/"
 
 var _udp := PacketPeerUDP.new()
 var _points := PackedVector3Array()   # 21 landmarks normalizados (x,y,z)
 var has_hand := false
 var _last_packet_time := 0.0
-var _got_datagram := false   # el tracker ya está mandando datos
-var _tracker_pid := 0        # PID del tracker lanzado por el juego (0 = ninguno)
-var _spawn_time := 0.0
+var _got_datagram := false   # el tracker está mandando datos
 
-# --- UI de estado del tracker ---
+# Estado del arranque: "spawned" | "running" | "failed" | "needs_install"
+var _spawn_state := "spawned"
+var _tracker_pid := 0          # PID del run_tracker.sh que lanzó el juego
+var _tracker_started_here := false   # true si el juego lo levantó (y debe cerrarlo)
+
+# --- UI de estado ---
 var _panel: PanelContainer
 var _lbl: Label
 var _bar: ProgressBar
-var _status_path := ""
-var _cached_phase := ""
-var _last_phase_read := 0.0
 var _last_ui_update := 0.0
+var _status_path := ""
+var _cached_status := ""
+var _last_status_read := 0.0
 
 func _ready() -> void:
 	var err := _udp.bind(UDP_PORT)
 	if err != OK:
 		push_warning("[HandTracking] No pudo bindear UDP %d: %s" % [UDP_PORT, err])
 	else:
-		# Puerto libre => nadie más lo usa; levantamos el tracker de mano de fondo.
-		_start_tracker_server()
-
-func _start_tracker_server() -> void:
-	var script_path := ProjectSettings.globalize_path(TRACKER_SCRIPT)
-	_status_path = ProjectSettings.globalize_path(STATUS_FILE)
-	_spawn_time = Time.get_ticks_msec() / 1000.0
-	print("[HandTracking] Levantando tracker de mano (MediaPipe): ", script_path)
-	_tracker_pid = OS.create_process(script_path, [])
-	if _tracker_pid > 0:
-		print("[HandTracking] Tracker lanzado (PID=%d). Esperando landmarks por UDP %d." % [_tracker_pid, UDP_PORT])
-	else:
-		push_warning("[HandTracking] No se pudo lanzar el tracker (código=%d). Control por teclado." % _tracker_pid)
+		_auto_start_tracker()
 	_build_status_ui()
 	_update_status_ui(true)
 
 func _exit_tree() -> void:
-	# Al cerrar el juego, apagamos el tracker que levantamos para no dejar la cámara abierta.
-	if _tracker_pid > 0:
-		print("[HandTracking] Cerrando tracker (PID=%d)" % _tracker_pid)
-		OS.kill(_tracker_pid)
-		_tracker_pid = 0
-	if _panel:
-		_panel.queue_free()
+	# Al cerrar el juego, escribir la bandera que le dice al tracker que
+	# se cierre. El script (run_tracker.sh) tiene un WATCHDOG que monitorea
+	# al padre del juego; si el juego muere (botón, Alt+F4, Win+W, crash) el
+	# tracker se cierra solo. Este flag es respaldo por si el proceso bash se
+	# muere antes de que el loop chequeé el PID (p.ej. a veces Win+W).
+	if _status_path != "":
+		var flag := ProjectSettings.globalize_path(TRACKER_DIR) + ".tracker.game_exit"
+		var f := FileAccess.open(flag, FileAccess.WRITE)
+		if f:
+			f.store_string("1")
+			f.close()
+		print("[HandTracking] Bandera de salida escrita para el tracker.")
+
+func _auto_start_tracker() -> void:
+	_status_path = ProjectSettings.globalize_path(TRACKER_DIR) + ".tracker.status"
+	var script_path := ProjectSettings.globalize_path(TRACKER_SCRIPT)
+
+	# 1) Si ya había un tracker (instancia anterior / manual), no duplicar.
+	if _lock_live():
+		_spawn_state = "running"
+		_tracker_started_here = false
+		print("[HandTracking] Tracker ya corriendo. Solo me conecto por UDP ", UDP_PORT, ".")
+		return
+
+	# 2) Si no está instalado el .venv, no instalamos desde el juego: instalación única.
+	if not FileAccess.file_exists(ProjectSettings.globalize_path(TRACKER_DIR) + ".venv/bin/python"):
+		_spawn_state = "needs_install"
+		_tracker_started_here = false
+		print("[HandTracking] Tracker no instalado. Corré una vez: ./run_tracker.sh")
+		return
+
+	# 3) Levantar el tracker como HIJO de este juego (se cierra solo al salir).
+	var pid := OS.create_process(script_path, [])
+	if pid > 0:
+		_spawn_state = "spawned"
+		_tracker_pid = pid
+		_tracker_started_here = true
+		print("[HandTracking] Tracker lanzado (PID=%d). Esperando landmarks por UDP %d." % [pid, UDP_PORT])
+	else:
+		_spawn_state = "failed"
+		_tracker_started_here = false
+		push_warning("[HandTracking] No se pudo lanzar el tracker (código=%d). Teclado." % pid)
+
+func _lock_pid() -> int:
+	# Lee tracker_server/.tracker.pid y devuelve el PID del tracker (0 si no hay).
+	var lock := ProjectSettings.globalize_path(TRACKER_DIR) + ".tracker.pid"
+	if not FileAccess.file_exists(lock):
+		return 0
+	var f := FileAccess.open(lock, FileAccess.READ)
+	if not f:
+		return 0
+	var pid_str := f.get_as_text().strip_edges()
+	f.close()
+	if pid_str.is_empty() or not pid_str.is_valid_int():
+		return 0
+	return int(pid_str)
+
+func _lock_live() -> bool:
+	# ¿Hay un proceso tracker vivo (el del lock)? kill -0 no mata, solo chequea.
+	var p := _lock_pid()
+	return p > 0 and OS.execute("kill", ["-0", str(p)]) == 0
 
 func _process(_delta: float) -> void:
 	# Timeout: si no llega datagrama, caer a teclado.
@@ -136,8 +183,8 @@ func _build_status_ui() -> void:
 	_panel.anchor_right = 0.5
 	_panel.anchor_top = 0.0
 	_panel.anchor_bottom = 0.0
-	_panel.offset_left = -190
-	_panel.offset_right = 190
+	_panel.offset_left = -215
+	_panel.offset_right = 215
 	_panel.offset_top = 18
 	_panel.offset_bottom = 92
 
@@ -175,7 +222,7 @@ func _update_status_ui(_force := false) -> void:
 		return
 
 	# El tracker está mandando datos -> listo, solo falta la mano.
-	if _got_datagram:
+	if _got_datagram or _tracker_status() == "ready":
 		_set_ui_visible(true)
 		_set_bar_fill(Color(0.1, 1.0, 0.45, 1))
 		_lbl.text = "Control por mano listo — mostrá la mano"
@@ -183,52 +230,45 @@ func _update_status_ui(_force := false) -> void:
 		_bar.value = 100.0
 		return
 
-	var f := _read_status_phase()
-	_set_ui_visible(true)
-
-	if _tracker_pid <= 0:
-		_lbl.text = "Tracker no disponible — se usa el teclado"
-		_lbl.add_theme_color_override("font_color", Color(1, 0.5, 0.5, 1))
-		_set_bar_fill(Color(1, 0.3, 0.3, 1))
+	var st := _tracker_status()
+	if _spawn_state == "needs_install":
+		_set_ui_visible(true)
+		_lbl.text = "Tracker no instalado — corré ./run_tracker.sh una vez"
+		_lbl.add_theme_color_override("font_color", Color(1, 0.78, 0.25, 1))
+		_set_bar_fill(Color(1, 0.6, 0.2, 1))
 		_bar.value = 0.0
-	elif f == "installing":
-		_lbl.text = "Instalando control por mano (primera vez)…"
-		_indeterminate_bar(now)
-		_lbl.add_theme_color_override("font_color", Color(0.9, 0.35, 1, 1))
-		_set_bar_fill(Color(0.9, 0.35, 1, 1))
-	elif f.begins_with("error") or now - _spawn_time > NO_DATA_WARN_SEC:
-		_lbl.text = "La cámara no responde — se usa el teclado"
+	elif _spawn_state == "failed" or st.begins_with("error"):
+		_set_ui_visible(true)
+		_lbl.text = "No se pudo iniciar el tracker — se usa el teclado"
 		_lbl.add_theme_color_override("font_color", Color(1, 0.5, 0.5, 1))
 		_set_bar_fill(Color(1, 0.3, 0.3, 1))
 		_bar.value = 0.0
 	else:
+		# "spawned" / "running": arrancando (Primera vez mediapipe carga ~5-10s).
+		_set_ui_visible(true)
 		_lbl.text = "Iniciando control por mano…"
-		_indeterminate_bar(now)
 		_lbl.add_theme_color_override("font_color", Color(0, 0.9, 1, 1))
 		_set_bar_fill(Color(0, 0.9, 1, 1))
+		_bar.value = fmod(now * 38.0, 100.0)
 
-func _indeterminate_bar(now: float) -> void:
-	# Barra "de descarga" animada mientras no sabemos cuándo termina.
-	_bar.value = fmod(now * 38.0, 100.0)
+func _tracker_status() -> String:
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - _last_status_read < 0.3:
+		return _cached_status
+	_last_status_read = now
+	_cached_status = ""
+	if FileAccess.file_exists(_status_path):
+		var f := FileAccess.open(_status_path, FileAccess.READ)
+		if f:
+			_cached_status = f.get_as_text().strip_edges()
+			f.close()
+	return _cached_status
 
 func _set_bar_fill(c: Color) -> void:
 	var fill := StyleBoxFlat.new()
 	fill.bg_color = c
 	fill.set_corner_radius_all(3)
 	_bar.add_theme_stylebox_override("fill", fill)
-
-func _read_status_phase() -> String:
-	var now := Time.get_ticks_msec() / 1000.0
-	if now - _last_phase_read < 0.3:
-		return _cached_phase
-	_last_phase_read = now
-	_cached_phase = ""
-	if FileAccess.file_exists(_status_path):
-		var f := FileAccess.open(_status_path, FileAccess.READ)
-		if f:
-			_cached_phase = f.get_as_text().strip_edges()
-			f.close()
-	return _cached_phase
 
 func _set_ui_visible(v: bool) -> void:
 	if _panel and _panel.visible != v:
