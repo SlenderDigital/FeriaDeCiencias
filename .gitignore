@@ -5,6 +5,12 @@
 .godot/
 .nomedia
 
+# Third-party addons (re-downloadable)
+addons/godot_ai/
+
+# User-specific export configuration
+export_presets.cfg
+
 # Python tracker server
 tracker_server/.venv/
 tracker_server/hand_landmarker.task
