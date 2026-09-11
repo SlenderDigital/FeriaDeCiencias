@@ -19,6 +19,16 @@ const NO_HAND_TIMEOUT := 0.5   # segundos sin datagrama -> se corta el tracking
 const TRACKER_SCRIPT := "res://run_tracker.sh"
 const TRACKER_DIR := "res://tracker_server/"
 
+# --- Mapeo de coordenadas cámara -> viewport ---
+# camera_aspect_ratio: aspect ratio de la cámara (ej. 4/3 = 1.333, 16/9 = 1.777)
+# 0 = auto (usa 16/9 como fallback)
+# mapping_mode: "stretch" | "fit" | "crop"
+#   stretch = llena todo el viewport (distorsiona si aspect ratios difieren)
+#   fit = mantiene aspect ratio cámara, puede haber barras negras
+#   crop = llena viewport recortando cámara
+@export var camera_aspect_ratio: float = 0.0
+@export var mapping_mode: String = "fit"
+
 var _udp := PacketPeerUDP.new()
 var _points := PackedVector3Array()   # 21 landmarks normalizados (x,y,z)
 var has_hand := false
