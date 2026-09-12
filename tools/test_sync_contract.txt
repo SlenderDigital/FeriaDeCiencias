@@ -1,0 +1,21 @@
+# Audio-sync contract (music-driven levels)
+
+The gameplay clock is anchored to the real playback clock, NOT to `_process(delta)` accumulation:
+
+- `song_time = music.get_playback_position()` (via `AudioStreamPlayer.get_playback_position()`)
+- Spawning walks `chart.beat_times` in a `while next_beat_idx < size and beat_times[next_beat_idx] <= song_time` loop,
+  so a beat is emitted exactly once, in order, at (or just after) its real timestamp.
+- Victory requires genuine end-of-track (`song_time >= chart.duration` with `song_time > 0.5` guard,
+  or `music.finished` with the same guard) — never an instant win on the stream-setup `finished` race.
+
+## Alignment tolerance
+
+`get_playback_position()` tracks the streamed OGG clock. Expected agreement between the
+playback clock and the analysis beat grid is within one audio frame (~10 ms). The build-time
+`tools/test_beat_alignment.py` proves the *grid* is sound (monotonic beats, drift < 2.5x median
+gap, contiguous sections); the runtime pairing is exercised in Task 9's E2E.
+
+## Invariant
+
+`chart.beat_times` is strictly monotonic and bounded by `chart.duration`; `next_beat_idx` never
+wraps or double-emits. If a chart violates this, `ChartData._validate()` warns on load.
