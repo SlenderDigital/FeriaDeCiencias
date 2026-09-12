@@ -1,0 +1,6 @@
+# Source lossless audio (build-time analyzer input; already consumed into .ogg + .analysis.json)
+*.wav
+*.wav.import
+
+# Godot auto-generated sidecar imports (regenerated on scan)
+*.ogg.import
