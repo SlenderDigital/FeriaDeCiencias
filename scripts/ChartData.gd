@@ -16,19 +16,28 @@ static func load_charts(analysis_path: String, level_path: String) -> ChartData:
 	if a == null or l == null:
 		push_error("ChartData: cannot open chart files")
 		return cd
-	var analysis: Dictionary = JSON.parse_string(a.get_as_text())
-	var level: Dictionary = JSON.parse_string(l.get_as_text())
-	if analysis.is_empty() or level.is_empty():
+	var analysis = JSON.parse_string(a.get_as_text())
+	var level = JSON.parse_string(l.get_as_text())
+	if analysis == null or level == null or analysis.is_empty() or level.is_empty():
 		push_error("ChartData: malformed chart JSON")
 		return cd
 	cd.bpm = float(analysis.get("bpm", 0.0))
 	cd.duration = float(analysis.get("duration", 0.0))
-	cd.beat_times = analysis.get("beats", [])
-	cd.sections = analysis.get("sections", [])
-	cd.level_sections = level.get("sections", [])
-	cd.setpieces = level.get("setpieces", [])
+	cd.beat_times.assign(analysis.get("beats", []))
+	cd.sections.assign(_to_dict_array(analysis.get("sections", [])))
+	cd.level_sections.assign(_to_dict_array(level.get("sections", [])))
+	cd.setpieces.assign(_to_dict_array(level.get("setpieces", [])))
 	cd._validate()
 	return cd
+
+static func _to_dict_array(arr: Array) -> Array[Dictionary]:
+	## Rebuilds an untyped JSON array into a typed Array[Dictionary], skipping
+	## any non-Dictionary entries so malformed data cannot cause a runtime type error.
+	var out: Array[Dictionary] = []
+	for item in arr:
+		if item is Dictionary:
+			out.append(item)
+	return out
 
 func _validate() -> void:
 	for i in range(1, beat_times.size()):
