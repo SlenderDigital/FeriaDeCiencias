@@ -13,6 +13,8 @@ func spawns_at(t: float, base_color: Color) -> Array[Dictionary]:
 		return []
 	var density: float = float(sec.get("density", 0.5))
 	var pool: Array = sec.get("pattern_pool", ["single_target"])
+	if pool.is_empty():
+		return []
 	if randf() > density:
 		return []
 	var pattern: String = pool[randi() % pool.size()]
@@ -39,6 +41,9 @@ func _build_pattern(pattern: String, t: float, base: Color) -> Array[Dictionary]
 		"triple_burst":
 			for i in range(3):
 				out.append(_target(randf_range(150 + i * 300, 350 + i * 300), base))
+		_:
+			push_warning("PatternController: unknown pattern '%s'" % pattern)
+			return []
 	return out
 
 func _target(x: float, c: Color) -> Dictionary:

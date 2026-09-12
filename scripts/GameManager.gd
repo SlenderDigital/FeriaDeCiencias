@@ -16,52 +16,49 @@ const MODE_HANDS: String = "MediaPipe"
 # Tracks Data
 const TRACKS: Array[Dictionary] = [
 	{
-		"id": "procedural_mvp",
-		"name": "Nivel Procedural MVP",
-		"artist": "Algoritmo Neón",
-		"bpm": 132,
-		"difficulty": "Procedural",
-		"difficulty_stars": 2,
-		"duration": "1:00",
-		"color": Color(0.0, 0.94, 1.0, 1.0),
-		"secondary_color": Color(0.6, 0.0, 1.0, 1.0),
-		"description": "Nivel generado proceduralmente en tiempo real. Esquivá peligros y capturá nodos rítmicos usando las flechitas o teclado."
-	},
-	{
-		"id": "track_1",
-		"name": "Cyber Genesis",
-		"artist": "SynthPulse",
-		"bpm": 128,
+		"id": "level_first_light",
+		"name": "First Light",
+		"artist": "Abstract Pulse",
+		"bpm": 104,
 		"difficulty": "Principiante",
 		"difficulty_stars": 1,
-		"duration": "2:15",
-		"color": Color(0.2, 0.8, 1.0, 1.0), # Cyan
+		"duration": "1:40",
+		"color": Color(0.2, 0.8, 1, 1),
 		"secondary_color": Color(0.1, 0.4, 0.9, 1.0),
-		"description": "Patrones rítmicos estables ideales para acostumbrarse al control."
+		"description": "Patrones rítmicos estables ideales para acostumbrarse al control.",
+		"audio": "res://assets/music/first_light.ogg",
+		"analysis": "res://assets/music/first_light.analysis.json",
+		"level": "res://assets/music/first_light.level.json"
 	},
 	{
-		"id": "track_2",
-		"name": "Neon Rush",
-		"artist": "CyberWave",
-		"bpm": 145,
+		"id": "level_mechanical_wall",
+		"name": "Mechanical Wall",
+		"artist": "Abstract Pulse",
+		"bpm": 115,
 		"difficulty": "Intermedio",
 		"difficulty_stars": 2,
-		"duration": "2:40",
-		"color": Color(1.0, 0.0, 0.55, 1.0), # Magenta
+		"duration": "2:15",
+		"color": Color(0.75, 0.75, 0.8, 1),
 		"secondary_color": Color(0.6, 0.0, 1.0, 1.0),
-		"description": "Velocidad acelerada con ráfagas dobles de proyectiles y obstáculos cruzados."
+		"description": "Velocidad acelerada con ráfagas dobles de proyectiles y obstáculos cruzados.",
+		"audio": "res://assets/music/mechanical_wall.ogg",
+		"analysis": "res://assets/music/mechanical_wall.analysis.json",
+		"level": "res://assets/music/mechanical_wall.level.json"
 	},
 	{
-		"id": "track_3",
-		"name": "Overdrive Pulse",
-		"artist": "Neural Beat",
-		"bpm": 170,
+		"id": "level_relentless_drive",
+		"name": "Relentless Drive",
+		"artist": "Abstract Pulse",
+		"bpm": 176,
 		"difficulty": "Avanzado",
 		"difficulty_stars": 3,
 		"duration": "3:10",
-		"color": Color(1.0, 0.85, 0.0, 1.0), # Gold
+		"color": Color(1, 0, 0.55, 1),
 		"secondary_color": Color(1.0, 0.2, 0.0, 1.0),
-		"description": "Desafío extremo de reflejos y movimiento continuo al ritmo máximo."
+		"description": "Desafío extremo de reflejos y movimiento continuo al ritmo máximo.",
+		"audio": "res://assets/music/relentless_drive.ogg",
+		"analysis": "res://assets/music/relentless_drive.analysis.json",
+		"level": "res://assets/music/relentless_drive.level.json"
 	}
 ]
 
@@ -110,9 +107,9 @@ var bloom_enabled: bool = true
 
 # High Scores per Track ID
 var high_scores: Dictionary = {
-	"track_1": 12500,
-	"track_2": 8400,
-	"track_3": 0
+	"level_first_light": 12500,
+	"level_mechanical_wall": 8400,
+	"level_relentless_drive": 0
 }
 
 func _ready() -> void:

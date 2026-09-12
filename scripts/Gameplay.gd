@@ -11,8 +11,12 @@ extends Node2D
 @onready var results_overlay: Control = $HUDLayer/ResultsOverlay
 @onready var results_title_lbl: Label = $HUDLayer/ResultsOverlay/Panel/VBox/Title
 @onready var results_score_lbl: Label = $HUDLayer/ResultsOverlay/Panel/VBox/ScoreDetails
+@onready var music: AudioStreamPlayer = $MusicPlayer
 
 var generator: ProceduralLevelGenerator
+var chart: ChartData
+var controller: PatternController
+var next_beat_idx: int = 0
 var track_data: Dictionary = {}
 var bpm: float = 132.0
 var song_time: float = 0.0
@@ -52,13 +56,24 @@ func _ready() -> void:
 	bpm = track_data.get("bpm", 132.0)
 	beat_interval = 60.0 / bpm
 	
+	# Real music + chart-driven path (when track_data carries chart files)
+	if track_data.has("audio") and track_data.has("analysis") and track_data.has("level"):
+		chart = ChartData.load_charts(track_data["analysis"], track_data["level"])
+		if not chart.beat_times.is_empty():
+			controller = PatternController.new(chart)
+			music.stream = load(track_data["audio"]) as AudioStream
+			bpm = chart.bpm
+			total_song_duration = chart.duration
+			beat_interval = 60.0 / bpm
+			music.play()
+	
 	if track_title_lbl:
-		track_title_lbl.text = "NIVEL PROCEDURAL MVP  |  BPM: %d" % int(bpm)
+		track_title_lbl.text = "%s  |  BPM: %d" % [track_data.get("name", "Nivel Procedural"), int(bpm)]
 		track_title_lbl.add_theme_color_override("font_color", track_data.get("color", Color(0, 0.94, 1, 1)))
 		
 	pause_overlay.visible = false
 	results_overlay.visible = false
-	print("[Gameplay] Nivel Procedural MVP iniciado con Semilla: ", seed_val)
+	print("[Gameplay] Nivel iniciado: ", track_data.get("name", "Procedural MVP"), " (bpm=", bpm, ", chart=", chart != null, ")")
 
 func _input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"): # ESC key
@@ -82,8 +97,12 @@ func _process(delta: float) -> void:
 	if is_paused or is_game_over:
 		return
 		
-	song_time += delta
-	beat_timer += delta
+	# Anchor game clock to real audio playback when chart-driven; otherwise fall
+	# back to the procedural delta-accumulated clock.
+	if chart != null and music.playing:
+		song_time = music.get_playback_position()
+	else:
+		song_time += delta
 	
 	var progress: float = clamp(song_time / total_song_duration, 0.0, 1.0)
 	
@@ -91,20 +110,38 @@ func _process(delta: float) -> void:
 	if progress_bar:
 		progress_bar.value = progress * 100.0
 		
-	if track_title_lbl and generator:
-		var phase_str: String = generator.get_phase_name(progress)
-		track_title_lbl.text = "%s  |  %s" % [track_data.get("name", "Nivel Procedural"), phase_str]
+	if track_title_lbl:
+		if chart != null:
+			track_title_lbl.text = "%s  |  BPM: %d" % [track_data.get("name", "Nivel"), int(bpm)]
+		elif generator:
+			var phase_str: String = generator.get_phase_name(progress)
+			track_title_lbl.text = "%s  |  %s" % [track_data.get("name", "Nivel Procedural"), phase_str]
 		
 	# Check level completion
-	if song_time >= total_song_duration:
-		_trigger_victory()
-		return
+	if chart != null:
+		if (music.playing and song_time >= chart.duration) or music.finished:
+			_trigger_victory()
+			return
+	else:
+		if song_time >= total_song_duration:
+			_trigger_victory()
+			return
 		
-	# Procedural Beat Spawner
-	if beat_timer >= beat_interval:
-		beat_timer -= beat_interval
-		_spawn_procedural_wave()
-		if SoundManager: SoundManager.play_beat()
+	# Spawning: chart-driven beats from the real playback pointer, else procedural waves
+	if chart != null:
+		var track_color: Color = track_data.get("color", Color(0, 0.94, 1, 1))
+		while next_beat_idx < chart.beat_times.size() and chart.beat_times[next_beat_idx] <= song_time:
+			var t: float = chart.beat_times[next_beat_idx]
+			var spawns: Array[Dictionary] = controller.spawns_at(t, track_color)
+			for s in spawns:
+				targets.append(s)
+			next_beat_idx += 1
+	else:
+		beat_timer += delta
+		if beat_timer >= beat_interval:
+			beat_timer -= beat_interval
+			_spawn_procedural_wave()
+			if SoundManager: SoundManager.play_beat()
 		
 	_update_player_movement(delta)
 	_update_targets(delta)
