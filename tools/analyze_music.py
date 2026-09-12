@@ -9,7 +9,7 @@ import librosa
 
 
 def _analyze(y, sr):
-    tempo_arr, beat_frames = librosa.beat.beat_track(y=y, sr=sr, units="frames")
+    tempo_arr, beat_frames = librosa.beat.beat_track(y=y, sr=sr, units="frames", trim=False)
     tempo = float(np.atleast_1d(tempo_arr)[0])
     beat_times = librosa.frames_to_time(beat_frames, sr=sr).astype(float)
 

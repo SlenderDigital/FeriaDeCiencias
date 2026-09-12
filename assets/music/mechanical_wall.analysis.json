@@ -1,9 +1,26 @@
 {
   "bpm": 114.8,
   "duration": 110.167,
-  "n_beats": 183,
-  "beat_regularity": 0.036,
+  "n_beats": 205,
+  "beat_regularity": 0.0428,
   "beats": [
+    3.84,
+    4.362666666666667,
+    4.8853333333333335,
+    5.408,
+    5.9093333333333335,
+    6.442666666666667,
+    6.965333333333334,
+    7.488,
+    8.170666666666667,
+    8.693333333333333,
+    9.216,
+    9.738666666666667,
+    10.261333333333333,
+    10.848,
+    11.445333333333334,
+    11.978666666666667,
+    12.501333333333333,
     13.013333333333334,
     13.536,
     14.058666666666667,
@@ -186,7 +203,12 @@
     105.90933333333334,
     106.432,
     106.95466666666667,
-    107.47733333333333
+    107.47733333333333,
+    107.98933333333333,
+    108.512,
+    109.03466666666667,
+    109.55733333333333,
+    110.08
   ],
   "downbeat": [
     true,
@@ -371,7 +393,29 @@
     false,
     true,
     false,
-    false
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    true
   ],
   "bars": [
     0,
@@ -419,7 +463,13 @@
     168,
     172,
     176,
-    180
+    180,
+    184,
+    188,
+    192,
+    196,
+    200,
+    204
   ],
   "phrases": [
     0,
@@ -433,7 +483,8 @@
     128,
     144,
     160,
-    176
+    176,
+    192
   ],
   "onsets": [
     0.0,
@@ -10769,141 +10820,159 @@
   "sections": [
     {
       "name": "section_0",
-      "start": 13.013,
-      "end": 16.992,
-      "energy": 0.334
+      "start": 3.84,
+      "end": 8.171,
+      "energy": 0.234
     },
     {
       "name": "section_1",
-      "start": 16.992,
-      "end": 21.152,
-      "energy": 0.314
+      "start": 8.171,
+      "end": 12.501,
+      "energy": 0.294
     },
     {
       "name": "section_2",
-      "start": 21.152,
-      "end": 25.301,
-      "energy": 0.44
+      "start": 12.501,
+      "end": 16.48,
+      "energy": 0.303
     },
     {
       "name": "section_3",
-      "start": 25.301,
-      "end": 29.461,
-      "energy": 0.495
+      "start": 16.48,
+      "end": 20.629,
+      "energy": 0.356
     },
     {
       "name": "section_4",
-      "start": 29.461,
-      "end": 33.611,
-      "energy": 0.39
+      "start": 20.629,
+      "end": 24.789,
+      "energy": 0.401
     },
     {
       "name": "section_5",
-      "start": 33.611,
-      "end": 37.781,
-      "energy": 0.454
-    },
-    {
-      "name": "section_6",
-      "start": 37.781,
-      "end": 41.941,
-      "energy": 0.448
-    },
-    {
-      "name": "section_7",
-      "start": 41.941,
-      "end": 46.101,
-      "energy": 0.35
-    },
-    {
-      "name": "section_8",
-      "start": 46.101,
-      "end": 50.261,
-      "energy": 0.507
-    },
-    {
-      "name": "section_9",
-      "start": 50.261,
-      "end": 54.421,
-      "energy": 0.517
-    },
-    {
-      "name": "section_10",
-      "start": 54.421,
-      "end": 58.581,
-      "energy": 0.49
-    },
-    {
-      "name": "section_11",
-      "start": 58.581,
-      "end": 62.741,
-      "energy": 0.531
-    },
-    {
-      "name": "section_12",
-      "start": 62.741,
-      "end": 66.891,
-      "energy": 0.485
-    },
-    {
-      "name": "section_13",
-      "start": 66.891,
-      "end": 71.051,
-      "energy": 0.508
-    },
-    {
-      "name": "section_14",
-      "start": 71.051,
-      "end": 75.221,
-      "energy": 0.494
-    },
-    {
-      "name": "section_15",
-      "start": 75.221,
-      "end": 79.552,
-      "energy": 0.481
-    },
-    {
-      "name": "section_16",
-      "start": 79.552,
-      "end": 83.541,
-      "energy": 0.469
-    },
-    {
-      "name": "section_17",
-      "start": 83.541,
-      "end": 87.712,
-      "energy": 0.49
-    },
-    {
-      "name": "section_18",
-      "start": 87.712,
-      "end": 91.872,
+      "start": 24.789,
+      "end": 28.939,
       "energy": 0.502
     },
     {
+      "name": "section_6",
+      "start": 28.939,
+      "end": 33.099,
+      "energy": 0.414
+    },
+    {
+      "name": "section_7",
+      "start": 33.099,
+      "end": 37.259,
+      "energy": 0.443
+    },
+    {
+      "name": "section_8",
+      "start": 37.259,
+      "end": 41.419,
+      "energy": 0.437
+    },
+    {
+      "name": "section_9",
+      "start": 41.419,
+      "end": 45.579,
+      "energy": 0.344
+    },
+    {
+      "name": "section_10",
+      "start": 45.579,
+      "end": 49.739,
+      "energy": 0.508
+    },
+    {
+      "name": "section_11",
+      "start": 49.739,
+      "end": 53.899,
+      "energy": 0.512
+    },
+    {
+      "name": "section_12",
+      "start": 53.899,
+      "end": 58.059,
+      "energy": 0.491
+    },
+    {
+      "name": "section_13",
+      "start": 58.059,
+      "end": 62.219,
+      "energy": 0.52
+    },
+    {
+      "name": "section_14",
+      "start": 62.219,
+      "end": 66.379,
+      "energy": 0.514
+    },
+    {
+      "name": "section_15",
+      "start": 66.379,
+      "end": 70.475,
+      "energy": 0.49
+    },
+    {
+      "name": "section_16",
+      "start": 70.475,
+      "end": 74.699,
+      "energy": 0.494
+    },
+    {
+      "name": "section_17",
+      "start": 74.699,
+      "end": 79.029,
+      "energy": 0.486
+    },
+    {
+      "name": "section_18",
+      "start": 79.029,
+      "end": 83.019,
+      "energy": 0.47
+    },
+    {
       "name": "section_19",
-      "start": 91.872,
-      "end": 96.032,
-      "energy": 0.576
+      "start": 83.019,
+      "end": 87.189,
+      "energy": 0.483
     },
     {
       "name": "section_20",
-      "start": 96.032,
-      "end": 100.192,
-      "energy": 0.53
+      "start": 87.189,
+      "end": 91.349,
+      "energy": 0.499
     },
     {
       "name": "section_21",
-      "start": 100.192,
-      "end": 104.352,
-      "energy": 0.321
+      "start": 91.349,
+      "end": 95.52,
+      "energy": 0.568
     },
     {
       "name": "section_22",
-      "start": 104.352,
+      "start": 95.52,
+      "end": 99.669,
+      "energy": 0.553
+    },
+    {
+      "name": "section_23",
+      "start": 99.669,
+      "end": 103.829,
+      "energy": 0.344
+    },
+    {
+      "name": "section_24",
+      "start": 103.829,
+      "end": 107.989,
+      "energy": 0.262
+    },
+    {
+      "name": "section_25",
+      "start": 107.989,
       "end": 110.167,
-      "energy": 0.272
+      "energy": 0.289
     }
   ]
 }

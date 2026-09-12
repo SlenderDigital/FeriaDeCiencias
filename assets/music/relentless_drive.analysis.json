@@ -1,9 +1,50 @@
 {
   "bpm": 175.78,
   "duration": 199.967,
-  "n_beats": 513,
+  "n_beats": 568,
   "beat_regularity": 0.0208,
   "beats": [
+    2.453333333333333,
+    2.7946666666666666,
+    3.1466666666666665,
+    3.488,
+    3.8293333333333335,
+    4.1706666666666665,
+    4.522666666666667,
+    4.864,
+    5.216,
+    5.557333333333333,
+    5.9093333333333335,
+    6.250666666666667,
+    6.592,
+    6.944,
+    7.285333333333333,
+    7.626666666666667,
+    7.968,
+    8.32,
+    8.661333333333333,
+    9.002666666666666,
+    9.354666666666667,
+    9.696,
+    10.048,
+    10.389333333333333,
+    10.730666666666666,
+    11.082666666666666,
+    11.424,
+    11.765333333333333,
+    12.106666666666667,
+    12.458666666666666,
+    12.8,
+    13.141333333333334,
+    13.493333333333334,
+    13.834666666666667,
+    14.176,
+    14.528,
+    14.869333333333334,
+    15.210666666666667,
+    15.552,
+    15.904,
+    16.245333333333335,
     16.586666666666666,
     16.917333333333332,
     17.269333333333332,
@@ -516,7 +557,21 @@
     192.096,
     192.448,
     192.78933333333333,
-    193.13066666666666
+    193.13066666666666,
+    193.46133333333333,
+    193.824,
+    194.18666666666667,
+    194.54933333333332,
+    194.88,
+    195.22133333333332,
+    195.56266666666667,
+    195.904,
+    196.256,
+    196.608,
+    196.93866666666668,
+    197.26933333333332,
+    197.61066666666667,
+    197.952
   ],
   "downbeat": [
     true,
@@ -1031,7 +1086,62 @@
     false,
     false,
     false,
-    true
+    true,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false,
+    true,
+    false,
+    false,
+    false
   ],
   "bars": [
     0,
@@ -1162,7 +1272,20 @@
     500,
     504,
     508,
-    512
+    512,
+    516,
+    520,
+    524,
+    528,
+    532,
+    536,
+    540,
+    544,
+    548,
+    552,
+    556,
+    560,
+    564
   ],
   "phrases": [
     0,
@@ -1197,7 +1320,10 @@
     464,
     480,
     496,
-    512
+    512,
+    528,
+    544,
+    560
   ],
   "onsets": [
     0.0,
@@ -19951,393 +20077,429 @@
   "sections": [
     {
       "name": "section_0",
-      "start": 16.587,
-      "end": 19.349,
-      "energy": 0.429
+      "start": 2.453,
+      "end": 5.216,
+      "energy": 0.214
     },
     {
       "name": "section_1",
-      "start": 19.349,
-      "end": 22.101,
-      "energy": 0.357
+      "start": 5.216,
+      "end": 7.968,
+      "energy": 0.285
     },
     {
       "name": "section_2",
-      "start": 22.101,
-      "end": 24.864,
-      "energy": 0.377
+      "start": 7.968,
+      "end": 10.731,
+      "energy": 0.326
     },
     {
       "name": "section_3",
-      "start": 24.864,
-      "end": 27.787,
-      "energy": 0.366
+      "start": 10.731,
+      "end": 13.493,
+      "energy": 0.334
     },
     {
       "name": "section_4",
-      "start": 27.787,
-      "end": 30.549,
-      "energy": 0.514
+      "start": 13.493,
+      "end": 16.245,
+      "energy": 0.342
     },
     {
       "name": "section_5",
-      "start": 30.549,
-      "end": 33.312,
-      "energy": 0.469
+      "start": 16.245,
+      "end": 18.997,
+      "energy": 0.432
     },
     {
       "name": "section_6",
-      "start": 33.312,
-      "end": 36.064,
-      "energy": 0.482
+      "start": 18.997,
+      "end": 21.76,
+      "energy": 0.358
     },
     {
       "name": "section_7",
-      "start": 36.064,
-      "end": 38.827,
-      "energy": 0.435
+      "start": 21.76,
+      "end": 24.512,
+      "energy": 0.375
     },
     {
       "name": "section_8",
-      "start": 38.827,
-      "end": 41.589,
-      "energy": 0.447
+      "start": 24.512,
+      "end": 27.445,
+      "energy": 0.375
     },
     {
       "name": "section_9",
-      "start": 41.589,
-      "end": 44.341,
-      "energy": 0.442
+      "start": 27.445,
+      "end": 30.208,
+      "energy": 0.495
     },
     {
       "name": "section_10",
-      "start": 44.341,
-      "end": 47.104,
-      "energy": 0.365
+      "start": 30.208,
+      "end": 32.971,
+      "energy": 0.462
     },
     {
       "name": "section_11",
-      "start": 47.104,
-      "end": 49.856,
-      "energy": 0.355
+      "start": 32.971,
+      "end": 35.723,
+      "energy": 0.477
     },
     {
       "name": "section_12",
-      "start": 49.856,
-      "end": 52.619,
-      "energy": 0.438
+      "start": 35.723,
+      "end": 38.485,
+      "energy": 0.449
     },
     {
       "name": "section_13",
-      "start": 52.619,
-      "end": 55.381,
-      "energy": 0.448
+      "start": 38.485,
+      "end": 41.237,
+      "energy": 0.447
     },
     {
       "name": "section_14",
-      "start": 55.381,
-      "end": 58.133,
-      "energy": 0.432
+      "start": 41.237,
+      "end": 44.0,
+      "energy": 0.44
     },
     {
       "name": "section_15",
-      "start": 58.133,
-      "end": 60.896,
-      "energy": 0.383
+      "start": 44.0,
+      "end": 46.752,
+      "energy": 0.374
     },
     {
       "name": "section_16",
-      "start": 60.896,
-      "end": 63.648,
-      "energy": 0.453
+      "start": 46.752,
+      "end": 49.525,
+      "energy": 0.353
     },
     {
       "name": "section_17",
-      "start": 63.648,
-      "end": 66.411,
-      "energy": 0.433
+      "start": 49.525,
+      "end": 52.277,
+      "energy": 0.434
     },
     {
       "name": "section_18",
-      "start": 66.411,
-      "end": 69.163,
-      "energy": 0.429
+      "start": 52.277,
+      "end": 55.029,
+      "energy": 0.447
     },
     {
       "name": "section_19",
-      "start": 69.163,
-      "end": 71.915,
-      "energy": 0.329
-    },
-    {
-      "name": "section_20",
-      "start": 71.915,
-      "end": 74.677,
+      "start": 55.029,
+      "end": 57.792,
       "energy": 0.432
     },
     {
+      "name": "section_20",
+      "start": 57.792,
+      "end": 60.544,
+      "energy": 0.393
+    },
+    {
       "name": "section_21",
-      "start": 74.677,
-      "end": 77.429,
-      "energy": 0.437
+      "start": 60.544,
+      "end": 63.307,
+      "energy": 0.443
     },
     {
       "name": "section_22",
-      "start": 77.429,
-      "end": 80.192,
-      "energy": 0.423
+      "start": 63.307,
+      "end": 66.059,
+      "energy": 0.434
     },
     {
       "name": "section_23",
-      "start": 80.192,
-      "end": 82.944,
+      "start": 66.059,
+      "end": 68.821,
       "energy": 0.432
     },
     {
       "name": "section_24",
-      "start": 82.944,
-      "end": 85.696,
-      "energy": 0.407
+      "start": 68.821,
+      "end": 71.573,
+      "energy": 0.34
     },
     {
       "name": "section_25",
-      "start": 85.696,
-      "end": 88.459,
-      "energy": 0.41
+      "start": 71.573,
+      "end": 74.336,
+      "energy": 0.417
     },
     {
       "name": "section_26",
-      "start": 88.459,
-      "end": 91.211,
-      "energy": 0.411
+      "start": 74.336,
+      "end": 77.088,
+      "energy": 0.436
     },
     {
       "name": "section_27",
-      "start": 91.211,
-      "end": 93.963,
-      "energy": 0.369
+      "start": 77.088,
+      "end": 79.84,
+      "energy": 0.426
     },
     {
       "name": "section_28",
-      "start": 93.963,
-      "end": 96.725,
-      "energy": 0.482
+      "start": 79.84,
+      "end": 82.603,
+      "energy": 0.429
     },
     {
       "name": "section_29",
-      "start": 96.725,
-      "end": 99.477,
-      "energy": 0.467
+      "start": 82.603,
+      "end": 85.355,
+      "energy": 0.409
     },
     {
       "name": "section_30",
-      "start": 99.477,
-      "end": 102.229,
-      "energy": 0.466
+      "start": 85.355,
+      "end": 88.107,
+      "energy": 0.411
     },
     {
       "name": "section_31",
-      "start": 102.229,
-      "end": 104.981,
-      "energy": 0.454
+      "start": 88.107,
+      "end": 90.869,
+      "energy": 0.412
     },
     {
       "name": "section_32",
-      "start": 104.981,
-      "end": 107.733,
-      "energy": 0.464
+      "start": 90.869,
+      "end": 93.621,
+      "energy": 0.376
     },
     {
       "name": "section_33",
-      "start": 107.733,
-      "end": 110.496,
-      "energy": 0.463
+      "start": 93.621,
+      "end": 96.373,
+      "energy": 0.468
     },
     {
       "name": "section_34",
-      "start": 110.496,
-      "end": 113.248,
-      "energy": 0.443
+      "start": 96.373,
+      "end": 99.125,
+      "energy": 0.468
     },
     {
       "name": "section_35",
-      "start": 113.248,
-      "end": 116.0,
-      "energy": 0.418
+      "start": 99.125,
+      "end": 101.888,
+      "energy": 0.465
     },
     {
       "name": "section_36",
-      "start": 116.0,
-      "end": 118.752,
-      "energy": 0.39
+      "start": 101.888,
+      "end": 104.64,
+      "energy": 0.457
     },
     {
       "name": "section_37",
-      "start": 118.752,
-      "end": 121.504,
-      "energy": 0.334
-    },
-    {
-      "name": "section_38",
-      "start": 121.504,
-      "end": 124.267,
-      "energy": 0.39
-    },
-    {
-      "name": "section_39",
-      "start": 124.267,
-      "end": 127.019,
-      "energy": 0.378
-    },
-    {
-      "name": "section_40",
-      "start": 127.019,
-      "end": 129.771,
-      "energy": 0.407
-    },
-    {
-      "name": "section_41",
-      "start": 129.771,
-      "end": 132.523,
-      "energy": 0.393
-    },
-    {
-      "name": "section_42",
-      "start": 132.523,
-      "end": 135.275,
-      "energy": 0.397
-    },
-    {
-      "name": "section_43",
-      "start": 135.275,
-      "end": 138.037,
-      "energy": 0.407
-    },
-    {
-      "name": "section_44",
-      "start": 138.037,
-      "end": 140.789,
+      "start": 104.64,
+      "end": 107.392,
       "energy": 0.462
     },
     {
+      "name": "section_38",
+      "start": 107.392,
+      "end": 110.155,
+      "energy": 0.463
+    },
+    {
+      "name": "section_39",
+      "start": 110.155,
+      "end": 112.907,
+      "energy": 0.445
+    },
+    {
+      "name": "section_40",
+      "start": 112.907,
+      "end": 115.659,
+      "energy": 0.419
+    },
+    {
+      "name": "section_41",
+      "start": 115.659,
+      "end": 118.411,
+      "energy": 0.398
+    },
+    {
+      "name": "section_42",
+      "start": 118.411,
+      "end": 121.163,
+      "energy": 0.336
+    },
+    {
+      "name": "section_43",
+      "start": 121.163,
+      "end": 123.915,
+      "energy": 0.385
+    },
+    {
+      "name": "section_44",
+      "start": 123.915,
+      "end": 126.677,
+      "energy": 0.372
+    },
+    {
       "name": "section_45",
-      "start": 140.789,
-      "end": 143.541,
-      "energy": 0.47
+      "start": 126.677,
+      "end": 129.419,
+      "energy": 0.411
     },
     {
       "name": "section_46",
-      "start": 143.541,
-      "end": 146.304,
-      "energy": 0.51
+      "start": 129.419,
+      "end": 132.181,
+      "energy": 0.39
     },
     {
       "name": "section_47",
-      "start": 146.304,
-      "end": 149.056,
-      "energy": 0.459
+      "start": 132.181,
+      "end": 134.933,
+      "energy": 0.398
     },
     {
       "name": "section_48",
-      "start": 149.056,
-      "end": 151.808,
-      "energy": 0.503
+      "start": 134.933,
+      "end": 137.685,
+      "energy": 0.409
     },
     {
       "name": "section_49",
-      "start": 151.808,
-      "end": 154.56,
-      "energy": 0.511
+      "start": 137.685,
+      "end": 140.448,
+      "energy": 0.451
     },
     {
       "name": "section_50",
-      "start": 154.56,
-      "end": 157.323,
-      "energy": 0.494
+      "start": 140.448,
+      "end": 143.2,
+      "energy": 0.468
     },
     {
       "name": "section_51",
-      "start": 157.323,
-      "end": 160.075,
-      "energy": 0.458
+      "start": 143.2,
+      "end": 145.952,
+      "energy": 0.508
     },
     {
       "name": "section_52",
-      "start": 160.075,
-      "end": 162.827,
-      "energy": 0.515
+      "start": 145.952,
+      "end": 148.715,
+      "energy": 0.472
     },
     {
       "name": "section_53",
-      "start": 162.827,
-      "end": 165.589,
-      "energy": 0.52
+      "start": 148.715,
+      "end": 151.467,
+      "energy": 0.49
     },
     {
       "name": "section_54",
-      "start": 165.589,
-      "end": 168.341,
-      "energy": 0.524
+      "start": 151.467,
+      "end": 154.219,
+      "energy": 0.513
     },
     {
       "name": "section_55",
-      "start": 168.341,
-      "end": 171.093,
-      "energy": 0.516
+      "start": 154.219,
+      "end": 156.971,
+      "energy": 0.498
     },
     {
       "name": "section_56",
-      "start": 171.093,
-      "end": 173.845,
-      "energy": 0.595
+      "start": 156.971,
+      "end": 159.733,
+      "energy": 0.465
     },
     {
       "name": "section_57",
-      "start": 173.845,
-      "end": 176.597,
-      "energy": 0.598
+      "start": 159.733,
+      "end": 162.485,
+      "energy": 0.504
     },
     {
       "name": "section_58",
-      "start": 176.597,
-      "end": 179.349,
-      "energy": 0.566
+      "start": 162.485,
+      "end": 165.237,
+      "energy": 0.521
     },
     {
       "name": "section_59",
-      "start": 179.349,
-      "end": 182.112,
-      "energy": 0.517
+      "start": 165.237,
+      "end": 167.989,
+      "energy": 0.523
     },
     {
       "name": "section_60",
-      "start": 182.112,
-      "end": 184.864,
-      "energy": 0.368
+      "start": 167.989,
+      "end": 170.741,
+      "energy": 0.511
     },
     {
       "name": "section_61",
-      "start": 184.864,
-      "end": 187.616,
-      "energy": 0.324
+      "start": 170.741,
+      "end": 173.504,
+      "energy": 0.588
     },
     {
       "name": "section_62",
-      "start": 187.616,
-      "end": 190.379,
-      "energy": 0.329
+      "start": 173.504,
+      "end": 176.256,
+      "energy": 0.6
     },
     {
       "name": "section_63",
-      "start": 190.379,
-      "end": 193.131,
-      "energy": 0.378
+      "start": 176.256,
+      "end": 179.008,
+      "energy": 0.569
     },
     {
       "name": "section_64",
-      "start": 193.131,
+      "start": 179.008,
+      "end": 181.771,
+      "energy": 0.517
+    },
+    {
+      "name": "section_65",
+      "start": 181.771,
+      "end": 184.523,
+      "energy": 0.392
+    },
+    {
+      "name": "section_66",
+      "start": 184.523,
+      "end": 187.275,
+      "energy": 0.324
+    },
+    {
+      "name": "section_67",
+      "start": 187.275,
+      "end": 190.037,
+      "energy": 0.327
+    },
+    {
+      "name": "section_68",
+      "start": 190.037,
+      "end": 192.789,
+      "energy": 0.359
+    },
+    {
+      "name": "section_69",
+      "start": 192.789,
+      "end": 195.563,
+      "energy": 0.618
+    },
+    {
+      "name": "section_70",
+      "start": 195.563,
       "end": 199.967,
-      "energy": 0.383
+      "energy": 0.244
     }
   ]
 }
