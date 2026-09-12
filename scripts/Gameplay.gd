@@ -119,7 +119,13 @@ func _process(delta: float) -> void:
 		
 	# Check level completion
 	if chart != null:
-		if (music.playing and song_time >= chart.duration) or music.finished:
+		# Victory only when the music has genuinely reached the end of the
+		# track. `music.finished` flips true during stream setup before real
+		# playback, so guard it with an elapsed-time check to avoid an
+		# instant-win on the first frame.
+		var reached_end: bool = song_time >= chart.duration and song_time > 0.5
+		var genuinely_finished: bool = music.finished and song_time > 0.5
+		if reached_end or genuinely_finished:
 			_trigger_victory()
 			return
 	else:
