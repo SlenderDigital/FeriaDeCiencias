@@ -241,8 +241,6 @@ func ClickButton(btn: Control) -> void:
 		_on_btn_track_1_pressed()
 	elif btn == $Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack2:
 		_on_btn_track_2_pressed()
-	elif btn == $Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack3:
-		_on_btn_track_3_pressed()
 	elif btn == $Layout/Content/Panels/SongSelectPanel/VBox/Details/BtnPlayLevel:
 		_on_btn_play_level_pressed()
 	elif btn == check_fullscreen:
@@ -345,10 +343,6 @@ func _on_btn_track_1_pressed() -> void:
 
 func _on_btn_track_2_pressed() -> void:
 	_select_track_ui(2)
-
-
-func _on_btn_track_3_pressed() -> void:
-	_select_track_ui(3)
 
 
 func _select_track_ui(index: int) -> void:

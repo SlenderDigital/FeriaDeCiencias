@@ -39,6 +39,10 @@ var targets: Array[Dictionary] = []
 var projectiles: Array[Dictionary] = []
 var spark_effects: Array[Dictionary] = []
 
+# --- Debug menu (F6) ---
+var _debug_overlay: Control = null
+var _debug_visible: bool = false
+
 func _ready() -> void:
 	var seed_val: int = 1337
 	if GameManager:
@@ -76,6 +80,9 @@ func _ready() -> void:
 	print("[Gameplay] Nivel iniciado: ", track_data.get("name", "Procedural MVP"), " (bpm=", bpm, ", chart=", chart != null, ")")
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_F6:
+		_toggle_debug_menu()
+		return
 	if event.is_action_pressed("ui_cancel"): # ESC key
 		toggle_pause()
 	elif not is_paused and not is_game_over:
@@ -92,6 +99,64 @@ func toggle_pause() -> void:
 	pause_overlay.visible = is_paused
 	get_tree().paused = is_paused
 	if SoundManager: SoundManager.play_click()
+
+
+# --- Debug: saltar entre niveles al instante (F6) ---
+func _toggle_debug_menu() -> void:
+	_debug_visible = not _debug_visible
+	if _debug_overlay == null:
+		_build_debug_overlay()
+	_debug_overlay.visible = _debug_visible
+	get_tree().paused = _debug_visible
+
+
+func _build_debug_overlay() -> void:
+	_debug_overlay = Control.new()
+	_debug_overlay.name = "DebugMenu"
+	_debug_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_debug_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.82)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_debug_overlay.add_child(dim)
+
+	var box := VBoxContainer.new()
+	box.set_anchors_preset(Control.PRESET_CENTER)
+	box.custom_minimum_size = Vector2(420, 0)
+	box.add_theme_constant_override("separation", 12)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	_debug_overlay.add_child(box)
+
+	var title := Label.new()
+	title.text = "DEBUG — SALTO DE NIVEL (F6 para cerrar)"
+	title.add_theme_color_override("font_color", Color(0, 0.94, 1, 1))
+	title.add_theme_font_size_override("font_size", 20)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+
+	if GameManager:
+		for i in range(GameManager.TRACKS.size()):
+			var t: Dictionary = GameManager.TRACKS[i]
+			var btn := Button.new()
+			btn.text = "%d. %s  (%s)" % [i + 1, t["name"], t["difficulty"]]
+			btn.custom_minimum_size = Vector2(0, 40)
+			btn.pressed.connect(_restart_with_level.bind(i))
+			box.add_child(btn)
+
+	_debug_overlay.visible = false
+	add_child(_debug_overlay)
+
+
+func _restart_with_level(index: int) -> void:
+	if GameManager and index >= 0 and index < GameManager.TRACKS.size():
+		GameManager.select_track(index)
+	get_tree().paused = false
+	if GameManager:
+		GameManager.change_scene("res://scenes/Gameplay.tscn")
+	else:
+		get_tree().reload_current_scene()
+
 
 func _process(delta: float) -> void:
 	if is_paused or is_game_over:
