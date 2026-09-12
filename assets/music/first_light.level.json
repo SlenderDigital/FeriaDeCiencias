@@ -1,0 +1,10 @@
+{
+  "sections": [
+    {"name": "intro",  "start": 0,  "end": 20, "pattern_pool": ["single_target"], "density": 0.35},
+    {"name": "teach",  "start": 20, "end": 45, "pattern_pool": ["single_target", "double_lane"], "density": 0.5},
+    {"name": "build",  "start": 45, "end": 65, "pattern_pool": ["double_lane"], "density": 0.6},
+    {"name": "drop",   "start": 65, "end": 88, "pattern_pool": ["double_lane", "hazard_wall"], "density": 0.7},
+    {"name": "outro",  "start": 88, "end": 100, "pattern_pool": ["single_target"], "density": 0.3}
+  ],
+  "setpieces": []
+}
