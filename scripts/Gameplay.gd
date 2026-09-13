@@ -200,14 +200,33 @@ func _process(delta: float) -> void:
 			_trigger_victory()
 			return
 		
-	# Spawning: chart-driven beats from the real playback pointer, else procedural waves
+	# --- Spawning: chart-driven beats from the real playback pointer, else procedural waves
 	if chart != null:
 		var track_color: Color = track_data.get("color", Color(0, 0.94, 1, 1))
 		while next_beat_idx < chart.beat_times.size() and chart.beat_times[next_beat_idx] <= song_time:
 			var t: float = chart.beat_times[next_beat_idx]
+			
+			# Regular beat spawns
 			var spawns: Array[Dictionary] = controller.spawns_at(t, track_color)
 			for s in spawns:
 				targets.append(s)
+			
+			# Downbeat patterns (every 4 beats) - big patterns
+			if chart.downbeat[next_beat_idx]:
+				var downbeat_spawns: Array[Dictionary] = controller.spawns_at_downbeat(t, next_beat_idx, track_color)
+				for s in controller.spawns_at_downbeat(t, next_beat_idx, track_color):
+					targets.append(s)
+			
+			# Bar patterns (every 4 beats = every downbeat) - variations
+			if next_beat_idx % 4 == 0:
+				for s in controller.spawns_at_bar(t, next_beat_idx, track_color):
+					targets.append(s)
+			
+			# Phrase patterns (every 16 beats) - setpieces / new mechanics
+			if next_beat_idx % 16 == 0:
+				for s in controller.spawns_at_phrase(t, next_beat_idx, track_color):
+					targets.append(s)
+			
 			next_beat_idx += 1
 	else:
 		beat_timer += delta
@@ -288,7 +307,58 @@ func _update_targets(delta: float) -> void:
 	var to_remove: Array[int] = []
 	for i in range(targets.size()):
 		var t: Dictionary = targets[i]
-		t["pos"] += t["vel"] * delta
+		
+		# Handle movement based on type
+		var ttype: String = t.get("type", "target")
+		if ttype == "homing":
+			# Homing projectile chases player
+			var dir = (player_pos - t["pos"]).normalized()
+			t["vel"] = t["vel"].lerp(dir * 250.0, 0.1)
+		elif ttype == "laser_telegraph":
+			# Telegraph counts down, then fires
+			var telegraph_time: float = t.get("telegraph_time", 1.0)
+			telegraph_time -= delta
+			t["telegraph_time"] = telegraph_time
+			if telegraph_time <= 0.0 and not t.get("fired", false):
+				# Fire the laser - create a vertical laser beam
+				t["fired"] = true
+				t["type"] = "laser_beam"
+				t["vel"] = Vector2(0, 0)  # Laser beam is instant, drawn as line
+				t["radius"] = 12
+			elif ttype == "laser_beam":
+				# Laser beam persists for a short duration then removes
+				var lifetime: float = t.get("lifetime", 0.5)
+				lifetime -= delta
+				if lifetime <= 0.0:
+					to_remove.append(i)
+					continue
+				t["lifetime"] = lifetime
+		elif ttype == "laser_telegraph":
+			# Telegraph counts down
+			var telegraph_time: float = t.get("telegraph_time", 1.0)
+			telegraph_time -= delta
+			t["telegraph_time"] = telegraph_time
+			if telegraph_time <= 0.0 and not t.get("fired", false):
+				t["fired"] = true
+				t["type"] = "laser_beam"
+				t["lifetime"] = 0.5
+		elif ttype == "laser_beam":
+			var lifetime: float = t.get("lifetime", 0.5)
+			lifetime -= delta
+			if lifetime <= 0.0:
+				to_remove.append(i)
+				continue
+			t["lifetime"] = lifetime
+		elif ttype == "perimeter":
+			# Perimeter balls move toward center
+			t["pos"] += t["vel"] * delta
+			# Check if reached center
+			if t["pos"].distance_to(Vector2(640, 360)) < 50:
+				to_remove.append(i)
+				continue
+		else:
+			# Standard movement
+			t["pos"] += t["vel"] * delta
 		
 		# Check collision with player ship
 		if player_pos.distance_to(t["pos"]) < (t["radius"] + 16.0):
@@ -461,10 +531,45 @@ func _draw() -> void:
 	# Draw targets & hazards
 	for t in targets:
 		if t.get("is_hazard", false):
-			# Red pulsing danger hazard
-			draw_circle(t["pos"], t["radius"], Color(1.0, 0.2, 0.3, 0.35))
-			draw_arc(t["pos"], t["radius"], 0, TAU, 28, Color(1.0, 0.1, 0.2, 1.0), 3.5)
-		else:
-			# Normal rhythm target
-			draw_arc(t["pos"], t["radius"], 0, TAU, 24, t["color"], 2.5)
-			draw_circle(t["pos"], t["radius"] * 0.4, Color(1, 1, 1, 0.85))
+			match t.get("type", "hazard"):
+				"stripe_wall":
+					# Draw diagonal stripe wall
+					draw_rect(t["pos"], Vector2(1280, t["radius"] * 2), Color(1.0, 0.2, 0.3, 0.4))
+					# Diagonal stripes
+					for i in range(12):
+						var x = t["pos"].x + (i * 120 - 240)
+						draw_line(Vector2(x, t["pos"].y), Vector2(x + 200, t["pos"].y + t["radius"] * 2), Color(0, 0, 0, 0.6), 3)
+				"saw":
+					# Draw rotating saw
+					draw_polygon(PackedVector2Array([t["pos"], t["pos"] + Vector2(-t["radius"], -t["radius"]), t["pos"] + Vector2(t["radius"], -t["radius"]), t["pos"] + Vector2(t["radius"], t["radius"]), t["pos"] + Vector2(-t["radius"], t["radius"]), t["pos"] + Vector2(-t["radius"], -t["radius"])]), t["color"], true)
+				"drifter":
+					# Spiked ring
+					draw_circle(t["pos"], t["radius"], t["color"])
+					for i in range(8):
+						var ang = TAU * i / 8.0
+						var spike = Vector2(cos(ang), sin(ang)) * t["radius"] * 1.3
+						draw_line(t["pos"], t["pos"] + spike, t["color"], 3)
+				"laser_telegraph":
+					# Telegraph line
+					var h = t.get("telegraph_time", 1.0)
+					var alpha = 0.3 + 0.7 * (1.0 - h)
+					draw_line(Vector2(t["pos"].x, 0), Vector2(t["pos"].x, 720), Color(1, 0.8, 0, alpha), 4)
+				"homing":
+					draw_circle(t["pos"], t["radius"], t["color"])
+					# Direction indicator
+					var dir = t["vel"].normalized()
+					draw_line(t["pos"], t["pos"] + dir * t["radius"] * 1.5, Color(1, 1, 1, 0.8), 2)
+				"perimeter":
+					draw_circle(t["pos"], t["radius"], t["color"])
+					for i in range(6):
+						var ang = TAU * i / 6.0
+						var spike = Vector2(cos(ang), sin(ang)) * t["radius"] * 1.2
+						draw_line(t["pos"], t["pos"] + spike, t["color"], 2)
+				_:
+					# Default hazard
+					draw_circle(t["pos"], t["radius"], Color(1.0, 0.2, 0.3, 0.35))
+					draw_arc(t["pos"], t["radius"], 0, TAU, 28, Color(1.0, 0.1, 0.2, 1.0), 3.5)
+			else:
+				# Normal rhythm target
+				draw_arc(t["pos"], t["radius"], 0, TAU, 24, t["color"], 2.5)
+				draw_circle(t["pos"], t["radius"] * 0.4, Color(1, 1, 1, 0.85))

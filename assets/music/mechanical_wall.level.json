@@ -1,11 +1,11 @@
 {
   "sections": [
-    {"name": "intro",         "start": 0,   "end": 22,  "pattern_pool": ["single_target"],                "density": 0.35},
-    {"name": "teach",         "start": 22,  "end": 42,  "pattern_pool": ["single_target", "double_lane"], "density": 0.55},
-    {"name": "build",         "start": 42,  "end": 58,  "pattern_pool": ["double_lane", "hazard_wall"],   "density": 0.7},
-    {"name": "drop",          "start": 58,  "end": 76,  "pattern_pool": ["hazard_wall", "double_lane"],   "density": 0.85},
-    {"name": "climax",        "start": 76,  "end": 96,  "pattern_pool": ["hazard_wall", "triple_burst"],  "density": 0.9},
-    {"name": "outro",         "start": 96,  "end": 110, "pattern_pool": ["single_target"],                "density": 0.3}
+    {"name": "intro",  "start": 0,  "end": 15, "pattern_pool": ["single_target"], "density": 0.3},
+    {"name": "teach",  "start": 15, "end": 35, "pattern_pool": ["single_target", "double_lane", "radial_burst"], "density": 0.5},
+    {"name": "build",  "start": 35, "end": 55, "pattern_pool": ["double_lane", "radial_burst", "stripe_wall", "saw"], "density": 0.65},
+    {"name": "drop",   "start": 55, "end": 85, "pattern_pool": ["double_lane", "hazard_wall", "stripe_wall", "saw", "drifter_swarm"], "density": 0.8},
+    {"name": "climax", "start": 85, "end": 100, "pattern_pool": ["stripe_wall", "saw", "drifter_swarm", "radial_burst", "closing_perimeter"], "density": 0.9},
+    {"name": "outro",  "start": 100, "end": 110, "pattern_pool": ["single_target", "radial_burst"], "density": 0.3}
   ],
   "setpieces": []
 }
