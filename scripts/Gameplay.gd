@@ -325,24 +325,8 @@ func _update_targets(delta: float) -> void:
 				t["type"] = "laser_beam"
 				t["vel"] = Vector2(0, 0)  # Laser beam is instant, drawn as line
 				t["radius"] = 12
-			elif ttype == "laser_beam":
-				# Laser beam persists for a short duration then removes
-				var lifetime: float = t.get("lifetime", 0.5)
-				lifetime -= delta
-				if lifetime <= 0.0:
-					to_remove.append(i)
-					continue
-				t["lifetime"] = lifetime
-		elif ttype == "laser_telegraph":
-			# Telegraph counts down
-			var telegraph_time: float = t.get("telegraph_time", 1.0)
-			telegraph_time -= delta
-			t["telegraph_time"] = telegraph_time
-			if telegraph_time <= 0.0 and not t.get("fired", false):
-				t["fired"] = true
-				t["type"] = "laser_beam"
-				t["lifetime"] = 0.5
 		elif ttype == "laser_beam":
+			# Laser beam persists for a short duration then removes
 			var lifetime: float = t.get("lifetime", 0.5)
 			lifetime -= delta
 			if lifetime <= 0.0:
