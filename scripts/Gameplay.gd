@@ -553,7 +553,7 @@ func _draw() -> void:
 					# Default hazard
 					draw_circle(t["pos"], t["radius"], Color(1.0, 0.2, 0.3, 0.35))
 					draw_arc(t["pos"], t["radius"], 0, TAU, 28, Color(1.0, 0.1, 0.2, 1.0), 3.5)
-			else:
-				# Normal rhythm target
-				draw_arc(t["pos"], t["radius"], 0, TAU, 24, t["color"], 2.5)
-				draw_circle(t["pos"], t["radius"] * 0.4, Color(1, 1, 1, 0.85))
+		else:
+			# Normal rhythm target
+			draw_arc(t["pos"], t["radius"], 0, TAU, 24, t["color"], 2.5)
+			draw_circle(t["pos"], t["radius"] * 0.4, Color(1, 1, 1, 0.85))
