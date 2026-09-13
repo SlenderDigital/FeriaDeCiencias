@@ -164,6 +164,13 @@ func _process(delta: float) -> void:
 
 
 # ------------------------------------------------------------------ lógica de mano
+# Dwell-click anti-spam: tras disparar un click sobre un botón, no volver a
+# dispararlo sobre el mismo mientras la mano siga ahí, hasta pasado un tiempo
+# de gracia. Sin esto, una mano quieta re-dispara el click cada DWELL_TIME
+# (ej. te quedás atrancado alternando hacia Configuración).
+var _dwell_fire_time: float = -1.0
+var _dwell_fire_button: Control = null
+
 func UpdateHandState(delta: float) -> void:
 	var btn := HitTestButtonAt(_hand_pos)
 	if btn != _hand_btn:
@@ -173,9 +180,15 @@ func UpdateHandState(delta: float) -> void:
 	if _hand_btn:
 		_dwell_acc += delta
 		if _dwell_acc >= DWELL_TIME:
-			_dwell_acc = 0.0
-			ClickButton(_hand_btn)
-			_hand_btn = null
+			var can_fire := true
+			if _dwell_fire_button == _hand_btn and Time.get_ticks_msec() / 1000.0 - _dwell_fire_time < 0.7:
+				can_fire = false  # mismo botón recién clickeado -> marginar
+			if can_fire:
+				_dwell_acc = 0.0
+				_dwell_fire_time = Time.get_ticks_msec() / 1000.0
+				_dwell_fire_button = _hand_btn
+				ClickButton(_hand_btn)
+				_hand_btn = null
 	else:
 		_dwell_acc = 0.0
 
@@ -204,6 +217,12 @@ func CollectVisibleButtons() -> Array:
 
 
 func CollectVisibleButtonsRec(n: Node, out: Array) -> void:
+	# Solo contar botones efectivamente en pantalla: un nodo no es "visible"
+	# para el usuario si alguno de sus ancestros está oculto. En este menú,
+	# los paneles SongSelect/Settings se ocultan alternadamente, así que un
+	# botón dentro de un panel colapsado NO debe ser clickeable.
+	if n is Control and not n.is_visible_in_tree():
+		return
 	if n is Button and n.visible:
 		out.append(n)
 	elif n is CheckButton and n.visible:

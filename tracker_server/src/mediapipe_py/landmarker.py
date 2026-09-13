@@ -12,9 +12,9 @@ class Landmarker:
         self.hands_solution = mp.solutions.hands
 
         self.hands = self.hands_solution.Hands(
-            model_complexity=0,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5
+            model_complexity=1,
+            min_detection_confidence=0.6,
+            min_tracking_confidence=0.6
         )
 
     def process(self, image: cv2.typing.MatLike) -> ArrayLike:
