@@ -33,6 +33,7 @@ var combo: int = 0
 var max_combo: int = 0
 var is_paused: bool = false
 var is_game_over: bool = false
+var _music_finished: bool = false
 
 # Targets, Hazards & Projectiles
 var targets: Array[Dictionary] = []
@@ -70,6 +71,7 @@ func _ready() -> void:
 			total_song_duration = chart.duration
 			beat_interval = 60.0 / bpm
 			music.play()
+			music.finished.connect(func(): _music_finished = true)
 	
 	if track_title_lbl:
 		track_title_lbl.text = "%s  |  BPM: %d" % [track_data.get("name", "Nivel Procedural"), int(bpm)]
@@ -185,12 +187,12 @@ func _process(delta: float) -> void:
 	# Check level completion
 	if chart != null:
 		# Victory only when the music has genuinely reached the end of the
-		# track. `music.finished` flips true during stream setup before real
-		# playback, so guard it with an elapsed-time check to avoid an
-		# instant-win on the first frame.
-		var reached_end: bool = song_time >= chart.duration and song_time > 0.5
-		var genuinely_finished: bool = music.finished and song_time > 0.5
-		if reached_end or genuinely_finished:
+		# track, per the real playback clock. `music.finished` is a Signal
+		# (always truthy if used as a bool), so we track actual completion
+		# via a signal-connected flag and guard both paths with an elapsed
+		# time margin to avoid an instant-win on the first frames.
+		var reached_end: bool = song_time >= chart.duration and song_time > 1.0
+		if reached_end or (_music_finished and song_time > 1.0):
 			_trigger_victory()
 			return
 	else:
