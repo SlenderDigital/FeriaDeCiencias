@@ -11,6 +11,7 @@ var sfx_click: AudioStreamWAV
 var sfx_launch: AudioStreamWAV
 var sfx_beat: AudioStreamWAV
 var sfx_back: AudioStreamWAV
+var sfx_warning: AudioStreamWAV
 
 func _ready() -> void:
 	process_mode = PROCESS_MODE_ALWAYS
@@ -32,6 +33,12 @@ func _generate_audio_streams() -> void:
 	sfx_click = _create_synth_tone(1320.0, 0.08, 0.35, "square")   # Crisp synth click
 	sfx_launch = _create_synth_sweep(220.0, 880.0, 0.4, 0.4)      # Rising synth sweep
 	sfx_back = _create_synth_sweep(660.0, 330.0, 0.12, 0.25)      # Falling tone
+	sfx_warning = _create_synth_tone(784.0, 0.12, 0.4, "square")  # Alarma: beep G5 angular
+
+func play_warning() -> void:
+	# Alarma de telegraph láser: avisa ANTES de que el beam pueda dañar
+	if sfx_warning and _get_sfx_enabled():
+		_play_stream(audio_player_ui, sfx_warning, -4.0)
 	sfx_beat = _create_synth_tone(120.0, 0.08, 0.5, "sine")       # Deep bass kick pulse
 
 func play_hover() -> void:

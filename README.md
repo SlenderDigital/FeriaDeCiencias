@@ -2,39 +2,43 @@
 
 Juego rítmico de acción con estética minimalista, abstracta y neón, desarrollado en **Godot 4** para la Feria de Ciencias.
 
-El jugador controla una nave o personaje luminoso con ambas manos mediante **MediaPipe** (tracking de manos por cámara), esquivando obstáculos, apuntando y disparando al ritmo de la música. Cada canción define la dificultad, la velocidad de los ataques y la intensidad visual del nivel.
+El jugador controla una nave o personaje luminoso con ambas manos mediante **MediaPipe** (tracking de manos por cámara), esquivando obstáculos al ritmo de la música y usando un escudo de emergencia para atravesar lo imposible. Cada canción define la dificultad, la velocidad de los ataques y la intensidad visual del nivel.
 ---
 
 ## Características principales
 
-- **Control por manos con MediaPipe**: una mano define el desplazamiento, la otra la orientación y el disparo.
+- **Control por manos con MediaPipe**: una mano define el desplazamiento, la otra la orientación de la nave.
 - **Gameplay rítmico**: los patrones, proyectiles y obstáculos se sincronizan con la canción.
+- **Esquiva pura**: todo lo que aparece es peligro (sierras, enjambres, proyectiles teledirigidos, muros y láseres). No hay disparos ni puntos que recolectar.
+- **Progreso como métrica**: el HUD muestra el % de la canción sobrevivida; el récord personal es el mejor progreso alcanzado.
+- **Escudo de emergencia**: invulnerabilidad temporal con recarga, para atravesar muros y láseres.
+- **Barra de vida con estados**: verde, ámbar y rojo pulsante según lo crítica que esté la partida.
 - **Estética neón minimalista**: visuales abstractos con brillos, estelas y animaciones de impacto.
-- **Dificultad progresiva**: la intensidad escala según la canción seleccionada.
-- **Mejoras visuales (Upgrades)**: cambios de color/brillo del personaje, estelas neón, disparos vistosos, escudo visual temporal, transformaciones estéticas según el rendimiento.
+- **Dificultad progresiva**: la intensidad escala con la energía de la canción (intro → build → drop → clímax).
 
 ## Condiciones de partida
 
-- **Victoria**: sobrevivir hasta el final de la canción.
-- **Derrota**: la barra de vida llega a 0.
-- **Finalización**: completar todos los niveles (si no se generan de forma procedural).
+- **Victoria**: sobrevivir hasta el final de la canción (progreso 100%).
+- **Derrota**: la barra de vida llega a 0 (el progreso logrado queda registrado).
+- **Récord**: se guarda el mejor progreso por canción (0–100%).
 
 ## Loop general
 
 1. Selección de canción / nivel.
 2. Inicia la música y el jugador entra al escenario.
-3. Moverse siguiendo un punto fijo de referencia con las manos (una mano desplaza, la otra apunta/dispara).
-4. Aparecen patrones, proyectiles y obstáculos cada vez más complejos al ritmo.
-5. Al terminar la canción, se muestra el resultado y se pasa al siguiente desafío.
+3. Moverse siguiendo un punto fijo de referencia con las manos (una mano desplaza, la otra orienta la nave); el escudo se activa con espacio/click.
+4. Aparecen patrones de peligro cada vez más complejos al ritmo: sierras, enjambres, muros con hueco, láseres telegrafiados y proyectiles teledirigidos.
+5. Al terminar la canción (o al perder toda la vida), se muestra el progreso alcanzado y el récord.
 
 ## Mecánica principal
 
-Movimiento y apuntado por manos con MediaPipe:
+Movimiento por manos con MediaPipe:
 
-- Una mano define el desplazamiento.
-- La otra define la orientación y el disparo.
-- Esquivar obstáculos al ritmo de la canción.
-- Disparar para interactuar con ciertos elementos del nivel.
+- Una mano define el desplazamiento de la nave.
+- La otra define la orientación.
+- Esquivar todos los obstáculos al ritmo de la canción: todo spawn es peligro.
+- **Escudo de emergencia**: invulnerabilidad breve (~1.2s) que atraviesa cualquier peligro, con recarga de ~3s.
+- **Progreso**: % de la canción sobrevivida; al morir se guarda como mejor progreso si supera el récord.
 
 ## Requisitos para la feria
 
@@ -91,7 +95,7 @@ El juego **levanta solo el tracker** al abrirse (`run_tracker.sh --detach`), y s
    - 🟠 *"Tracker no instalado — corré ./run_tracker.sh una vez"* → falta la instalación única (abajo).
    - Se oculta sola cuando la mano ya controla la nave.
    - **Al cerrar el juego, el tracker se apaga solo** (libera la cámara).
-3. Mové la mano frente a la cámara: la palma desplaza la nave y la rotación pulgar→índice la orienta. Tirá disparos con espacio/click o con la otra mano.
+3. Mové la mano frente a la cámara: la palma desplaza la nave y la rotación pulgar→índice la orienta. Activá el **escudo** con espacio/click para atravesar peligros unos instantes.
 
 > **Instalación única de dependencias** (solo la primera vez): `cd tracker_server && uv sync` (descarga `mediapipe` y `opencv`). Se hace una vez; el juego no instala nada al abrir.
 >

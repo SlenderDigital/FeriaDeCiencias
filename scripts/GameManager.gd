@@ -19,16 +19,14 @@ const TRACKS: Array[Dictionary] = [
 		"id": "level_first_light",
 		"name": "First Light",
 		"artist": "Abstract Pulse",
-		"bpm": 104,
+		"bpm": 128,
 		"difficulty": "Principiante",
 		"difficulty_stars": 1,
-		"duration": "1:40",
+		"duration": "1:45",
 		"color": Color(0.2, 0.8, 1, 1),
 		"secondary_color": Color(0.1, 0.4, 0.9, 1.0),
-		"description": "Patrones rítmicos estables ideales para acostumbrarse al control.",
-		"audio": "res://assets/music/first_light.ogg",
-		"analysis": "res://assets/music/first_light.analysis.json",
-		"level": "res://assets/music/first_light.level.json"
+		"description": "Tema compuesto por el motor: la canción y el nivel nacen de los mismos datos.",
+		"procedural": true
 	},
 	{
 		"id": "level_mechanical_wall",
@@ -115,6 +113,16 @@ var high_scores: Dictionary = {
 func _ready() -> void:
 	process_mode = PROCESS_MODE_ALWAYS
 	print("[GameManager] Inicializado correctamente.")
+	# Fullscreen-on-start: el juego se juega con la mano frente a la pantalla,
+	# no hay mouse disponible; arrancar ya en fullscreen (main_scene boot).
+	fullscreen_enabled = true
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var scr: Vector2i = DisplayServer.screen_get_size()
+	if scr.x > 0 and scr.y > 0 and DisplayServer.window_get_size() != scr:
+		DisplayServer.window_set_size(scr)
+	print("[GameManager] fullscreen aplicado, tamaño=", DisplayServer.window_get_size())
 
 func get_current_track() -> Dictionary:
 	if current_track_index >= 0 and current_track_index < TRACKS.size():
