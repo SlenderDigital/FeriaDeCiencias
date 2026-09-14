@@ -29,6 +29,8 @@ var player_pos: Vector2 = Vector2(640, 560)
 var ship_rotation: float = 0.0    # grados; 0 = proa hacia +X (derecha)
 # (player_pos se re-centra al área real en _ready())
 var player_speed: float = 550.0
+# Estela de la nave: última posición donde se soltó una chispa de motor.
+var _trail_last: Vector2 = Vector2(-9999.0, -9999.0)
 
 # Escudo: invulnerabilidad temporal (atraviesa todo sin colisionar) + delay de recarga
 const SHIELD_TIME: float = 1.2
@@ -691,12 +693,20 @@ func _draw() -> void:
 	var rad: float = deg_to_rad(ship_rotation)
 	var fwd := Vector2.from_angle(rad)          # linea de proa
 	var perp := Vector2(-fwd.y, fwd.x)          # perpendicular
-	var nose: Vector2 = player_pos + fwd * 20.0
-	var p2: Vector2 = player_pos + (-fwd * 9.0 + perp * 15.0)
-	var p3: Vector2 = player_pos + (-fwd * 9.0 - perp * 15.0)
-	_neon_polyline(PackedVector2Array([nose, p2, p3, nose]), ship_col, 3.5)
-	_neon_line(player_pos, player_pos + fwd * 24.0, Color(1, 1, 1, ship_blink), 1.5)
-	draw_circle(player_pos, 4.0, Color(1.0, 1.0, 1.0, ship_blink))
+	var nose: Vector2 = player_pos + fwd * 24.0
+	var p2: Vector2 = player_pos + (-fwd * 11.0 + perp * 18.0)
+	var p3: Vector2 = player_pos + (-fwd * 11.0 - perp * 18.0)
+	_neon_polyline(PackedVector2Array([nose, p2, p3, nose]), ship_col, 4.0)
+	_neon_line(player_pos, player_pos + fwd * 28.0, Color(1, 1, 1, ship_blink), 2.0)
+	draw_circle(player_pos, 5.0, Color(1.0, 1.0, 1.0, ship_blink))
+	# Estela del motor: chispa color carril en la popa cada 14px de viaje.
+	if _trail_last.distance_to(player_pos) > 14.0:
+		_trail_last = player_pos
+		spark_effects.append({
+			"pos": player_pos - fwd * 12.0,
+			"vel": -fwd * 60.0 + Vector2(randf_range(-30.0, 30.0), randf_range(-30.0, 30.0)),
+			"color": Color(ship_col.r, ship_col.g, ship_col.b, 1.0),
+			"life": 0.3})
 	
 	# Draw spark particles
 	for s in spark_effects:
@@ -726,13 +736,13 @@ func _draw() -> void:
 	if _shield_cooldown > 0.0:
 		var frac: float = 1.0 - clampf(_shield_cooldown / SHIELD_COOLDOWN, 0.0, 1.0)
 		draw_arc(player_pos, 34.0, -PI / 2.0, -PI / 2.0 + TAU * frac, 24,
-				Color(0.5, 0.9, 1.0, 0.25 + 0.3 * frac), 3.0)
+				Color(0.5, 0.95, 1.0, 0.4 + 0.4 * frac), 4.0)
 	else:
 		# listo: pulso tenue para avisar que el escudo volvio a cargar
 		var tnow2: float = Time.get_ticks_msec() * 0.001
 		var pulse: float = 0.5 + 0.5 * sin(tnow2 * 6.0)
 		draw_arc(player_pos, 34.0 + 2.0 * pulse, 0, TAU, 28,
-				Color(0.5, 0.95, 1.0, 0.18 + 0.14 * pulse), 2.0)
+				Color(0.5, 0.95, 1.0, 0.28 + 0.20 * pulse), 2.5)
 
 	# Draw targets & hazards
 	for t in targets:
@@ -822,7 +832,7 @@ func _draw() -> void:
 							Color(2.0, 0.5, 0.55, 0.35 + 0.5 * wpulse), 4.0 + 2.0 * wpulse)
 					else:
 						# Active / fade: muro solido con franjas que desfilan al compas
-						draw_rect(Rect2(-w_half, w_size), Color(1.0, 0.2, 0.3, 0.42 * w_alpha))
+						draw_rect(Rect2(-w_half, w_size), Color(1.0, 0.2, 0.3, 0.30 * w_alpha))
 						var stripe_n: int = maxi(6, int(w_size.x / 110.0))
 						var stripe_w: float = w_size.x / float(stripe_n)
 						# Las franjas avanzan 1 paso por beat, en fase con la musica
@@ -854,27 +864,62 @@ func _draw() -> void:
 							Color(1.5, 1.5, 1.5, 0.30 * w_alpha), 2.0, 26.0)
 					draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 				"saw":
-					# Draw rotating saw
-					draw_colored_polygon(PackedVector2Array([t["pos"], t["pos"] + Vector2(-t["radius"], -t["radius"]), t["pos"] + Vector2(t["radius"], -t["radius"]), t["pos"] + Vector2(t["radius"], t["radius"]), t["pos"] + Vector2(-t["radius"], t["radius"]), t["pos"] + Vector2(-t["radius"], -t["radius"])]), t["color"])
+					# Sierra giratoria: disco oscuro + 8 dientes rojos que rotan
+					# con el reloj real + aro neon + nucleo pulsante.
+					var saw_c: Vector2 = t["pos"]
+					var saw_r: float = t["radius"]
+					var saw_spin: float = Time.get_ticks_msec() * 0.004
+					draw_circle(saw_c, saw_r, Color(0.45, 0.03, 0.08, 1.0))
+					for si in range(8):
+						var sang: float = saw_spin + TAU * float(si) / 8.0
+						var sdir := Vector2(cos(sang), sin(sang))
+						draw_line(saw_c + sdir * saw_r * 0.75, saw_c + sdir * saw_r * 1.28, Color(1.0, 0.13, 0.22, 1.0), 6.0)
+					_neon_arc(saw_c, saw_r * 0.92, Color(1.0, 0.13, 0.22), 3.0)
+					var saw_pulse: float = 0.55 + 0.08 * sin(saw_spin * 0.5)
+					draw_circle(saw_c, saw_r * 0.34, Color(1.3, 0.22, 0.3, saw_pulse))
+					draw_circle(saw_c, saw_r * 0.13, Color(1.6, 0.6, 0.7, 1.0))
 				"drifter":
-					# Spiked ring
-					draw_circle(t["pos"], t["radius"], t["color"])
-					for i in range(8):
-						var ang = TAU * i / 8.0
-						var spike = Vector2(cos(ang), sin(ang)) * t["radius"] * 1.3
-						draw_line(t["pos"], t["pos"] + spike, t["color"], 3)
+					# Mina de puas: casco oscuro + 8 puas neon + nucleo.
+					var dri_c: Vector2 = t["pos"]
+					var dri_r: float = t["radius"]
+					var dri_bp: float = fmod(song_time / maxf(beat_interval, 0.001), 1.0)
+					var dri_len: float = dri_r * (1.25 + 0.25 * clampf(1.0 - dri_bp * 5.0, 0.0, 1.0))
+					draw_circle(dri_c, dri_r, Color(0.38, 0.03, 0.07, 1.0))
+					for di in range(8):
+						var ddir := Vector2.from_angle(TAU * float(di) / 8.0 + song_time * 0.6)
+						_neon_line(dri_c + ddir * dri_r * 0.7, dri_c + ddir * dri_len, Color(1.0, 0.16, 0.25), 3.0)
+					_neon_arc(dri_c, dri_r, Color(1.0, 0.16, 0.25), 3.0)
+					draw_circle(dri_c, dri_r * 0.22, Color(1.5, 0.35, 0.4, 0.9))
 				"homing":
-					draw_circle(t["pos"], t["radius"], t["color"])
-					# Direction indicator
-					var dir = t["vel"].normalized()
-					draw_line(t["pos"], t["pos"] + dir * t["radius"] * 1.5, Color(1, 1, 1, 0.8), 2)
+					# Misil: dardo que apunta a su velocidad + estela incandescente.
+					var hom_c: Vector2 = t["pos"]
+					var hom_r: float = t["radius"]
+					var hom_v: Vector2 = t["vel"]
+					var hom_dir := Vector2.DOWN
+					if hom_v.length_squared() > 1.0:
+						hom_dir = hom_v.normalized()
+					var hom_perp := Vector2(-hom_dir.y, hom_dir.x)
+					draw_line(hom_c - hom_dir * hom_r * 0.8, hom_c - hom_dir * hom_r * 1.9, Color(1.0, 0.45, 0.1, 0.55), 7.0)
+					draw_colored_polygon(PackedVector2Array([hom_c + hom_dir * hom_r * 1.1, hom_c - hom_dir * hom_r * 0.8 + hom_perp * hom_r * 0.75, hom_c, hom_c - hom_dir * hom_r * 0.8 - hom_perp * hom_r * 0.75]), Color(0.55, 0.05, 0.1, 1.0))
+					_neon_polyline(PackedVector2Array([hom_c + hom_dir * hom_r * 1.1, hom_c - hom_dir * hom_r * 0.8 + hom_perp * hom_r * 0.75, hom_c - hom_dir * hom_r * 0.8 - hom_perp * hom_r * 0.75, hom_c + hom_dir * hom_r * 1.1]), Color(1.0, 0.16, 0.25), 2.5)
+					draw_circle(hom_c, hom_r * 0.26, Color(1.0, 0.85, 0.4, 1.0))
 				"perimeter":
-					draw_circle(t["pos"], t["radius"], t["color"])
-					for i in range(6):
-						var ang = TAU * i / 6.0
-						var spike = Vector2(cos(ang), sin(ang)) * t["radius"] * 1.2
-						draw_line(t["pos"], t["pos"] + spike, t["color"], 2)
+					# Centinela: hexagono neon que rota lento + nucleo.
+					var per_c: Vector2 = t["pos"]
+					var per_r: float = t["radius"]
+					var per_spin: float = Time.get_ticks_msec() * 0.0012
+					var per_pts := PackedVector2Array()
+					for pi in range(6):
+						per_pts.append(per_c + Vector2.from_angle(per_spin + TAU * float(pi) / 6.0) * per_r * 1.1)
+					per_pts.append(per_pts[0])
+					draw_circle(per_c, per_r * 1.1, Color(0.35, 0.03, 0.07, 1.0))
+					_neon_polyline(per_pts, Color(1.0, 0.16, 0.25), 3.0)
+					var per_core: float = 0.5 + 0.5 * sin(per_spin * 6.0)
+					draw_circle(per_c, per_r * (0.20 + 0.12 * per_core), Color(1.4, 0.3, 0.38, 0.95))
 				_:
-					# Default hazard — disco rojo neón
-					draw_circle(t["pos"], t["radius"], Color(1.0, 0.2, 0.3, 0.35))
-					_neon_arc(t["pos"], t["radius"], Color(1.0, 0.1, 0.2), 3.5)
+					# Default hazard: disco rojo neon con nucleo.
+					var hz_c: Vector2 = t["pos"]
+					var hz_r: float = t["radius"]
+					draw_circle(hz_c, hz_r, Color(0.5, 0.04, 0.09, 0.95))
+					_neon_arc(hz_c, hz_r, Color(1.0, 0.13, 0.22), 3.5)
+					draw_circle(hz_c, hz_r * 0.30, Color(1.0, 0.2, 0.3, 0.9))
