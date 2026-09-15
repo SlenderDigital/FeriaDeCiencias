@@ -687,16 +687,26 @@ func _draw() -> void:
 	var hp_frac: float = clampf(health / 100.0, 0.0, 1.0)
 	var hp_col: Color = _health_color()
 	var hp_dim: float = 0.7 if _shield_active > 0.0 else 1.0  # la burbuja manda
-	draw_arc(player_pos, 27.0, 0, TAU, 48, Color(0.1, 0.1, 0.14, 0.75 * hp_dim), 7.0)
+	# Fondo: oscuro normal, pero en critico pulsa rojo para avisar aunque el
+	# arco sea chico (25% o menos apenas ocupa un cuadrante).
+	var hp_bg := Color(0.1, 0.1, 0.14, 0.75 * hp_dim)
+	if health <= 30.0:
+		var crit_pulse: float = 0.5 + 0.5 * absf(sin(Time.get_ticks_msec() * 0.016))
+		hp_bg = Color(1.0, 0.15, 0.2, (0.25 + 0.45 * crit_pulse) * hp_dim)
+	draw_arc(player_pos, 27.0, 0, TAU, 48, hp_bg, 7.0)
 	if hp_frac > 0.0:
 		var hp_soft := Color(hp_col.r, hp_col.g, hp_col.b, 0.9 * hp_dim)
 		draw_arc(player_pos, 27.0, -PI / 2.0, -PI / 2.0 + TAU * hp_frac, 48, hp_soft, 7.0)
 		var hp_hot := Color(minf(hp_col.r + 0.6, 2.0), minf(hp_col.g + 0.6, 2.0), minf(hp_col.b + 0.6, 2.0), hp_dim)
 		draw_arc(player_pos, 27.0, -PI / 2.0, -PI / 2.0 + TAU * hp_frac, 48, hp_hot, 2.5)
 	# Relleno de la flecha: la nave "se vacia" al perder vida (redundancia
-	# cercana al anillo; el contorno neon queda intacto).
+	# cercana al anillo; el contorno neon queda intacto). En critico el
+	# relleno hereda el alpha pulsante del color para no pelear con el anillo.
 	var hp_fill := hp_col
-	hp_fill.a = (0.25 + 0.55 * hp_frac) * ship_blink * hp_dim
+	if health > 30.0:
+		hp_fill.a = (0.25 + 0.55 * hp_frac) * ship_blink * hp_dim
+	else:
+		hp_fill.a *= ship_blink * hp_dim
 	draw_colored_polygon(PackedVector2Array([nose, p2, p3]), hp_fill)
 	# Estela del motor: chispa color carril en la popa cada 14px de viaje.
 	if _trail_last.distance_to(player_pos) > 14.0:
