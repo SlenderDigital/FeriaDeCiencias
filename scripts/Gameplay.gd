@@ -225,7 +225,7 @@ func _process(delta: float) -> void:
 		if spt > 8.9 and spt < 9.2 and not get_meta("shot_act2", false):
 			set_meta("shot_act2", true)
 			get_viewport().get_texture().get_image().save_png("/tmp/shot_act2.png")
-		# Segunda captura con muro/interaccion activa (~20s)
+		# Tercera captura (~20s): gameplay con muro recto/interaccion.
 		if spt > 20.5 and spt < 20.8 and not get_meta("shot_act3", false):
 			set_meta("shot_act3", true)
 			get_viewport().get_texture().get_image().save_png("/tmp/shot_act3.png")
@@ -846,6 +846,13 @@ func _draw() -> void:
 							Color(1.8, 0.45, 0.55, 0.9 * w_alpha), 4.0)
 						draw_line(Vector2(-w_half.x, w_half.y), Vector2(w_half.x, w_half.y),
 							Color(1.8, 0.45, 0.55, 0.7 * w_alpha), 3.0)
+					# Esquinas: remache neón en cada vértice para que el marco
+					# del muro lea bien también en diagonal.
+						for wcx in [-w_half.x, w_half.x]:
+							for wcy in [-w_half.y, w_half.y]:
+								var wcp := Vector2(wcx, wcy)
+								draw_line(wcp + Vector2(-9.0, 0.0), wcp + Vector2(9.0, 0.0), Color(2.0, 0.7, 0.8, 0.85 * w_alpha), 2.5)
+								draw_line(wcp + Vector2(0.0, -9.0), wcp + Vector2(0.0, 9.0), Color(2.0, 0.7, 0.8, 0.85 * w_alpha), 2.5)
 						# Canto seguro del corredor: el borde de cada banda que mira
 						# al hueco se marca cian (color de carril) unos px dentro
 						# del pasillo, para que siga legible mientras el muro

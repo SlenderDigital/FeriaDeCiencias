@@ -132,8 +132,15 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0) -
 			#   El muro nace en un downbeat y libera el gate justo antes del
 			#   siguiente compás.
 			var dirs := [Vector2(0, 1), Vector2(0, -1), Vector2(1, 0), Vector2(-1, 0)]
+			# Coreografia por compas (bar_idx), sin azar: eje por fase de 4 en
+			# compases pares; compas impar = mismo eje inclinado (diagonal).
 			var bar_idx: int = beat_idx / 4
-			var ni: int = bar_idx % 4
+			# Inclinacion de compas impar: mismo eje rotado 45 grados, con signo
+			# alterno por bar (bar 1: -45, bar 3: +45, bar 5: -45...): zigzag
+			# visible sin azar, solo coreografia.
+			var tilt_sign: float = -1.0 if bar_idx % 4 == 1 else (1.0 if bar_idx % 4 == 3 else 0.0)
+			var ni: int = int(bar_idx / 2) % 4
+			var tilted: bool = (bar_idx % 2 == 1)
 			if _last_wall_dir != Vector2.ZERO and ni == 3:
 				# Alterna el lado: excluye la dirección previa (rotación no
 				# degenerada; la dirección repetida se pospone, no se azariza).
@@ -142,6 +149,10 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0) -
 					idx = (idx + 1) % 4
 				ni = idx
 			var n: Vector2 = dirs[ni]
+			if tilted:
+				# Compas impar: el eje gira 45 grados a izquierda/derecha segun el
+				# signo del compas (zigzag determinista).
+				n = dirs[ni].rotated(tilt_sign * deg_to_rad(45.0)).normalized()
 			_last_wall_dir = n
 			var t_dir := Vector2(-n.y, n.x)
 			var corners := [Vector2.ZERO, Vector2(play_size.x, 0), Vector2(0, play_size.y), play_size]
@@ -167,9 +178,11 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0) -
 			gap_center = minf(gap_center, smax - 180.0)
 			var gap_half := 90.0
 			var dir_name := "down"
-			if n.y < 0.0: dir_name = "up"
-			elif n.x > 0.0: dir_name = "right"
-			elif n.x < 0.0: dir_name = "left"
+			if n.distance_squared_to(Vector2(0, 1)) < 0.01: dir_name = "down"
+			elif n.distance_squared_to(Vector2(0, -1)) < 0.01: dir_name = "up"
+			elif n.distance_squared_to(Vector2(1, 0)) < 0.01: dir_name = "right"
+			elif n.distance_squared_to(Vector2(-1, 0)) < 0.01: dir_name = "left"
+			elif tilted: dir_name = "diag" + ("L" if tilt_sign < 0.0 else "R")
 			print("[WALL] spawn t=%.2f bar=%d dir=%s lane=%d gap_center=%.0f (smin=%.0f smax=%.0f)" % [t, bar_idx, dir_name, gap_i, gap_center, smin, smax])
 			# Guard anti-doble-muro (punto UNICO de emision): cualquier ruta
 			# (downbeat o pool de patrones) pasa por aca. Cooldown de 3 beats:
