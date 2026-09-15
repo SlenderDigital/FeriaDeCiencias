@@ -500,10 +500,10 @@ func _update_targets(delta: float) -> void:
 					t["age"] = 0.0  # el compas del barrido arranca en el acento musical
 			elif wstate == "active":
 				var wn: Vector2 = t["wall_n"]
-				# Velocidad MUSICAL: barre un carril (128px de la grilla) por beat,
-				# o sea 4 carriles por compas: entra en un downbeat y libera el
-				# gate en el siguiente.
-				var step: float = 128.0 * delta / beat_interval
+				# Velocidad MUSICAL LENTA: medio carril (64px de la grilla) por
+				# beat, o sea 2 carriles por compas: entra en un downbeat y da
+				# el doble de tiempo de reaccion para cruzar el hueco.
+				var step: float = 64.0 * delta / beat_interval
 				t["pos"] = (t["pos"] as Vector2) + wn * step
 				t["s0"] = float(t["s0"]) + step
 				t["s1"] = float(t["s1"]) + step
