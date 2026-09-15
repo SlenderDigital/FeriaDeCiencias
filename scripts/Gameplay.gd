@@ -696,7 +696,7 @@ func _draw() -> void:
 	# Relleno de la flecha: la nave "se vacia" al perder vida (redundancia
 	# cercana al anillo; el contorno neon queda intacto).
 	var hp_fill := hp_col
-	hp_fill.a = (0.10 + 0.35 * hp_frac) * ship_blink * hp_dim
+	hp_fill.a = (0.25 + 0.55 * hp_frac) * ship_blink * hp_dim
 	draw_colored_polygon(PackedVector2Array([nose, p2, p3]), hp_fill)
 	# Estela del motor: chispa color carril en la popa cada 14px de viaje.
 	if _trail_last.distance_to(player_pos) > 14.0:
