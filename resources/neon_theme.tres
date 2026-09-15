@@ -1,4 +1,4 @@
-[gd_resource type="Theme" load_steps=6 format=3 uid="uid://c8neon_theme_res"]
+[gd_resource type="Theme" format=3 uid="uid://bmy8vsp3t017o"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_normal"]
 content_margin_left = 24.0
@@ -10,7 +10,7 @@ border_width_left = 2
 border_width_top = 2
 border_width_right = 2
 border_width_bottom = 2
-border_color = Color(0.0, 0.75, 0.9, 0.5)
+border_color = Color(0, 0.75, 0.9, 0.5)
 corner_radius_top_left = 6
 corner_radius_top_right = 6
 corner_radius_bottom_right = 6
@@ -28,7 +28,7 @@ border_width_left = 3
 border_width_top = 3
 border_width_right = 3
 border_width_bottom = 3
-border_color = Color(0.0, 0.94, 1.0, 1.0)
+border_color = Color(0, 0.94, 1, 1)
 corner_radius_top_left = 6
 corner_radius_top_right = 6
 corner_radius_bottom_right = 6
@@ -41,12 +41,12 @@ content_margin_left = 24.0
 content_margin_top = 14.0
 content_margin_right = 24.0
 content_margin_bottom = 14.0
-bg_color = Color(1.0, 0.0, 0.55, 0.35)
+bg_color = Color(1, 0, 0.55, 0.35)
 border_width_left = 3
 border_width_top = 3
 border_width_right = 3
 border_width_bottom = 3
-border_color = Color(1.0, 0.0, 0.55, 1.0)
+border_color = Color(1, 0, 0.55, 1)
 corner_radius_top_left = 6
 corner_radius_top_right = 6
 corner_radius_bottom_right = 6
@@ -64,42 +64,23 @@ border_width_left = 2
 border_width_top = 2
 border_width_right = 2
 border_width_bottom = 2
-border_color = Color(0.0, 0.94, 1.0, 0.3)
+border_color = Color(0, 0.94, 1, 0.3)
 corner_radius_top_left = 10
 corner_radius_top_right = 10
 corner_radius_bottom_right = 10
 corner_radius_bottom_left = 10
-shadow_color = Color(0, 0, 0, 0.6)
 shadow_size = 14
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel_accent"]
-content_margin_left = 20.0
-content_margin_top = 20.0
-content_margin_right = 20.0
-content_margin_bottom = 20.0
-bg_color = Color(0.08, 0.06, 0.14, 0.92)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(1.0, 0.0, 0.55, 0.45)
-corner_radius_top_left = 10
-corner_radius_top_right = 10
-corner_radius_bottom_right = 10
-corner_radius_bottom_left = 10
-shadow_color = Color(1.0, 0.0, 0.55, 0.2)
-shadow_size = 16
 
 [resource]
 default_font_size = 18
-Button/colors/font_color = Color(0.9, 0.95, 1.0, 1.0)
-Button/colors/font_focus_color = Color(0.0, 0.94, 1.0, 1.0)
-Button/colors/font_hover_color = Color(0.0, 0.94, 1.0, 1.0)
-Button/colors/font_pressed_color = Color(1.0, 0.6, 0.8, 1.0)
+Button/colors/font_color = Color(0.9, 0.95, 1, 1)
+Button/colors/font_focus_color = Color(0, 0.94, 1, 1)
+Button/colors/font_hover_color = Color(0, 0.94, 1, 1)
+Button/colors/font_pressed_color = Color(1, 0.6, 0.8, 1)
 Button/styles/disabled = SubResource("StyleBoxFlat_btn_normal")
 Button/styles/focus = SubResource("StyleBoxFlat_btn_hover")
 Button/styles/hover = SubResource("StyleBoxFlat_btn_hover")
 Button/styles/normal = SubResource("StyleBoxFlat_btn_normal")
 Button/styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
-Label/colors/font_color = Color(0.92, 0.94, 0.98, 1.0)
+Label/colors/font_color = Color(0.92, 0.94, 0.98, 1)
 PanelContainer/styles/panel = SubResource("StyleBoxFlat_panel")

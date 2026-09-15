@@ -35,6 +35,14 @@ var has_hand := false
 var _last_packet_time := 0.0
 var _got_datagram := false   # el tracker está mandando datos
 
+# --- Suavizado temporal (EMA) ---
+# Los landmarks de MediaPipe vibran (±1-3% por frame). Aplicamos una media
+# móvil exponencial a la palma y al ángulo para que el cursor no "tiemble".
+const HAND_SMOOTH := 0.35   # 0=sin suave (directo) .. 1=muy suave (laggy)
+var _smoothed_palm := Vector2.ZERO
+var _has_smoothed := false
+var _smoothed_angle := 0.0
+
 # Estado del arranque: "spawned" | "running" | "failed" | "needs_install"
 var _spawn_state := "spawned"
 var _tracker_pid := 0          # PID del run_tracker.sh que lanzó el juego
@@ -160,7 +168,15 @@ func get_palm_center() -> Vector2:
 	var pm := get_landmark(17)
 	var px: float = (w.x + im.x + mm.x + pm.x) * 0.25
 	var py: float = (w.y + im.y + mm.y + pm.y) * 0.25
-	return Vector2(1.0 - px, py)
+	var raw := Vector2(1.0 - px, py)
+	# EMA: el primer frame toma el valor crudo; los siguientes se suavizan.
+	var alpha := HAND_SMOOTH
+	if not _has_smoothed:
+		_smoothed_palm = raw
+		_has_smoothed = true
+	else:
+		_smoothed_palm = _smoothed_palm.lerp(raw, alpha)
+	return _smoothed_palm
 
 func get_hand_angle_deg() -> float:
 	# rotacion por segmento THUMB_CMC(1) -> INDEX_TIP(8), ambas X espejadas
@@ -170,7 +186,14 @@ func get_hand_angle_deg() -> float:
 	var dy := tip.y - thumb.y
 	if Vector2(dx, dy).length() < 0.006:   # umbral normalizado (equiv. len>8px en 1280)
 		return 9999.0   # valor invalido -> no aplicar
-	return rad_to_deg(atan2(dy, dx))
+	var ang := rad_to_deg(atan2(dy, dx))
+	# Suavizado del ángulo (con wrap para que 359<->0 no dé un salto enorme).
+	if _has_smoothed and _smoothed_angle != 0.0:
+		var diff := wrapf(ang - _smoothed_angle, -180.0, 180.0)
+		_smoothed_angle = _smoothed_angle + diff * HAND_SMOOTH
+	else:
+		_smoothed_angle = ang
+	return _smoothed_angle
 
 # ---------------------------------------------------------------- UI de estado
 

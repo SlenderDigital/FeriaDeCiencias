@@ -45,8 +45,13 @@ var _cursor: ColorRect
 # ------------------------------------------------------------------ ciclo de vida
 func _ready() -> void:
 	_setup_button_audio()
+	_refresh_track_buttons()   # labels desde GameManager.TRACKS (no texto quemado en tscn)
 	_select_track_ui(0)
 	_show_panel(song_select_panel)
+	# Sync del toggle con el estado real (arrancamos en fullscreen desde GameManager).
+	# set_pressed_no_signal: evita re-disparar _on_check_fullscreen_toggled,
+	# que ya corrió desde GameManager._ready.
+	check_fullscreen.set_pressed_no_signal(GameManager.fullscreen_enabled)
 	_hand_btn = null
 	_dwell_acc = 0.0
 	if GameManager:
@@ -120,8 +125,11 @@ func HandleKeyboardInput(key: Key) -> void:
 			if GameManager:
 				GameManager.fullscreen_enabled = not GameManager.fullscreen_enabled
 				print("[MainMenu] F11 pressed, fullscreen_enabled = ", GameManager.fullscreen_enabled)
-				DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if GameManager.fullscreen_enabled else DisplayServer.WINDOW_MODE_WINDOWED)
-				print("[MainMenu] window_set_mode called")
+				if GameManager.fullscreen_enabled:
+					_on_check_fullscreen_toggled(true)
+				else:
+					DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+					print("[MainMenu] window_set_mode WINDOWED called")
 
 
 # ------------------------------------------------------------------ temporizador de hand
@@ -137,7 +145,10 @@ func _process(delta: float) -> void:
 	if HandTrackingClient and HandTrackingClient.has_hand:
 		var palm := HandTrackingClient.get_palm_center()      # Vector2 normalizado (0..1), X espejada
 		if palm.x >= 0.0 and palm.x <= 1.0 and palm.y >= 0.0 and palm.y <= 1.0:
-			var pos := palm * Vector2(VIEWPORT_W, VIEWPORT_H)
+			var vps: Vector2 = get_viewport_rect().size
+			if vps == Vector2.ZERO:
+				vps = Vector2(VIEWPORT_W, VIEWPORT_H)
+			var pos := palm * vps
 			_hand_pos = pos
 			_hand_active = true
 			# Mover cursor visual
@@ -164,6 +175,13 @@ func _process(delta: float) -> void:
 
 
 # ------------------------------------------------------------------ lógica de mano
+# Dwell-click anti-spam: tras disparar un click sobre un botón, no volver a
+# dispararlo sobre el mismo mientras la mano siga ahí, hasta pasado un tiempo
+# de gracia. Sin esto, una mano quieta re-dispara el click cada DWELL_TIME
+# (ej. te quedás atrancado alternando hacia Configuración).
+var _dwell_fire_time: float = -1.0
+var _dwell_fire_button: Control = null
+
 func UpdateHandState(delta: float) -> void:
 	var btn := HitTestButtonAt(_hand_pos)
 	if btn != _hand_btn:
@@ -173,9 +191,15 @@ func UpdateHandState(delta: float) -> void:
 	if _hand_btn:
 		_dwell_acc += delta
 		if _dwell_acc >= DWELL_TIME:
-			_dwell_acc = 0.0
-			ClickButton(_hand_btn)
-			_hand_btn = null
+			var can_fire := true
+			if _dwell_fire_button == _hand_btn and Time.get_ticks_msec() / 1000.0 - _dwell_fire_time < 0.7:
+				can_fire = false  # mismo botón recién clickeado -> marginar
+			if can_fire:
+				_dwell_acc = 0.0
+				_dwell_fire_time = Time.get_ticks_msec() / 1000.0
+				_dwell_fire_button = _hand_btn
+				ClickButton(_hand_btn)
+				_hand_btn = null
 	else:
 		_dwell_acc = 0.0
 
@@ -204,6 +228,12 @@ func CollectVisibleButtons() -> Array:
 
 
 func CollectVisibleButtonsRec(n: Node, out: Array) -> void:
+	# Solo contar botones efectivamente en pantalla: un nodo no es "visible"
+	# para el usuario si alguno de sus ancestros está oculto. En este menú,
+	# los paneles SongSelect/Settings se ocultan alternadamente, así que un
+	# botón dentro de un panel colapsado NO debe ser clickeable.
+	if n is Control and not n.is_visible_in_tree():
+		return
 	if n is Button and n.visible:
 		out.append(n)
 	elif n is CheckButton and n.visible:
@@ -241,8 +271,6 @@ func ClickButton(btn: Control) -> void:
 		_on_btn_track_1_pressed()
 	elif btn == $Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack2:
 		_on_btn_track_2_pressed()
-	elif btn == $Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack3:
-		_on_btn_track_3_pressed()
 	elif btn == $Layout/Content/Panels/SongSelectPanel/VBox/Details/BtnPlayLevel:
 		_on_btn_play_level_pressed()
 	elif btn == check_fullscreen:
@@ -281,7 +309,10 @@ func HandleSliderInteraction(slider: HSlider) -> void:
 	# El clic simple en un slider lo activa; luego el movimiento de mano lo arrastra.
 	# En esta versión, el arrastre se maneja en _process cuando la mano está sobre el slider.
 	var palm := HandTrackingClient.get_palm_center()
-	var pos := palm * Vector2(VIEWPORT_W, VIEWPORT_H)
+	var vps2: Vector2 = get_viewport_rect().size
+	if vps2 == Vector2.ZERO:
+		vps2 = Vector2(VIEWPORT_W, VIEWPORT_H)
+	var pos := palm * vps2
 	var r: Rect2 = slider.get_global_rect()
 	if r.has_point(pos) or (pos.y >= r.position.y - 15 and pos.y <= r.position.y + r.size.y + 15):
 		var range := slider.max_value - slider.min_value
@@ -347,8 +378,23 @@ func _on_btn_track_2_pressed() -> void:
 	_select_track_ui(2)
 
 
-func _on_btn_track_3_pressed() -> void:
-	_select_track_ui(3)
+func _refresh_track_buttons() -> void:
+	# Los labels de los botones salen de GameManager.TRACKS: una sola fuente
+	# de verdad. Si hay más tracks que botones, se ocultan los sobrantes.
+	if not GameManager:
+		return
+	var btns: Array[Button] = [
+		$Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack0,
+		$Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack1,
+		$Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack2,
+	]
+	for i in range(btns.size()):
+		if i < GameManager.TRACKS.size():
+			var t: Dictionary = GameManager.TRACKS[i]
+			btns[i].text = "%d. %s  (%s)" % [i + 1, t["name"], t["difficulty"]]
+			btns[i].visible = true
+		else:
+			btns[i].visible = false
 
 
 func _select_track_ui(index: int) -> void:
@@ -363,7 +409,7 @@ func _select_track_ui(index: int) -> void:
 		if track_desc_label:
 			track_desc_label.text = track["description"]
 		if track_highscore_label:
-			track_highscore_label.text = "RÉCORD PERSONAL: %d PTS" % GameManager.get_high_score(track["id"])
+			track_highscore_label.text = "MEJOR PROGRESO: %d%%" % GameManager.get_high_score(track["id"])
 
 
 func _on_btn_play_level_pressed() -> void:
@@ -396,7 +442,14 @@ func _on_check_fullscreen_toggled(toggled_on: bool) -> void:
 	if toggled_on:
 		print("[MainMenu] CheckFullscreen toggled ON")
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
-		print("[MainMenu] window_set_mode FULLSCREEN called")
+		# Sin esto, en Linux/X11 el modo cambia pero el tamaño puede quedar
+		# en la resolución ventana anterior (1201x676 visto en live test).
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var scr: Vector2i = DisplayServer.screen_get_size()
+		if scr.x > 0 and scr.y > 0 and DisplayServer.window_get_size() != scr:
+			DisplayServer.window_set_size(scr)
+		print("[MainMenu] fullscreen aplicado, tamaño=", DisplayServer.window_get_size())
 	else:
 		print("[MainMenu] CheckFullscreen toggled OFF")
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)

@@ -1,10 +1,10 @@
-[gd_scene load_steps=5 format=3 uid="uid://main_menu_simple_v1"]
+[gd_scene format=3 uid="uid://7q7wmwoxiwri"]
 
-[ext_resource type="Theme" uid="uid://c8neon_theme_res" path="res://resources/neon_theme.tres" id="1_theme"]
-[ext_resource type="Script" path="res://scripts/MainMenu.gd" id="2_menu_script"]
-[ext_resource type="Script" path="res://scripts/NeonBackground.gd" id="3_bg_script"]
+[ext_resource type="Theme" path="res://resources/neon_theme.tres" id="1_theme"]
+[ext_resource type="Script" uid="uid://bx5ruuf00uy0a" path="res://scripts/MainMenu.gd" id="2_menu_script"]
+[ext_resource type="Script" uid="uid://d4nxfvs2w1y6v" path="res://scripts/NeonBackground.gd" id="3_bg_script"]
 
-[node name="MainMenu" type="Control"]
+[node name="MainMenu" type="Control" unique_id=1492307459]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -14,7 +14,7 @@ grow_vertical = 2
 theme = ExtResource("1_theme")
 script = ExtResource("2_menu_script")
 
-[node name="Background" type="Control" parent="."]
+[node name="Background" type="Control" parent="." unique_id=111494161]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -23,7 +23,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("3_bg_script")
 
-[node name="Layout" type="VBoxContainer" parent="."]
+[node name="Layout" type="VBoxContainer" parent="." unique_id=1690938387]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -36,59 +36,59 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 20
 
-[node name="Header" type="HBoxContainer" parent="Layout"]
+[node name="Header" type="HBoxContainer" parent="Layout" unique_id=388778355]
 custom_minimum_size = Vector2(0, 80)
 layout_mode = 2
 alignment = 1
 
-[node name="TitleContainer" type="VBoxContainer" parent="Layout/Header"]
+[node name="TitleContainer" type="VBoxContainer" parent="Layout/Header" unique_id=377455860]
 layout_mode = 2
 size_flags_horizontal = 3
 alignment = 1
 
-[node name="Title" type="Label" parent="Layout/Header/TitleContainer"]
+[node name="Title" type="Label" parent="Layout/Header/TitleContainer" unique_id=315471712]
 layout_mode = 2
 theme_override_colors/font_color = Color(0, 0.94, 1, 1)
 theme_override_font_sizes/font_size = 42
 text = "ABSTRACT PULSE"
 
-[node name="Subtitle" type="Label" parent="Layout/Header/TitleContainer"]
+[node name="Subtitle" type="Label" parent="Layout/Header/TitleContainer" unique_id=1457907541]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.8, 0.95, 0.8)
 theme_override_font_sizes/font_size = 14
 text = "RHYTHM ACTION  //  FERIA DE CIENCIAS 2026"
 
-[node name="Content" type="HBoxContainer" parent="Layout"]
+[node name="Content" type="HBoxContainer" parent="Layout" unique_id=549365351]
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 24
 
-[node name="SideNav" type="VBoxContainer" parent="Layout/Content"]
+[node name="SideNav" type="VBoxContainer" parent="Layout/Content" unique_id=1526274696]
 custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 theme_override_constants/separation = 12
 alignment = 1
 
-[node name="BtnNavPlay" type="Button" parent="Layout/Content/SideNav"]
+[node name="BtnNavPlay" type="Button" parent="Layout/Content/SideNav" unique_id=1414080726]
 layout_mode = 2
 text = "JUGAR / CANCIONES"
 
-[node name="BtnNavSettings" type="Button" parent="Layout/Content/SideNav"]
+[node name="BtnNavSettings" type="Button" parent="Layout/Content/SideNav" unique_id=1598221750]
 layout_mode = 2
 text = "CONFIGURACIÓN"
 
-[node name="BtnNavExit" type="Button" parent="Layout/Content/SideNav"]
+[node name="BtnNavExit" type="Button" parent="Layout/Content/SideNav" unique_id=1093136040]
 layout_mode = 2
 text = "SALIR DEL JUEGO"
 
-[node name="Panels" type="PanelContainer" parent="Layout/Content"]
+[node name="Panels" type="PanelContainer" parent="Layout/Content" unique_id=304054150]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="SongSelectPanel" type="Control" parent="Layout/Content/Panels"]
+[node name="SongSelectPanel" type="Control" parent="Layout/Content/Panels" unique_id=1938317992]
 layout_mode = 2
 
-[node name="VBox" type="VBoxContainer" parent="Layout/Content/Panels/SongSelectPanel"]
+[node name="VBox" type="VBoxContainer" parent="Layout/Content/Panels/SongSelectPanel" unique_id=2024059172]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -97,81 +97,82 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 16
 
-[node name="Header" type="Label" parent="Layout/Content/Panels/SongSelectPanel/VBox"]
+[node name="Header" type="Label" parent="Layout/Content/Panels/SongSelectPanel/VBox" unique_id=1867207470]
 layout_mode = 2
 theme_override_colors/font_color = Color(0, 0.94, 1, 1)
 theme_override_font_sizes/font_size = 22
 text = "SELECCIÓN DE CANCIÓN"
 
-[node name="TrackButtons" type="VBoxContainer" parent="Layout/Content/Panels/SongSelectPanel/VBox"]
+[node name="TrackButtons" type="VBoxContainer" parent="Layout/Content/Panels/SongSelectPanel/VBox" unique_id=789684145]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="BtnTrack0" type="Button" parent="Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons"]
+[node name="BtnTrack0" type="Button" parent="Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons" unique_id=1159276675]
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
-text = "1. Nivel Procedural MVP  (Procedural)"
+text = "1. First Light  (Principiante)"
 
-[node name="BtnTrack1" type="Button" parent="Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons"]
+[node name="BtnTrack1" type="Button" parent="Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons" unique_id=658618701]
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
-text = "2. Cyber Genesis  (Principiante)"
+text = "2. Mechanical Wall  (Intermedio)"
 
-[node name="BtnTrack2" type="Button" parent="Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons"]
+[node name="BtnTrack2" type="Button" parent="Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons" unique_id=1368111479]
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
-text = "3. Neon Rush  (Intermedio)"
+text = "3. Relentless Drive  (Avanzado)"
 
-[node name="BtnTrack3" type="Button" parent="Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons"]
-custom_minimum_size = Vector2(0, 48)
-layout_mode = 2
-text = "4. Overdrive Pulse  (Avanzado)"
-
-[node name="HSeparator" type="HSeparator" parent="Layout/Content/Panels/SongSelectPanel/VBox"]
+[node name="HSeparator" type="HSeparator" parent="Layout/Content/Panels/SongSelectPanel/VBox" unique_id=1418323461]
 layout_mode = 2
 
-[node name="Details" type="VBoxContainer" parent="Layout/Content/Panels/SongSelectPanel/VBox"]
+[node name="Details" type="VBoxContainer" parent="Layout/Content/Panels/SongSelectPanel/VBox" unique_id=558245451]
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 10
 
-[node name="TrackTitle" type="Label" parent="Layout/Content/Panels/SongSelectPanel/VBox/Details"]
+[node name="TrackTitle" type="Label" parent="Layout/Content/Panels/SongSelectPanel/VBox/Details" unique_id=1590158125]
 layout_mode = 2
 theme_override_colors/font_color = Color(0, 0.94, 1, 1)
 theme_override_font_sizes/font_size = 26
 text = "NIVEL PROCEDURAL MVP"
 
-[node name="TrackInfo" type="Label" parent="Layout/Content/Panels/SongSelectPanel/VBox/Details"]
+[node name="TrackInfo" type="Label" parent="Layout/Content/Panels/SongSelectPanel/VBox/Details" unique_id=2036524052]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.8, 0.85, 0.95, 0.9)
 theme_override_font_sizes/font_size = 14
 text = "Artista: Algoritmo Neón | BPM: 132 | Duración: 1:00"
 
-[node name="TrackDesc" type="Label" parent="Layout/Content/Panels/SongSelectPanel/VBox/Details"]
+[node name="TrackDesc" type="Label" parent="Layout/Content/Panels/SongSelectPanel/VBox/Details" unique_id=1285422192]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.65, 0.75, 0.85, 0.8)
 theme_override_font_sizes/font_size = 14
-text = "Nivel generado proceduralmente en tiempo real. Esquivá peligros y capturá nodos rítmicos usando las flechitas o teclado."
+text = "Nivel generado proceduralmente en tiempo real. Esquivá TODO lo rojo: sierras, enjambres, muros y láseres. El escudo (ESPACIO) te hace atravesarlos sin daño."
 autowrap_mode = 3
 
-[node name="HighScoreLabel" type="Label" parent="Layout/Content/Panels/SongSelectPanel/VBox/Details"]
+[node name="HighScoreLabel" type="Label" parent="Layout/Content/Panels/SongSelectPanel/VBox/Details" unique_id=976196452]
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.85, 0, 1)
 theme_override_font_sizes/font_size = 16
-text = "RÉCORD PERSONAL: 0 PTS"
+text = "MEJOR PROGRESO: 0%"
 
-[node name="BtnPlayLevel" type="Button" parent="Layout/Content/Panels/SongSelectPanel/VBox/Details"]
+[node name="LegendLabel" type="Label" parent="Layout/Content/Panels/SongSelectPanel/VBox/Details" unique_id=976196453]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.35, 0.45, 0.85)
+theme_override_font_sizes/font_size = 13
+text = "ROJO = PELIGRO (daña)  ·  ESCUDO = ESPACIO o CLIC  ·  RÉCORD = mejor progreso"
+
+[node name="BtnPlayLevel" type="Button" parent="Layout/Content/Panels/SongSelectPanel/VBox/Details" unique_id=57738590]
 custom_minimum_size = Vector2(0, 54)
 layout_mode = 2
 size_flags_vertical = 10
 theme_override_font_sizes/font_size = 20
 text = "▶ INICIAR NIVEL"
 
-[node name="SettingsPanel" type="Control" parent="Layout/Content/Panels"]
+[node name="SettingsPanel" type="Control" parent="Layout/Content/Panels" unique_id=1082857439]
 visible = false
 layout_mode = 2
 
-[node name="VBox" type="VBoxContainer" parent="Layout/Content/Panels/SettingsPanel"]
+[node name="VBox" type="VBoxContainer" parent="Layout/Content/Panels/SettingsPanel" unique_id=199247240]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -180,57 +181,57 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 16
 
-[node name="Header" type="Label" parent="Layout/Content/Panels/SettingsPanel/VBox"]
+[node name="Header" type="Label" parent="Layout/Content/Panels/SettingsPanel/VBox" unique_id=1977202199]
 layout_mode = 2
 theme_override_colors/font_color = Color(0, 0.94, 1, 1)
 theme_override_font_sizes/font_size = 22
 text = "CONFIGURACIÓN DEL SISTEMA"
 
-[node name="Grid" type="GridContainer" parent="Layout/Content/Panels/SettingsPanel/VBox"]
+[node name="Grid" type="GridContainer" parent="Layout/Content/Panels/SettingsPanel/VBox" unique_id=105075460]
 layout_mode = 2
 theme_override_constants/h_separation = 20
 theme_override_constants/v_separation = 16
 columns = 2
 
-[node name="LabelMaster" type="Label" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid"]
+[node name="LabelMaster" type="Label" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid" unique_id=365656477]
 layout_mode = 2
 text = "Volumen Master:"
 
-[node name="SliderMaster" type="HSlider" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid"]
+[node name="SliderMaster" type="HSlider" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid" unique_id=1006473358]
 custom_minimum_size = Vector2(240, 0)
 layout_mode = 2
 max_value = 1.0
 step = 0.05
 value = 0.8
 
-[node name="LabelMusic" type="Label" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid"]
+[node name="LabelMusic" type="Label" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid" unique_id=1916710931]
 layout_mode = 2
 text = "Volumen Música:"
 
-[node name="SliderMusic" type="HSlider" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid"]
+[node name="SliderMusic" type="HSlider" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid" unique_id=759408462]
 layout_mode = 2
 max_value = 1.0
 step = 0.05
 value = 0.8
 
-[node name="LabelSFX" type="Label" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid"]
+[node name="LabelSFX" type="Label" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid" unique_id=1028618324]
 layout_mode = 2
 text = "Volumen Efectos (SFX):"
 
-[node name="SliderSFX" type="HSlider" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid"]
+[node name="SliderSFX" type="HSlider" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid" unique_id=1523712510]
 layout_mode = 2
 max_value = 1.0
 step = 0.05
 value = 0.9
 
-[node name="LabelFS" type="Label" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid"]
+[node name="LabelFS" type="Label" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid" unique_id=726838776]
 layout_mode = 2
 text = "Pantalla Completa:"
 
-[node name="CheckFullscreen" type="CheckButton" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid"]
+[node name="CheckFullscreen" type="CheckButton" parent="Layout/Content/Panels/SettingsPanel/VBox/Grid" unique_id=1829508430]
 layout_mode = 2
 
-[node name="TextoToggle" type="Label" parent="Layout/Content/Panels/SettingsPanel/VBox"]
+[node name="TextoToggle" type="Label" parent="Layout/Content/Panels/SettingsPanel/VBox" unique_id=1787503679]
 visible = false
 layout_mode = 2
 text = "(Modo de control: flechitas / teclado — siempre activo)"
@@ -241,7 +242,6 @@ text = "(Modo de control: flechitas / teclado — siempre activo)"
 [connection signal="pressed" from="Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack0" to="." method="_on_btn_track_0_pressed"]
 [connection signal="pressed" from="Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack1" to="." method="_on_btn_track_1_pressed"]
 [connection signal="pressed" from="Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack2" to="." method="_on_btn_track_2_pressed"]
-[connection signal="pressed" from="Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack3" to="." method="_on_btn_track_3_pressed"]
 [connection signal="pressed" from="Layout/Content/Panels/SongSelectPanel/VBox/Details/BtnPlayLevel" to="." method="_on_btn_play_level_pressed"]
 [connection signal="value_changed" from="Layout/Content/Panels/SettingsPanel/VBox/Grid/SliderMaster" to="." method="_on_slider_master_value_changed"]
 [connection signal="value_changed" from="Layout/Content/Panels/SettingsPanel/VBox/Grid/SliderMusic" to="." method="_on_slider_music_value_changed"]

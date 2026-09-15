@@ -1,11 +1,14 @@
 [gd_scene load_steps=5 format=3 uid="uid://gameplay_scene_v1"]
 
-[ext_resource type="Theme" uid="uid://c8neon_theme_res" path="res://resources/neon_theme.tres" id="1_theme"]
+[ext_resource type="Theme" uid="uid://bmy8vsp3t017o" path="res://resources/neon_theme.tres" id="1_theme"]
 [ext_resource type="Script" path="res://scripts/Gameplay.gd" id="2_game_script"]
 [ext_resource type="Script" path="res://scripts/NeonBackground.gd" id="3_bg_script"]
 
 [node name="Gameplay" type="Node2D"]
 script = ExtResource("2_game_script")
+
+[node name="MusicPlayer" type="AudioStreamPlayer" parent="."]
+bus = "Master"
 
 [node name="BackgroundLayer" type="CanvasLayer" parent="."]
 layer = -1
@@ -60,9 +63,10 @@ custom_minimum_size = Vector2(0, 12)
 layout_mode = 2
 show_percentage = false
 
-[node name="HealthBar" type="TextureProgressBar" parent="HUDLayer/HUD/BottomBar"]
-custom_minimum_size = Vector2(0, 12)
+[node name="HealthBar" type="ProgressBar" parent="HUDLayer/HUD/BottomBar"]
+custom_minimum_size = Vector2(0, 14)
 layout_mode = 2
+show_percentage = false
 value = 100.0
 
 [node name="PauseOverlay" type="Control" parent="HUDLayer"]
