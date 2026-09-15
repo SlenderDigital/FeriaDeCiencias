@@ -63,12 +63,6 @@ custom_minimum_size = Vector2(0, 12)
 layout_mode = 2
 show_percentage = false
 
-[node name="HealthBar" type="ProgressBar" parent="HUDLayer/HUD/BottomBar"]
-custom_minimum_size = Vector2(0, 14)
-layout_mode = 2
-show_percentage = false
-value = 100.0
-
 [node name="PauseOverlay" type="Control" parent="HUDLayer"]
 visible = false
 layout_mode = 3

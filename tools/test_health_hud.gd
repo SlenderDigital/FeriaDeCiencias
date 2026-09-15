@@ -1,6 +1,6 @@
 extends SceneTree
-## Test headless del HUD de vida: instancia Gameplay.tscn y valida la barra
-## (tipo, rango, valores y color del relleno segun nivel de vida).
+## Test headless de la vida EN LA NAVE: valida _health_color() por umbrales
+## (verde >60, ambar >30, rojo <=30) y el rango del anillo (0-100).
 
 func _init() -> void:
 	_run.call_deferred()
@@ -13,30 +13,16 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 
-	var hb: ProgressBar = gp.health_bar
-	if hb == null:
-		print("[HUD_TEST] FAIL: health_bar es null")
-		quit(1)
-		return
-	if hb.get_class() != "ProgressBar":
-		fails.append("tipo=%s (esperaba ProgressBar)" % hb.get_class())
-	if hb.max_value != 100.0:
-		fails.append("max_value=%s" % hb.max_value)
-	if hb.show_percentage:
-		fails.append("show_percentage=true")
+	# La barra vieja ya no existe: la vida vive en la nave.
+	if gp.get("health_bar") != null:
+		fails.append("health_bar todavia existe (deberia estar eliminado)")
+	if gp.has_node("HUDLayer/HUD/BottomBar/HealthBar"):
+		fails.append("nodo HealthBar todavia en la escena")
 
-	# Casos: [vida, chequeo del color del relleno]
+	# Casos: [vida, color esperado]
 	for c in [[80.0, "verde"], [45.0, "ambar"], [20.0, "rojo"]]:
 		gp.health = c[0]
-		gp._update_health_hud()
-		if absf(hb.value - c[0]) > 0.01:
-			fails.append("vida=%s -> bar.value=%s" % [c[0], hb.value])
-		var fill: StyleBoxFlat = hb.get_theme_stylebox("fill")
-		var bg: StyleBoxFlat = hb.get_theme_stylebox("background")
-		if fill == null or bg == null:
-			fails.append("vida=%s sin stylebox fill/background" % c[0])
-			continue
-		var col: Color = fill.bg_color
+		var col: Color = gp._health_color()
 		var ok := false
 		match c[1]:
 			"verde":
@@ -48,8 +34,15 @@ func _run() -> void:
 		if not ok:
 			fails.append("vida=%s color esperado %s, obtuvo (%.2f, %.2f, %.2f)" % [c[0], c[1], col.r, col.g, col.b])
 
+	# Fraccion del anillo: clamp 0-100 (incluye bordes).
+	for c in [[-10.0, 0.0], [0.0, 0.0], [55.0, 0.55], [100.0, 1.0], [140.0, 1.0]]:
+		gp.health = c[0]
+		var frac: float = clampf(gp.health / 100.0, 0.0, 1.0)
+		if absf(frac - c[1]) > 0.01:
+			fails.append("vida=%s -> frac=%s (esperaba %s)" % [c[0], frac, c[1]])
+
 	if fails.is_empty():
-		print("[HUD_TEST] PASS: barra tipo ProgressBar, rango 0-100, sin porcentaje, colores verde/ambar/rojo OK")
+		print("[HUD_TEST] PASS: sin barra, _health_color() verde/ambar/rojo OK, anillo 0-100 OK")
 		quit(0)
 	else:
 		print("[HUD_TEST] FAIL: ", "; ".join(fails))

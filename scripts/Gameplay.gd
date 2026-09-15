@@ -5,7 +5,6 @@ extends Node2D
 @onready var bg_control: Control = $BackgroundLayer/Background
 @onready var track_title_lbl: Label = $HUDLayer/HUD/TopBar/TrackTitle
 @onready var score_lbl: Label = $HUDLayer/HUD/TopBar/ScoreLabel
-@onready var health_bar: ProgressBar = $HUDLayer/HUD/BottomBar/HealthBar
 @onready var progress_bar: ProgressBar = $HUDLayer/HUD/BottomBar/ProgressBar
 @onready var pause_overlay: Control = $HUDLayer/PauseOverlay
 @onready var results_overlay: Control = $HUDLayer/ResultsOverlay
@@ -126,7 +125,6 @@ func _ready() -> void:
 	_damage_overlay.size = get_viewport_rect().size
 	_damage_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_damage_overlay)
-	_update_health_hud()  # estiliza la barra de vida desde el primer frame
 	print("[Gameplay] Nivel iniciado: ", track_data.get("name", "Procedural MVP"), " (bpm=", bpm, ", chart=", chart != null, ")")
 	player_pos = Vector2(play_size().x * 0.5, play_size().y * 0.78)  # nave arranca abajo-centro del área real
 
@@ -225,7 +223,6 @@ func _process(delta: float) -> void:
 		if spt > 8.9 and spt < 9.2 and not get_meta("shot_act2", false):
 			set_meta("shot_act2", true)
 			get_viewport().get_texture().get_image().save_png("/tmp/shot_act2.png")
-		# Tercera captura (~20s): gameplay con muro recto/interaccion.
 		if spt > 20.5 and spt < 20.8 and not get_meta("shot_act3", false):
 			set_meta("shot_act3", true)
 			get_viewport().get_texture().get_image().save_png("/tmp/shot_act3.png")
@@ -245,9 +242,6 @@ func _process(delta: float) -> void:
 	if progress_bar:
 		progress_bar.value = progress * 100.0
 	_update_hud_progress(progress)
-	# Vida critica: refresca el pulso del relleno rojo en cada frame activo
-	if health <= 30.0:
-		_update_health_hud()
 		
 	if track_title_lbl:
 		if chart != null:
@@ -568,32 +562,20 @@ func _on_hazard_hit() -> void:
 	_damage_flash = 1.0
 	_shake_time = SHAKE_TIME
 	health -= 18.0
-	if health_bar: _update_health_hud()
 	if SoundManager: SoundManager.play_back()
 	
 	if health <= 0:
 		_trigger_game_over()
 
-func _update_health_hud() -> void:
-	## Barra de vida visible: fondo oscuro + relleno redondeado cuyo color
-	## sigue la vida (verde >60, ambar >30, rojo pulsante en critico).
-	if health_bar == null:
-		return
-	health_bar.value = health
-	var bg := StyleBoxFlat.new()
-	bg.bg_color = Color(0.05, 0.05, 0.1, 0.75)
-	bg.set_corner_radius_all(4)
-	var fill := StyleBoxFlat.new()
-	fill.set_corner_radius_all(4)
+func _health_color() -> Color:
+	## Color de vida compartido: lo usan el anillo de la nave y (antes) la
+	## barra. Verde >60, ambar >30, rojo pulsante en critico.
 	if health > 60.0:
-		fill.bg_color = Color(0.2, 1.0, 0.45)
+		return Color(0.2, 1.0, 0.45)
 	elif health > 30.0:
-		fill.bg_color = Color(1.0, 0.85, 0.1)
-	else:
-		# Pulso critico: el alpha del rojo oscila ~2.5 veces por segundo
-		fill.bg_color = Color(1.0, 0.15, 0.2, 0.55 + 0.45 * absf(sin(Time.get_ticks_msec() * 0.016)))
-	health_bar.add_theme_stylebox_override("background", bg)
-	health_bar.add_theme_stylebox_override("fill", fill)
+		return Color(1.0, 0.85, 0.1)
+	# Pulso critico: el alpha del rojo oscila ~2.5 veces por segundo
+	return Color(1.0, 0.15, 0.2, 0.55 + 0.45 * absf(sin(Time.get_ticks_msec() * 0.016)))
 
 func _update_hud_progress(p: float) -> void:
 	## Progreso del nivel: % de la canción sobrevivida (métrica principal).
@@ -699,6 +681,23 @@ func _draw() -> void:
 	_neon_polyline(PackedVector2Array([nose, p2, p3, nose]), ship_col, 4.0)
 	_neon_line(player_pos, player_pos + fwd * 28.0, Color(1, 1, 1, ship_blink), 2.0)
 	draw_circle(player_pos, 5.0, Color(1.0, 1.0, 1.0, ship_blink))
+	# VIDA EN LA NAVE: anillo concentrico r=27 (nave r~24, escudo r=34: no se
+	# pisan). Fondo tenue + frente con el color de vida (verde/ambar/rojo
+	# pulsante). El parpadeo de i-frames NO lo toca: la vida sigue legible.
+	var hp_frac: float = clampf(health / 100.0, 0.0, 1.0)
+	var hp_col: Color = _health_color()
+	var hp_dim: float = 0.7 if _shield_active > 0.0 else 1.0  # la burbuja manda
+	draw_arc(player_pos, 27.0, 0, TAU, 48, Color(0.1, 0.1, 0.14, 0.75 * hp_dim), 7.0)
+	if hp_frac > 0.0:
+		var hp_soft := Color(hp_col.r, hp_col.g, hp_col.b, 0.9 * hp_dim)
+		draw_arc(player_pos, 27.0, -PI / 2.0, -PI / 2.0 + TAU * hp_frac, 48, hp_soft, 7.0)
+		var hp_hot := Color(minf(hp_col.r + 0.6, 2.0), minf(hp_col.g + 0.6, 2.0), minf(hp_col.b + 0.6, 2.0), hp_dim)
+		draw_arc(player_pos, 27.0, -PI / 2.0, -PI / 2.0 + TAU * hp_frac, 48, hp_hot, 2.5)
+	# Relleno de la flecha: la nave "se vacia" al perder vida (redundancia
+	# cercana al anillo; el contorno neon queda intacto).
+	var hp_fill := hp_col
+	hp_fill.a = (0.10 + 0.35 * hp_frac) * ship_blink * hp_dim
+	draw_colored_polygon(PackedVector2Array([nose, p2, p3]), hp_fill)
 	# Estela del motor: chispa color carril en la popa cada 14px de viaje.
 	if _trail_last.distance_to(player_pos) > 14.0:
 		_trail_last = player_pos
