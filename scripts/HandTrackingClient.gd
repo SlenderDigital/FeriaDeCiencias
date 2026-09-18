@@ -195,6 +195,55 @@ func get_hand_angle_deg() -> float:
 		_smoothed_angle = ang
 	return _smoothed_angle
 
+# ---------------------------------------------------------------- Deteccion de puno
+# MediaPipe: wrist=0, dedos = index 5-8, middle 9-12, ring 13-16, pinky 17-20.
+# Metrica: curl = dist(tip, wrist) / dist(middle_MCP, wrist).
+# Abierta ~= 2.0x, puno ~= 1.0x. Normaliza distancia a la camara y es
+# invariante a rotacion (usa distancias, no angulos). Pulgar excluido
+# (se envuelve impredecible sobre los dedos en puno).
+
+# Umbrales con histeresis: entrar en puno < ENTER, salir > EXIT.
+const FIST_ENTER := 1.35
+const FIST_EXIT := 1.55
+# Cuantos frames seguidos de puno antes de confirmar (anti-ruido, ~70ms a 60fps).
+const FIST_CONFIRM_FRAMES := 4
+
+var _fist_frames := 0        # frames seguidos con curl < ENTER
+var _fist_latched := false   # estado con histeresis: true = puno confirmado
+
+func get_finger_curl() -> float:
+	if not has_hand or _points.size() < LANDMARK_COUNT:
+		return -1.0
+	var wrist := get_landmark(0)
+	var palm_ref := get_landmark(9)
+	var hand_size: float = Vector2(wrist.x - palm_ref.x, wrist.y - palm_ref.y).length()
+	if hand_size < 0.01:
+		return -1.0
+	var tips := [8, 12, 16, 20]
+	var sum := 0.0
+	for ti in tips:
+		var pt := get_landmark(ti)
+		sum += Vector2(pt.x - wrist.x, pt.y - wrist.y).length() / hand_size
+	return sum / 4.0
+
+func is_fist() -> bool:
+	var curl := get_finger_curl()
+	if curl < 0.0:
+		_fist_frames = 0
+		_fist_latched = false
+		return false
+	if curl < FIST_ENTER:
+		_fist_frames += 1
+		if _fist_frames >= FIST_CONFIRM_FRAMES:
+			_fist_latched = true
+	elif curl > FIST_EXIT:
+		_fist_frames = 0
+		_fist_latched = false
+	else:
+		if not _fist_latched:
+			_fist_frames = 0
+	return _fist_latched
+
 # ---------------------------------------------------------------- UI de estado
 
 func _build_status_ui() -> void:

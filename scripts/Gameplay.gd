@@ -47,6 +47,7 @@ var _damage_flash: float = 0.0
 var _shake_time: float = 0.0
 var _damage_overlay: ColorRect
 var _shield_was_ready: bool = true   # para sonido de "listo" al recargarse
+var _fist_was_closed: bool = false   # edge-trigger: un escudo por puno (requiere abrir para re-armar)
 var health: float = 100.0
 var progress_pct: int = 0   # % de la canción sobrevivida: la métrica del nivel
 var is_paused: bool = false
@@ -337,6 +338,7 @@ func _update_player_movement(delta: float) -> void:
 		var ang := HandTrackingClient.get_hand_angle_deg()
 		if ang < 9990.0:
 			_smooth_rotation_toward(ang, delta)
+		_update_fist_shield()
 		player_pos.x = clamp(player_pos.x, 50, ps.x - 50)
 		player_pos.y = clamp(player_pos.y, 80, ps.y - 50)
 		return
@@ -395,6 +397,15 @@ func _neon_arc(center: Vector2, r: float, c: Color, w: float) -> void:
 	draw_arc(center, r, 0, TAU, 32, Color(c.r, c.g, c.b, 0.18), w * 3.2)
 	draw_arc(center, r, 0, TAU, 32, Color(c.r, c.g, c.b, 0.5), w * 1.7)
 	draw_arc(center, r, 0, TAU, 32, Color(minf(c.r * 1.7, 4.0), minf(c.g * 1.7, 4.0), minf(c.b * 1.7, 4.0), 1.0), w)
+
+func _update_fist_shield() -> void:
+	if is_paused or is_game_over:
+		_fist_was_closed = false
+		return
+	var closed: bool = HandTrackingClient.is_fist()
+	if closed and not _fist_was_closed:
+		_try_shield()
+	_fist_was_closed = closed
 
 func _smooth_rotation_toward(target_deg: float, delta: float) -> void:
 	var diff := wrapf(target_deg - ship_rotation, -180.0, 180.0)
