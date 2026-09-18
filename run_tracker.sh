@@ -22,6 +22,19 @@
 #
 # IMPORTANT: do NOT use `uv run mediapipe-py` — that entrypoint points at the
 # __init__.py stub ("Hello from mediapipe-py!") and never starts the camera.
+#
+# CAMERA (Shinetech USB2.0 FHD, /dev/video0): modes MJPG/YUYV up to 1920x1080,
+# but only at 30/15fps — NO 60fps or 1080p60 mode (verified with v4l2-ctl
+# --list-formats-ext). The tracker runs 1280x720 MJPG @30fps. Two firmware
+# quirks had it limping at ~17fps (verified by A/B probing):
+#   1) exposure_dynamic_framerate=1 (default): in a dim room the camera drops
+#      frames to lengthen exposure -> main.py sets it to 0 via v4l2-ctl.
+#   2) CAP_PROP_BUFFERSIZE=1 silently degrades this driver to ~14fps -> we
+#      use 2 (still fresh frames, ~66ms worst-case latency).
+# Capture runs on its own thread so MediaPipe inference (~21ms) never stalls
+# the camera. Override without editing code:
+#   TRACKER_CAM_INDEX=0 TRACKER_CAM_WIDTH=1280 TRACKER_CAM_HEIGHT=720 \
+#   TRACKER_CAM_FPS=30 ./run_tracker.sh
 set -euo pipefail
 
 # Absolute path of THIS script (needed for --detach self-relaunch).
