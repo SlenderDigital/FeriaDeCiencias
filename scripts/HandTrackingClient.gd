@@ -34,6 +34,7 @@ var _points := PackedVector3Array()   # 21 landmarks normalizados (x,y,z)
 var has_hand := false
 var _last_packet_time := 0.0
 var _got_datagram := false   # el tracker está mandando datos
+var _got_count := -1         # último count recibido (0=sin mano, 21=mano, -1=nada aún)
 
 # --- Suavizado temporal (EMA) ---
 # Los landmarks de MediaPipe vibran (±1-3% por frame). Aplicamos una media
@@ -142,20 +143,28 @@ func _parse(data: PackedByteArray) -> void:
 		return
 	_got_datagram = true   # llegó algo del tracker -> está arriba
 	var count: int = data.decode_s32(0)   # little-endian (struct.pack "<i...f")
+	_got_count = count
+	# count==0: tracker vivo pero sin mano visible. count==21: mano trackeada.
+	# Cualquier otro valor = payload corrupto/truncado -> ignorar sin tocar estado.
+	if count == 0:
+		has_hand = false
+		_fist_frames = 0
+		_fist_latched = false
+		return
+	if count != LANDMARK_COUNT or data.size() < 4 + count * 12:
+		push_warning("[HandTracking] payload inesperado: count=%d size=%d" % [count, data.size()])
+		return
 	_points = PackedVector3Array()
-	if count == LANDMARK_COUNT and data.size() >= 4 + count * 12:
-		for i in count:
-			var o := 4 + i * 12
-			_points.push_back(Vector3(
-				data.decode_float(o),
-				data.decode_float(o + 4),
-				data.decode_float(o + 8)
-			))
-		has_hand = true
-		_last_packet_time = Time.get_ticks_msec() / 1000.0
-		hand_updated.emit()
-	else:
-		has_hand = false   # datagrama con count != 21 o sin mano
+	for i in count:
+		var o := 4 + i * 12
+		_points.push_back(Vector3(
+			data.decode_float(o),
+			data.decode_float(o + 4),
+			data.decode_float(o + 8)
+		))
+	has_hand = true
+	_last_packet_time = Time.get_ticks_msec() / 1000.0
+	hand_updated.emit()
 
 func get_landmark(idx: int) -> Vector3:
 	return _points[idx] if idx >= 0 and idx < _points.size() else Vector3.ZERO
