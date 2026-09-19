@@ -12,6 +12,7 @@ var sfx_launch: AudioStreamWAV
 var sfx_beat: AudioStreamWAV
 var sfx_back: AudioStreamWAV
 var sfx_warning: AudioStreamWAV
+var sfx_defeat: AudioStreamWAV
 
 func _ready() -> void:
 	process_mode = PROCESS_MODE_ALWAYS
@@ -34,12 +35,13 @@ func _generate_audio_streams() -> void:
 	sfx_launch = _create_synth_sweep(220.0, 880.0, 0.4, 0.4)      # Rising synth sweep
 	sfx_back = _create_synth_sweep(660.0, 330.0, 0.12, 0.25)      # Falling tone
 	sfx_warning = _create_synth_tone(784.0, 0.12, 0.4, "square")  # Alarma: beep G5 angular
+	sfx_beat = _create_synth_tone(120.0, 0.08, 0.5, "sine")       # Deep bass kick pulse
+	sfx_defeat = _create_defeat_sting()   # Derrota: barrido descendente + golpe grave
 
 func play_warning() -> void:
 	# Alarma de telegraph láser: avisa ANTES de que el beam pueda dañar
 	if sfx_warning and _get_sfx_enabled():
 		_play_stream(audio_player_ui, sfx_warning, -4.0)
-	sfx_beat = _create_synth_tone(120.0, 0.08, 0.5, "sine")       # Deep bass kick pulse
 
 func play_hover() -> void:
 	if sfx_hover and _get_sfx_enabled():
@@ -56,6 +58,11 @@ func play_back() -> void:
 func play_launch() -> void:
 	if sfx_launch and _get_sfx_enabled():
 		_play_stream(audio_player_ui, sfx_launch, -3.0)
+
+func play_defeat() -> void:
+	# Sting de derrota: suena UNA vez al perder, antes de mostrar resultados.
+	if sfx_defeat and _get_sfx_enabled():
+		_play_stream(audio_player_ui, sfx_defeat, -2.0)
 
 func play_beat() -> void:
 	if sfx_beat and _get_sfx_enabled():
@@ -97,6 +104,35 @@ func _create_synth_tone(freq: float, duration: float, volume: float = 0.3, wave_
 		byte_data[i * 2] = int_val & 0xFF
 		byte_data[i * 2 + 1] = (int_val >> 8) & 0xFF
 		
+	var stream: AudioStreamWAV = AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = sample_rate
+	stream.stereo = false
+	stream.data = byte_data
+	return stream
+
+## Defeat sting: descending minor sweep (E5 -> E3) + low thud. ~1.1s.
+func _create_defeat_sting() -> AudioStreamWAV:
+	var sample_rate: int = 22050
+	var duration: float = 1.1
+	var total_samples: int = int(sample_rate * duration)
+	var byte_data: PackedByteArray = PackedByteArray()
+	byte_data.resize(total_samples * 2)
+	var phase: float = 0.0
+	for i in range(total_samples):
+		var t: float = float(i) / float(sample_rate)
+		var prog: float = float(i) / float(total_samples)
+		# E5 (659) -> E3 (165): caida dramatica, curva exponencial
+		var current_freq: float = 659.0 * pow(165.0 / 659.0, prog)
+		phase += TAU * current_freq / float(sample_rate)
+		# Cuadrado oscurecido + sub-grave que entra en la segunda mitad
+		var sq: float = 0.6 if sin(phase) >= 0.0 else -0.6
+		var sub: float = sin(TAU * 55.0 * t) * clampf((prog - 0.5) * 2.0, 0.0, 1.0)
+		var env: float = sin(minf(prog * 1.15, 1.0) * PI)  # decae a cero al final
+		var sample_val: float = (sq * 0.5 + sub * 0.5) * 0.4 * env
+		var int_val: int = int(clampf(sample_val * 32767.0, -32768.0, 32767.0))
+		byte_data[i * 2] = int_val & 0xFF
+		byte_data[i * 2 + 1] = (int_val >> 8) & 0xFF
 	var stream: AudioStreamWAV = AudioStreamWAV.new()
 	stream.format = AudioStreamWAV.FORMAT_16_BITS
 	stream.mix_rate = sample_rate

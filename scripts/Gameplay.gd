@@ -628,6 +628,7 @@ func _update_sparks(delta: float) -> void:
 
 func _trigger_victory() -> void:
 	is_game_over = true
+	music.stop()   # la cancion termino: cortar antes de resultados
 	var is_new_hs: bool = false
 	if GameManager:
 		is_new_hs = GameManager.save_score(track_data.get("id", "procedural_mvp"), 100)
@@ -639,6 +640,8 @@ func _trigger_victory() -> void:
 
 func _trigger_game_over() -> void:
 	is_game_over = true
+	music.stop()   # cortar la musica al instante: la derrota se escucha
+	SoundManager.play_defeat()
 	var is_new_hs: bool = false
 	if GameManager:
 		is_new_hs = GameManager.save_score(track_data.get("id", "procedural_mvp"), progress_pct)
