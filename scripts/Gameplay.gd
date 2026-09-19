@@ -39,7 +39,10 @@ var _shield_cooldown: float = 0.0
 # Invulnerabilidad post-golpe: maximo UN impacto cada HIT_IFRAMES segundos.
 # Durante el lapso los peligros tocan la nave y se consumen sin drenar vida.
 const HIT_IFRAMES: float = 1.5
+const HIT_IFRAMES_EASY: float = 2.0
 var _hit_iframes: float = 0.0
+# easy_mode: nivel 1 (First Light) - mas margen. Niveles 2-3 intactos.
+var easy_mode: bool = false
 # Juice de daño: flash rojo de pantalla + vibracion al recibir un golpe.
 const SHAKE_TIME: float = 0.25
 const SHAKE_AMP: float = 12.0
@@ -106,6 +109,11 @@ func _ready() -> void:
 		chart = song.build_chart()
 		# Seed por id de track: mismo nivel para la misma cancion, siempre
 		controller = PatternController.new(chart, play_size(), bpm, hash(str(track_data.get("id", "track"))))
+		easy_mode = str(track_data.get("id", "")) == "level_first_light"
+		controller.easy_mode = easy_mode
+		if easy_mode:
+			health = 125.0   # un golpe extra de margen en el tutorial
+			print("[Gameplay] easy_mode ON (First Light): hazards x0.85, warn muros 2.5 beats, iframes 2.0s")
 		music.stream = song.render_audio()
 		bpm = chart.bpm
 		total_song_duration = chart.duration
@@ -569,7 +577,7 @@ func _update_targets(delta: float) -> void:
 			targets.remove_at(idx)
 
 func _on_hazard_hit() -> void:
-	_hit_iframes = HIT_IFRAMES
+	_hit_iframes = HIT_IFRAMES_EASY if easy_mode else HIT_IFRAMES
 	_damage_flash = 1.0
 	_shake_time = SHAKE_TIME
 	health -= 18.0

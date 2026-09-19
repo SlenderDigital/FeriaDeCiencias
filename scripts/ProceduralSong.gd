@@ -17,6 +17,12 @@ const CHORD_PROG: Array = [
 	[-2.0, 2.0, 5.0],  # G   (G, B, D)
 ]
 const A2: float = 110.0
+# Motivo del lead (2 compases, 16 pasos de corchea): índices a la tríada del
+# compás [0=raíz, 1=tercera, 2=quinta, 3=octava]. Siempre en la armonía porque
+# usa los tonos del acorde; la variación de octava sale del índice de compás
+# (determinista: mismo seed -> misma canción).
+# Contorno: subida raíz->3ra->5ta->octava, toque alto, respuesta descendente.
+const LEAD_MOTIF: Array = [0, 1, 2, 1, 2, 3, 2, 1, 0, 1, 2, 3, 2, 1, 2, 0]
 
 var bpm: float = 128.0
 var beat_interval: float = 0.46875
@@ -201,8 +207,17 @@ func render_audio() -> AudioStreamWAV:
 			_render_crash(buf_drum, bar_t)
 			_render_impact(buf_kick, bar_t)
 
+		# HOOK del lead: 2 compases on / 2 off en build y breakdown (pregunta),
+		# siempre on en drop/drop2 (estribillo). En intro/outro calla: el tema
+		# respira y el hook entra como novedad en el build.
+		if sname == "build" or sname == "breakdown":
+			if b % 4 < 2:
+				_render_lead2(buf_lead, b, bar_t, bar_len, chord)
+		elif sname == "drop" or sname == "drop2":
+			_render_lead2(buf_lead, b, bar_t, bar_len, chord)
+
 	# --- Mezcla final con headroom y fade global ---
-	var master: float = 0.72
+	var master: float = 0.66
 	var buf_out := _new_buf(total_samples)
 	var peak: int = 0
 	for i in range(total_samples):
@@ -312,6 +327,51 @@ func _render_bass(buf: PackedByteArray, t0: float, freq: float, gain: float) -> 
 		var idx: int = start_idx + i * 2
 		var cur: int = _s16(buf, idx) + int(sv)
 		_w16(buf, idx, clampi(cur, -32767, 32767))
+
+func _render_lead2(buf: PackedByteArray, bar: int, t0: float, dur: float, chord: Array) -> void:
+	## Hook principal: square con vibrato + eco de corchea con puntillo.
+	## El motivo son indices a la triada del compas (LEAD_MOTIF): siempre en la
+	## armonia. Determinista: la variacion de octava sale del indice de compas.
+	var step_dur: float = dur / 8.0
+	var echo_dur: float = step_dur * 1.5   # corchea con puntillo: el eco baila
+	var start_idx: int = int(t0 * float(RATE)) * 2
+	var echo_start: int = start_idx + int(echo_dur * float(RATE)) * 2
+	var total_n: int = int(dur * float(RATE))
+	var semi: Array = [float(chord[0]), float(chord[1]), float(chord[2])]
+	# 2 compases de motivo, segunda vuelta una octava arriba (pregunta/respuesta)
+	var octave_up: float = 12.0 if (bar % 4 >= 2) else 0.0
+	var amp: float = 1500.0
+	var vib_rate: float = 5.5
+	var vib_depth: float = 0.35   # semitonos de vaiven
+	for s in range(16):
+		var deg: int = int(LEAD_MOTIF[s % LEAD_MOTIF.size()])
+		var base_semi: float = semi[mini(deg, 2)] + (12.0 if deg >= 3 else 0.0)
+		var note_semi: float = base_semi + octave_up
+		var st0: int = start_idx + int((float(s) * step_dur) * float(RATE)) * 2
+		var st1: int = start_idx + int((float(s + 1) * step_dur) * float(RATE)) * 2
+		var phase: float = 0.0
+		for idx in range(st0, st1, 2):
+			var tt: float = float(idx - st0) / float(maxi(st1 - st0, 2))
+			var vib: float = sin(TAU * vib_rate * float(idx - st0) / float(RATE)) * vib_depth
+			phase += TAU * (A2 * pow(2.0, (note_semi + 12.0 + vib) / 12.0)) / float(RATE)
+			if phase > TAU:
+				phase -= TAU
+			var sq: float = 0.6 if sin(phase) >= 0.0 else -0.6
+			var env: float = minf(float(idx - st0) / (0.012 * float(RATE)), 1.0) * (1.0 - tt * 0.55)
+			var sv: float = (sq + sin(phase * 0.5) * 0.25) * env * amp
+			var cur: int = _s16(buf, idx) + int(sv)
+			_w16(buf, idx, clampi(cur, -32767, 32767))
+	# Eco: una repeticion atenuada (0.32) desplazada una corchea con puntillo
+	var echo_n: int = mini(total_n * 2, (start_idx + total_n * 2) - echo_start)
+	var di: int = 0
+	while di < echo_n:
+		var sidx: int = start_idx + di
+		var didx: int = echo_start + di
+		var sv: float = float(_s16(buf, sidx)) * 0.25
+		var cur: int = _s16(buf, didx) + int(sv)
+		_w16(buf, didx, clampi(cur, -32767, 32767))
+		di += 2
+
 
 func _render_lead(buf: PackedByteArray, t0: float, freq: float, gain: float) -> void:
 	var dur_s: float = 0.11
