@@ -14,6 +14,10 @@ var play_size: Vector2 = Vector2(1280, 720)
 # compás (beat_idx / 4): el nivel sale de la canción, no del azar.
 var bpm: float = 120.0
 var beat_len: float = 0.5          # 60 / bpm
+# easy_mode: nivel 1 (First Light). Sin sierras de acento en snare,
+# sin muros en downbeat, sin laser/homing/perimetro coreografiado.
+# Lo setea Gameplay segun el track id; niveles 2-3 intactos.
+var easy_mode: bool = false
 var _rng := RandomNumberGenerator.new()
 var _last_wall_dir: Vector2 = Vector2.ZERO  # anti-repetición de dirección
 var _last_wall_t: float = -100.0   # t del ultimo muro emitido (cooldown)
@@ -59,8 +63,8 @@ func spawns_at(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
 	# Mientras un muro esta en pantalla, se silencian los rojos de acento:
 	# el pasillo del hueco debe quedar limpio para reaccionar
 	if not wall_active:
-		# Hits de snare (beats 2 y 4) => sierra acento en secciones con drive
-		if (bp == 1 or bp == 3) and energy >= 0.55 and _rng.randf() <= 0.6:
+		# Hits de snare (beats 2 y 4) => sierra acento. En easy_mode no hay sorpresas.
+		if not easy_mode and (bp == 1 or bp == 3) and energy >= 0.62 and _rng.randf() <= 0.6:
 			out.append(_saw(_rng.randf_range(play_size.x * 0.15, play_size.x * 0.85), Color(1, 0.2, 0.3, 1)))
 
 	return out
@@ -70,6 +74,9 @@ func spawns_at_downbeat(t: float, beat_idx: int, base_color: Color) -> Array[Dic
 	"""Llamado en cada downbeat (cada 4 beats) — patrones grandes."""
 	if not chart.downbeat[beat_idx]:
 		return []
+	# En easy_mode (nivel 1) no hay muros de downbeat.
+	if easy_mode:
+		return []
 	# Las secciones tranquilas no lanzan muros: la energía manda la dificultad
 	var sec := _current_section(t)
 	if not sec.is_empty() and float(sec.get("energy", 0.5)) < 0.45:
@@ -77,6 +84,8 @@ func spawns_at_downbeat(t: float, beat_idx: int, base_color: Color) -> Array[Dic
 	return _build_pattern("stripe_wall", t, Color(1, 0.2, 0.3, 1), beat_idx)
 
 func spawns_at_bar(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
+	if easy_mode:
+		return []
 	"""Llamado en cada bar (cada 4 beats) — variaciones coreografiadas."""
 	if beat_idx % 4 != 0:
 		return []
@@ -216,8 +225,8 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0) -
 
 # --- Helpers para nuevos patrones ---
 func _hazard(x: float) -> Dictionary:
-	return {"pos": Vector2(x, -30.0), "vel": Vector2(0, 200.0),
-		"radius": _rng.randf_range(24, 32), "color": Color(1.0, 0.2, 0.3, 1.0), "is_hazard": true, "hit_health_bonus": -25.0, "type": "hazard"}
+	return {"pos": Vector2(x, -30.0), "vel": Vector2(0, 200.0 * (0.85 if easy_mode else 1.0)),
+		"radius": _rng.randf_range(24, 32), "color": Color(1.0, 0.2, 0.3, 1.0), "is_hazard": true, "hit_health_bonus": -15.0 if easy_mode else -25.0, "type": "hazard"}
 
 func _stripe_band(n: Vector2, t_dir: Vector2, tmin: float, tmax: float, s0: float, s1: float, gap_center: float, c: Color, bar_idx: int = 0, gap_i: int = 0) -> Dictionary:
 	# Banda de muro orientada: cubre s ∈ [s0, s1] en el eje n (avance) y el
@@ -234,18 +243,18 @@ func _stripe_band(n: Vector2, t_dir: Vector2, tmin: float, tmax: float, s0: floa
 		"size": Vector2(tmax - tmin, s1 - s0),
 		"rot": t_dir.angle(),
 		"gap_center": gap_center,
-		"state": "warning", "warn_time": 2.0 * beat_len, "active_time": 2.0 * beat_len, "fade_time": 0.5 * beat_len,
+		"state": "warning", "warn_time": (2.5 if easy_mode else 2.0) * beat_len, "active_time": 2.0 * beat_len, "fade_time": 0.5 * beat_len,
 		"bar_idx": bar_idx, "lane_index": gap_i,
 		"alpha": 1.0}
 
 func _saw(x: float, c: Color) -> Dictionary:
-	return {"pos": Vector2(x, -50.0), "vel": Vector2(_rng.randf_range(-50, 50), 120.0),
-		"radius": 30, "color": c, "is_hazard": true, "hit_health_bonus": -30.0, "type": "saw"}
+	return {"pos": Vector2(x, -50.0), "vel": Vector2(_rng.randf_range(-50, 50), 120.0 * (0.85 if easy_mode else 1.0)),
+		"radius": 30, "color": c, "is_hazard": true, "hit_health_bonus": -20.0 if easy_mode else -30.0, "type": "saw"}
 
 func _drifter(x: float, c: Color) -> Dictionary:
 	# Anillo con púas que deriva y rota
-	return {"pos": Vector2(x, -30.0), "vel": Vector2(_rng.randf_range(-40, 40), 80.0),
-		"radius": 28, "color": c, "is_hazard": true, "hit_health_bonus": -25.0, "type": "drifter"}
+	return {"pos": Vector2(x, -30.0), "vel": Vector2(_rng.randf_range(-40, 40), 80.0 * (0.85 if easy_mode else 1.0)),
+		"radius": 28, "color": c, "is_hazard": true, "hit_health_bonus": -18.0 if easy_mode else -25.0, "type": "drifter"}
 
 func _laser_telegraph(x: float) -> Dictionary:
 	# Telegraph de 1.3s (~2+ beats) -> dispara un beam en DIRECCIÓN ALEATORIA.
@@ -262,8 +271,8 @@ func _laser_telegraph(x: float) -> Dictionary:
 
 func _homing(x: float, c: Color) -> Dictionary:
 	# Proyectil teledirigido: persigue al jugador (Gameplay maneja el chase).
-	return {"pos": Vector2(x, -30.0), "vel": Vector2(0, 250.0),
-		"radius": 20, "color": c, "is_hazard": true, "hit_health_bonus": -20.0, "type": "homing"}
+	return {"pos": Vector2(x, -30.0), "vel": Vector2(0, 250.0 * (0.85 if easy_mode else 1.0)),
+		"radius": 20, "color": c, "is_hazard": true, "hit_health_bonus": -15.0 if easy_mode else -20.0, "type": "homing"}
 
 func _perimeter_ball(cx: float, cy: float, angle: float) -> Dictionary:
 	var dir = Vector2(cos(angle), sin(angle))

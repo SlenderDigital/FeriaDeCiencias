@@ -39,7 +39,10 @@ var _shield_cooldown: float = 0.0
 # Invulnerabilidad post-golpe: maximo UN impacto cada HIT_IFRAMES segundos.
 # Durante el lapso los peligros tocan la nave y se consumen sin drenar vida.
 const HIT_IFRAMES: float = 1.5
+const HIT_IFRAMES_EASY: float = 2.0
 var _hit_iframes: float = 0.0
+# easy_mode: nivel 1 (First Light) - mas margen. Niveles 2-3 intactos.
+var easy_mode: bool = false
 # Juice de daño: flash rojo de pantalla + vibracion al recibir un golpe.
 const SHAKE_TIME: float = 0.25
 const SHAKE_AMP: float = 12.0
@@ -47,6 +50,7 @@ var _damage_flash: float = 0.0
 var _shake_time: float = 0.0
 var _damage_overlay: ColorRect
 var _shield_was_ready: bool = true   # para sonido de "listo" al recargarse
+var _fist_was_closed: bool = false   # edge-trigger: un escudo por puno (requiere abrir para re-armar)
 var health: float = 100.0
 var progress_pct: int = 0   # % de la canción sobrevivida: la métrica del nivel
 var is_paused: bool = false
@@ -105,6 +109,11 @@ func _ready() -> void:
 		chart = song.build_chart()
 		# Seed por id de track: mismo nivel para la misma cancion, siempre
 		controller = PatternController.new(chart, play_size(), bpm, hash(str(track_data.get("id", "track"))))
+		easy_mode = str(track_data.get("id", "")) == "level_first_light"
+		controller.easy_mode = easy_mode
+		if easy_mode:
+			health = 125.0   # un golpe extra de margen en el tutorial
+			print("[Gameplay] easy_mode ON (First Light): hazards x0.85, warn muros 2.5 beats, iframes 2.0s")
 		music.stream = song.render_audio()
 		bpm = chart.bpm
 		total_song_duration = chart.duration
@@ -337,6 +346,7 @@ func _update_player_movement(delta: float) -> void:
 		var ang := HandTrackingClient.get_hand_angle_deg()
 		if ang < 9990.0:
 			_smooth_rotation_toward(ang, delta)
+		_update_fist_shield()
 		player_pos.x = clamp(player_pos.x, 50, ps.x - 50)
 		player_pos.y = clamp(player_pos.y, 80, ps.y - 50)
 		return
@@ -395,6 +405,15 @@ func _neon_arc(center: Vector2, r: float, c: Color, w: float) -> void:
 	draw_arc(center, r, 0, TAU, 32, Color(c.r, c.g, c.b, 0.18), w * 3.2)
 	draw_arc(center, r, 0, TAU, 32, Color(c.r, c.g, c.b, 0.5), w * 1.7)
 	draw_arc(center, r, 0, TAU, 32, Color(minf(c.r * 1.7, 4.0), minf(c.g * 1.7, 4.0), minf(c.b * 1.7, 4.0), 1.0), w)
+
+func _update_fist_shield() -> void:
+	if is_paused or is_game_over:
+		_fist_was_closed = false
+		return
+	var closed: bool = HandTrackingClient.is_fist()
+	if closed and not _fist_was_closed:
+		_try_shield()
+	_fist_was_closed = closed
 
 func _smooth_rotation_toward(target_deg: float, delta: float) -> void:
 	var diff := wrapf(target_deg - ship_rotation, -180.0, 180.0)
@@ -558,7 +577,7 @@ func _update_targets(delta: float) -> void:
 			targets.remove_at(idx)
 
 func _on_hazard_hit() -> void:
-	_hit_iframes = HIT_IFRAMES
+	_hit_iframes = HIT_IFRAMES_EASY if easy_mode else HIT_IFRAMES
 	_damage_flash = 1.0
 	_shake_time = SHAKE_TIME
 	health -= 18.0
@@ -609,6 +628,7 @@ func _update_sparks(delta: float) -> void:
 
 func _trigger_victory() -> void:
 	is_game_over = true
+	music.stop()   # la cancion termino: cortar antes de resultados
 	var is_new_hs: bool = false
 	if GameManager:
 		is_new_hs = GameManager.save_score(track_data.get("id", "procedural_mvp"), 100)
@@ -620,6 +640,8 @@ func _trigger_victory() -> void:
 
 func _trigger_game_over() -> void:
 	is_game_over = true
+	music.stop()   # cortar la musica al instante: la derrota se escucha
+	SoundManager.play_defeat()
 	var is_new_hs: bool = false
 	if GameManager:
 		is_new_hs = GameManager.save_score(track_data.get("id", "procedural_mvp"), progress_pct)
