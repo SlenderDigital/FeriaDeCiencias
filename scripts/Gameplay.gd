@@ -281,6 +281,18 @@ func _process(delta: float) -> void:
 		while next_beat_idx < chart.beat_times.size() and chart.beat_times[next_beat_idx] <= song_time:
 			var t: float = chart.beat_times[next_beat_idx]
 			
+			# Gate: un solo stripe_wall a la vez (no se apilan muros).
+			# Se calcula ANTES de spawns_at: el pool regular tambien puede
+			# traer stripe_wall y debe ver el flag fresco, no el del downbeat
+			# anterior.
+			var has_wall := false
+			for tg in targets:
+				if tg.get("type", "") == "stripe_wall":
+					has_wall = true
+					break
+			# El muro activo silencia los acentos rojos (PatternController)
+			controller.wall_active = has_wall
+
 			# Regular beat spawns
 			var spawns: Array[Dictionary] = controller.spawns_at(t, next_beat_idx, track_color)
 			for s in spawns:
@@ -289,14 +301,6 @@ func _process(delta: float) -> void:
 			
 			# Downbeat patterns (every 4 beats) - big patterns
 			if chart.downbeat[next_beat_idx]:
-				# Gate: un solo stripe_wall a la vez (no se apilan muros)
-				var has_wall := false
-				for tg in targets:
-					if tg.get("type", "") == "stripe_wall":
-						has_wall = true
-						break
-				# El muro activo silencia los acentos rojos (PatternController)
-				controller.wall_active = has_wall
 				if not has_wall:
 					for s in controller.spawns_at_downbeat(t, next_beat_idx, track_color):
 						_notify_spawn(s)

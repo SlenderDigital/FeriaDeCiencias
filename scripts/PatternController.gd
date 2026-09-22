@@ -22,7 +22,7 @@ var _rng := RandomNumberGenerator.new()
 var _last_wall_dir: Vector2 = Vector2.ZERO  # anti-repetición de dirección
 var _last_wall_t: float = -100.0   # t del ultimo muro emitido (cooldown)
 var _last_wall_end: float = -100.0  # t en que termino el ultimo muro (warn+active)
-var _last_gap_u: float = 0.5  # gap anterior en u∈[0,1]: el siguiente queda cerca
+var _last_gap_u: float = 1.0  # indice del ultimo hueco EMITIDO: el siguiente queda a max 1 carril
 # Rojo de peligro: TODO lo que daña es rojo, sin excepciones. El color del
 # track queda para la nave/HUD/ambiente; rojo = no lo toques.
 const DANGER_RED: Color = Color(1.0, 0.2, 0.3, 1.0)
@@ -109,7 +109,7 @@ func spawns_at_bar(t: float, beat_idx: int, base_color: Color) -> Array[Dictiona
 		pattern = _pick(["saw", "drifter_swarm"])
 	else:
 		pattern = _pick(["saw", "drifter_swarm", "homing", "hazard_wall"])
-	return _build_pattern(pattern, 0, base_color, beat_idx)
+	return _build_pattern(pattern, t, base_color, beat_idx)
 
 func spawns_at_phrase(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
 	"""Llamado en cada phrase (cada 16 beats) — setpieces / nuevo mech."""
@@ -121,7 +121,7 @@ func spawns_at_phrase(t: float, beat_idx: int, base_color: Color) -> Array[Dicti
 		return []
 	# Setpiece especial: closing perimeter o laser telegraph
 	var pattern: String = _pick(["closing_perimeter", "laser_telegraph"])
-	return _build_pattern(pattern, 0, Color(1, 0.2, 0.3, 1), beat_idx)
+	return _build_pattern(pattern, t, Color(1, 0.2, 0.3, 1), beat_idx)
 
 func _current_section(t: float) -> Dictionary:
 	for s in chart.level_sections:
