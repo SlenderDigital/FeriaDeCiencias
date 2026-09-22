@@ -101,26 +101,7 @@ theme_override_constants/separation = 16
 layout_mode = 2
 theme_override_colors/font_color = Color(0, 0.94, 1, 1)
 theme_override_font_sizes/font_size = 22
-text = "SELECCIÓN DE CANCIÓN"
-
-[node name="TrackButtons" type="VBoxContainer" parent="Layout/Content/Panels/SongSelectPanel/VBox" unique_id=789684145]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="BtnTrack0" type="Button" parent="Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons" unique_id=1159276675]
-custom_minimum_size = Vector2(0, 48)
-layout_mode = 2
-text = "1. First Light  (Principiante)"
-
-[node name="BtnTrack1" type="Button" parent="Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons" unique_id=658618701]
-custom_minimum_size = Vector2(0, 48)
-layout_mode = 2
-text = "2. Mechanical Wall  (Intermedio)"
-
-[node name="BtnTrack2" type="Button" parent="Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons" unique_id=1368111479]
-custom_minimum_size = Vector2(0, 48)
-layout_mode = 2
-text = "3. Relentless Drive  (Avanzado)"
+text = "NIVEL"
 
 [node name="HSeparator" type="HSeparator" parent="Layout/Content/Panels/SongSelectPanel/VBox" unique_id=1418323461]
 layout_mode = 2
@@ -239,9 +220,6 @@ text = "(Modo de control: flechitas / teclado — siempre activo)"
 [connection signal="pressed" from="Layout/Content/SideNav/BtnNavPlay" to="." method="_on_btn_nav_play_pressed"]
 [connection signal="pressed" from="Layout/Content/SideNav/BtnNavSettings" to="." method="_on_btn_nav_settings_pressed"]
 [connection signal="pressed" from="Layout/Content/SideNav/BtnNavExit" to="." method="_on_btn_nav_exit_pressed"]
-[connection signal="pressed" from="Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack0" to="." method="_on_btn_track_0_pressed"]
-[connection signal="pressed" from="Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack1" to="." method="_on_btn_track_1_pressed"]
-[connection signal="pressed" from="Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack2" to="." method="_on_btn_track_2_pressed"]
 [connection signal="pressed" from="Layout/Content/Panels/SongSelectPanel/VBox/Details/BtnPlayLevel" to="." method="_on_btn_play_level_pressed"]
 [connection signal="value_changed" from="Layout/Content/Panels/SettingsPanel/VBox/Grid/SliderMaster" to="." method="_on_slider_master_value_changed"]
 [connection signal="value_changed" from="Layout/Content/Panels/SettingsPanel/VBox/Grid/SliderMusic" to="." method="_on_slider_music_value_changed"]

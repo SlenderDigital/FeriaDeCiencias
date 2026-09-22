@@ -6,11 +6,15 @@ Contract checked here:
   1. beats are strictly monotonic and within [0, duration]
   2. inter-beat intervals are consistent (no drift / dropped-beat spikes)
   3. sections tile [0, duration] contiguously with finite energies
+
+Single-level MVP: solo first_light (el unico analisis que queda en disco;
+el juego es procedural y no lo consume, pero el contrato de chart sigue
+validandose para no romper la herramienta).
 """
 import json
 import sys
 
-TRACKS = ["first_light", "mechanical_wall", "relentless_drive"]
+TRACKS = ["first_light"]
 BASE = "assets/music"
 
 

@@ -45,8 +45,7 @@ var _cursor: ColorRect
 # ------------------------------------------------------------------ ciclo de vida
 func _ready() -> void:
 	_setup_button_audio()
-	_refresh_track_buttons()   # labels desde GameManager.TRACKS (no texto quemado en tscn)
-	_select_track_ui(0)
+	_select_track_ui(0)  # unico nivel: First Light, siempre seleccionado
 	_show_panel(song_select_panel)
 	# Sync del toggle con el estado real (arrancamos en fullscreen desde GameManager).
 	# set_pressed_no_signal: evita re-disparar _on_check_fullscreen_toggled,
@@ -265,12 +264,6 @@ func ClickButton(btn: Control) -> void:
 		_on_btn_nav_settings_pressed()
 	elif btn == $Layout/Content/SideNav/BtnNavExit:
 		_on_btn_nav_exit_pressed()
-	elif btn == $Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack0:
-		_on_btn_track_0_pressed()
-	elif btn == $Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack1:
-		_on_btn_track_1_pressed()
-	elif btn == $Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack2:
-		_on_btn_track_2_pressed()
 	elif btn == $Layout/Content/Panels/SongSelectPanel/VBox/Details/BtnPlayLevel:
 		_on_btn_play_level_pressed()
 	elif btn == check_fullscreen:
@@ -366,38 +359,9 @@ func _on_btn_nav_exit_pressed() -> void:
 	get_tree().quit()
 
 
-func _on_btn_track_0_pressed() -> void:
-	_select_track_ui(0)
-
-
-func _on_btn_track_1_pressed() -> void:
-	_select_track_ui(1)
-
-
-func _on_btn_track_2_pressed() -> void:
-	_select_track_ui(2)
-
-
-func _refresh_track_buttons() -> void:
-	# Los labels de los botones salen de GameManager.TRACKS: una sola fuente
-	# de verdad. Si hay más tracks que botones, se ocultan los sobrantes.
-	if not GameManager:
-		return
-	var btns: Array[Button] = [
-		$Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack0,
-		$Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack1,
-		$Layout/Content/Panels/SongSelectPanel/VBox/TrackButtons/BtnTrack2,
-	]
-	for i in range(btns.size()):
-		if i < GameManager.TRACKS.size():
-			var t: Dictionary = GameManager.TRACKS[i]
-			btns[i].text = "%d. %s  (%s)" % [i + 1, t["name"], t["difficulty"]]
-			btns[i].visible = true
-		else:
-			btns[i].visible = false
-
-
 func _select_track_ui(index: int) -> void:
+	# Single-level MVP: index siempre 0 (First Light). Muestra el detalle
+	# del unico nivel: titulo, info, descripcion, record.
 	if GameManager:
 		GameManager.select_track(index)
 		var track := GameManager.get_current_track()

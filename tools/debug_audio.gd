@@ -5,8 +5,6 @@ extends SceneTree
 func _init() -> void:
 	for audio in [
 		"res://assets/music/first_light.ogg",
-		"res://assets/music/mechanical_wall.ogg",
-		"res://assets/music/relentless_drive.ogg",
 	]:
 		var s := load(audio) as AudioStream
 		print("LOAD ", audio, " -> ", s, "  (class=", (s.get_class() if s else "NULL"), ")")
