@@ -795,7 +795,9 @@ func _draw() -> void:
 			var blink: float = 0.5 + 0.5 * sin(now_s * TAU * (5.0 + 8.0 * urg))
 			# Línea de peligro: halo rojo grueso + núcleo amarillo parpadeante
 			var lw: float = 5.0 + 7.0 * urg
-			var beam_len: float = (play_size().x + play_size().y) * 0.5
+			# Largo = diagonal completa + margen: el ancla vive al borde y el
+			# beam debe cruzar TODA la pantalla en esa dirección, no medio.
+			var beam_len: float = play_size().length() + 100.0
 			draw_line(c - bdir * beam_len, c + bdir * beam_len, Color(1.0, 0.15, 0.15, 0.30), lw + 7.0)
 			draw_line(c - bdir * beam_len, c + bdir * beam_len, Color(1.0, 0.85, 0.1, 0.35 + 0.6 * blink), lw)
 			# Anillos de alarma expandiéndose desde el ancla
@@ -811,7 +813,8 @@ func _draw() -> void:
 			var c: Vector2 = t["pos"] as Vector2
 			var lt: float = t.get("lifetime", 0.5)
 			var flash: float = 0.5 + 0.5 * sin(lt * 80.0)
-			var beam_len2: float = (play_size().x + play_size().y) * 0.5
+			# Igual que el telegraph: diagonal completa + margen.
+			var beam_len2: float = play_size().length() + 100.0
 			_neon_line(c - bdir * beam_len2, c + bdir * beam_len2, Color(1.0, 0.0, 0.55), 7.0)
 			draw_line(c - bdir * beam_len2, c + bdir * beam_len2, Color(2.0, 2.0, 2.0, 0.85), 4 + 3 * flash)
 		elif t.get("is_hazard", false):

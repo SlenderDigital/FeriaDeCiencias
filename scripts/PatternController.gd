@@ -180,6 +180,10 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0) -
 			var smax := -INF
 			var tmin := INF
 			var tmax := -INF
+			# Cobertura: rango tangente = diagonal completa + margen.
+			# En diagonal el bbox proyectado es mas chico que la pantalla
+			# real y el rect girado dejaba esquinas sin cubrir.
+			var need: float = play_size.length() + 200.0
 			for cn: Vector2 in corners:
 				var sv: float = cn.dot(n)
 				var tv: float = cn.dot(t_dir)
@@ -187,6 +191,12 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0) -
 				smax = maxf(smax, sv)
 				tmin = minf(tmin, tv)
 				tmax = maxf(tmax, tv)
+			# Expandir simetrico: el rect girado cubre toda la pantalla.
+			var span: float = tmax - tmin
+			if span < need:
+				var ex: float = (need - span) * 0.5
+				tmin -= ex
+				tmax += ex
 			# Hueco alineado a carriles: la grilla vive en el eje de AVANCE (s),
 			# con el mismo spacing que los carriles de targets (~1/10 del area).
 			# El pasillo cae siempre sobre un carril de la misma grilla virtual.
