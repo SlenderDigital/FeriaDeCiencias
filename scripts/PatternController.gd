@@ -21,6 +21,8 @@ var easy_mode: bool = false
 var _rng := RandomNumberGenerator.new()
 var _last_wall_dir: Vector2 = Vector2.ZERO  # anti-repetición de dirección
 var _last_wall_t: float = -100.0   # t del ultimo muro emitido (cooldown)
+var _last_wall_end: float = -100.0  # t en que termino el ultimo muro (warn+active)
+var _last_gap_u: float = 1.0  # indice del ultimo hueco EMITIDO: el siguiente queda a max 1 carril
 # Rojo de peligro: TODO lo que daña es rojo, sin excepciones. El color del
 # track queda para la nave/HUD/ambiente; rojo = no lo toques.
 const DANGER_RED: Color = Color(1.0, 0.2, 0.3, 1.0)
@@ -56,6 +58,10 @@ func spawns_at(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
 	# -> misma secuencia de patrones, siempre).
 	if not pool.is_empty() and _rng.randf() <= density:
 		var pattern: String = _pick(pool)
+		# Un muro a la vez: si el pool trae stripe_wall/hazard_wall mientras hay
+		# uno en pantalla, se salta (el hueco debe quedar limpio y legible).
+		if wall_active and (pattern == "stripe_wall" or pattern == "hazard_wall"):
+			pattern = "saw"
 		for s in _build_pattern(pattern, t, base_color, beat_idx):
 			out.append(s)
 
@@ -103,7 +109,7 @@ func spawns_at_bar(t: float, beat_idx: int, base_color: Color) -> Array[Dictiona
 		pattern = _pick(["saw", "drifter_swarm"])
 	else:
 		pattern = _pick(["saw", "drifter_swarm", "homing", "hazard_wall"])
-	return _build_pattern(pattern, 0, base_color, beat_idx)
+	return _build_pattern(pattern, t, base_color, beat_idx)
 
 func spawns_at_phrase(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
 	"""Llamado en cada phrase (cada 16 beats) — setpieces / nuevo mech."""
@@ -115,7 +121,7 @@ func spawns_at_phrase(t: float, beat_idx: int, base_color: Color) -> Array[Dicti
 		return []
 	# Setpiece especial: closing perimeter o laser telegraph
 	var pattern: String = _pick(["closing_perimeter", "laser_telegraph"])
-	return _build_pattern(pattern, 0, Color(1, 0.2, 0.3, 1), beat_idx)
+	return _build_pattern(pattern, t, Color(1, 0.2, 0.3, 1), beat_idx)
 
 func _current_section(t: float) -> Dictionary:
 	for s in chart.level_sections:
@@ -140,6 +146,11 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0) -
 			# - Ciclo: 2 beats warning -> 2 beats active -> 1/2 beat fade.
 			#   El muro nace en un downbeat y libera el gate justo antes del
 			#   siguiente compás.
+			# JUSTICIA: un muro a la vez. Si hay un muro en pantalla o el
+			# anterior termino hace menos de 1 beat, no sale nada: los muros
+			# nunca se solapan y cada hueco es 100% alcanzable.
+			if wall_active or (t - _last_wall_end) < beat_len:
+				return []
 			var dirs := [Vector2(0, 1), Vector2(0, -1), Vector2(1, 0), Vector2(-1, 0)]
 			# Coreografia por compas (bar_idx), sin azar: eje por fase de 4 en
 			# compases pares; compas impar = mismo eje inclinado (diagonal).
@@ -182,7 +193,18 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0) -
 			var span_len: float = smax - smin
 			var lane_spacing: float = maxf(110.0, span_len / 10.0)
 			var usable: float = span_len - 360.0
-			var gap_i: int = (bar_idx * 3 + 1) % maxi(int(usable / lane_spacing), 1)
+			# Hueco alcanzable: carriles recortados a la banda central (nunca
+			# pegado al borde) y a maximo 1 carril del hueco anterior (nunca te
+			# pide cruzar la arena entera). _last_gap_u guarda el indice previo.
+			var n_lanes: int = maxi(int(usable / lane_spacing), 1)
+			var want: int = (bar_idx * 3 + 1) % n_lanes
+			var lo_c: int = mini(1, n_lanes - 1)
+			var hi_c: int = maxi(n_lanes - 2, lo_c)
+			var want_c: int = clampi(want, lo_c, hi_c)
+			var prev_c: int = clampi(int(_last_gap_u), lo_c, hi_c)
+			var gap_i: int = clampi(want_c, prev_c - 1, prev_c + 1)
+			# (gap solo se registra al EMITIR, abajo: si el muro se salta por overlap,
+			#  el siguiente keep usa el ultimo emitido de verdad)
 			var gap_center: float = smin + 180.0 + gap_i * lane_spacing
 			gap_center = minf(gap_center, smax - 180.0)
 			var gap_half := 90.0
@@ -198,6 +220,8 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0) -
 			# la musica manda el ritmo de muros, sin dobles a medio compas.
 			if t - _last_wall_t >= 3.0 * beat_len:
 				_last_wall_t = t
+				_last_gap_u = float(gap_i)
+				_last_wall_end = t + (2.5 if easy_mode else 2.0) * beat_len + 2.0 * beat_len
 				out.append(_stripe_band(n, t_dir, tmin, tmax, smin, gap_center - gap_half, gap_center, DANGER_RED, bar_idx, gap_i))
 				out.append(_stripe_band(n, t_dir, tmin, tmax, gap_center + gap_half, smax, gap_center, DANGER_RED, bar_idx, gap_i))
 		"saw":
