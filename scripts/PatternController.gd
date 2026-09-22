@@ -174,7 +174,6 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0) -
 				# signo del compas (zigzag determinista).
 				n = dirs[ni].rotated(tilt_sign * deg_to_rad(45.0)).normalized()
 			_last_wall_dir = n
-			_last_wall_end = t + (2.5 if easy_mode else 2.0) * beat_len + 2.0 * beat_len
 			var t_dir := Vector2(-n.y, n.x)
 			var corners := [Vector2.ZERO, Vector2(play_size.x, 0), Vector2(0, play_size.y), play_size]
 			var smin := INF
@@ -222,6 +221,7 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0) -
 			if t - _last_wall_t >= 3.0 * beat_len:
 				_last_wall_t = t
 				_last_gap_u = float(gap_i)
+				_last_wall_end = t + (2.5 if easy_mode else 2.0) * beat_len + 2.0 * beat_len
 				out.append(_stripe_band(n, t_dir, tmin, tmax, smin, gap_center - gap_half, gap_center, DANGER_RED, bar_idx, gap_i))
 				out.append(_stripe_band(n, t_dir, tmin, tmax, gap_center + gap_half, smax, gap_center, DANGER_RED, bar_idx, gap_i))
 		"saw":
