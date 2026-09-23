@@ -56,6 +56,12 @@ func spawns_at(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
 	# --- Base: el patrón principal del beat, del pool de la sección ---
 	# Determinista: el "azar" sale del RNG semillado por track (misma canción
 	# -> misma secuencia de patrones, siempre).
+	# Muro en pantalla: compas limpio. Ni el pool ni el fallback a saw
+	# spawnean (las sierras cayendo sobre la banda roja ensucian la
+	# lectura). El muro coreografiado sale por spawns_at_downbeat, que
+	# tiene su propio camino y no pasa por aca.
+	if wall_active:
+		return out
 	if not pool.is_empty() and _rng.randf() <= density:
 		var pattern: String = _pick(pool)
 		# Un muro a la vez: si el pool trae stripe_wall/hazard_wall mientras hay
@@ -92,6 +98,8 @@ func spawns_at_downbeat(t: float, beat_idx: int, base_color: Color) -> Array[Dic
 func spawns_at_bar(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
 	if easy_mode:
 		return []
+	if wall_active:
+		return []
 	"""Llamado en cada bar (cada 4 beats) — variaciones coreografiadas."""
 	if beat_idx % 4 != 0:
 		return []
@@ -118,6 +126,8 @@ func spawns_at_phrase(t: float, beat_idx: int, base_color: Color) -> Array[Dicti
 	# Los setpieces solo aparecen cuando la música lo pide (no en el intro)
 	var sec := _current_section(t)
 	if not sec.is_empty() and float(sec.get("energy", 0.5)) < 0.5:
+		return []
+	if wall_active:
 		return []
 	# Setpiece especial: closing perimeter o laser telegraph
 	var pattern: String = _pick(["closing_perimeter", "laser_telegraph"])

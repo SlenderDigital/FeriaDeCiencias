@@ -410,6 +410,203 @@ func _neon_arc(center: Vector2, r: float, c: Color, w: float) -> void:
 	draw_arc(center, r, 0, TAU, 32, Color(c.r, c.g, c.b, 0.5), w * 1.7)
 	draw_arc(center, r, 0, TAU, 32, Color(minf(c.r * 1.7, 4.0), minf(c.g * 1.7, 4.0), minf(c.b * 1.7, 4.0), 1.0), w)
 
+func _draw_one_target(t: Dictionary) -> void:
+	# Dibujo de un spawn. _draw lo invoca en 3 pasadas: hazards comunes,
+	# stripe_wall opaco encima (cubre sierras atrapadas en la banda) y
+	# lasers al final (el telegraph jamas queda tapado).
+	var ttype_d: String = t.get("type", "target")
+	if ttype_d == "laser_telegraph":
+		# Aviso de laser: IMPOSIBLE de ignorar. Línea de peligro que
+		# parpadea cada vez más rápido + anillos de alarma en el ancla.
+		var bdir: Vector2 = (t.get("beam_dir", Vector2.UP) as Vector2).normalized()
+		var c: Vector2 = t["pos"] as Vector2
+		var h: float = t.get("telegraph_time", 1.3)
+		var total_t: float = t.get("telegraph_total", 1.3)
+		var urg: float = clampf(1.0 - h / total_t, 0.0, 1.0)
+		var now_s: float = Time.get_ticks_msec() * 0.001
+		# Parpadeo: arranca lento (5Hz) y acelera hasta ~13Hz cerca del disparo
+		var blink: float = 0.5 + 0.5 * sin(now_s * TAU * (5.0 + 8.0 * urg))
+		# Línea de peligro: halo rojo grueso + núcleo amarillo parpadeante
+		var lw: float = 5.0 + 7.0 * urg
+		# Largo = diagonal completa + margen: el ancla vive al borde y el
+		# beam debe cruzar TODA la pantalla en esa dirección, no medio.
+		var beam_len: float = play_size().length() + 100.0
+		draw_line(c - bdir * beam_len, c + bdir * beam_len, Color(1.0, 0.15, 0.15, 0.30), lw + 7.0)
+		draw_line(c - bdir * beam_len, c + bdir * beam_len, Color(1.0, 0.85, 0.1, 0.35 + 0.6 * blink), lw)
+		# Anillos de alarma expandiéndose desde el ancla
+		var ring_t: float = fmod(now_s * 2.2, 1.0)
+		var ring_r: float = 8.0 + ring_t * 40.0
+		draw_arc(c, ring_r, 0, TAU, 24, Color(1.0, 0.3, 0.2, 0.8 * (1.0 - ring_t)), 3.0)
+		var ring2_t: float = fmod(now_s * 2.2 + 0.5, 1.0)
+		draw_arc(c, 8.0 + ring2_t * 40.0, 0, TAU, 24, Color(1.0, 0.5, 0.1, 0.7 * (1.0 - ring2_t)), 2.0)
+		draw_circle(c, 7.0, Color(1.0, 0.2, 0.2, 0.9))
+	elif ttype_d == "laser_beam":
+		# Beam flash: núcleo blanco HDR + halo rosa que parpadea su vida corta
+		var bdir: Vector2 = (t.get("beam_dir", Vector2.UP) as Vector2).normalized()
+		var c: Vector2 = t["pos"] as Vector2
+		var lt: float = t.get("lifetime", 0.5)
+		var flash: float = 0.5 + 0.5 * sin(lt * 80.0)
+		# Igual que el telegraph: diagonal completa + margen.
+		var beam_len2: float = play_size().length() + 100.0
+		_neon_line(c - bdir * beam_len2, c + bdir * beam_len2, Color(1.0, 0.0, 0.55), 7.0)
+		draw_line(c - bdir * beam_len2, c + bdir * beam_len2, Color(2.0, 2.0, 2.0, 0.85), 4 + 3 * flash)
+	elif t.get("is_hazard", false):
+		match ttype_d:
+			"stripe_wall":
+				# Muro orientado: warning (RELLENO letal visible pulsando al beat +
+				# corredor del hueco delimitado + chevrons en fase), active (solido,
+				# franjas que desfilan al compas, borde HDR) y fade (alpha).
+				var w_alpha: float = t.get("alpha", 1.0)
+				var w_size: Vector2 = t["size"]
+				var w_state: String = t.get("state", "active")
+				var w_half: Vector2 = w_size * 0.5
+				draw_set_transform(t["pos"], t["rot"], Vector2.ONE)
+				# Fase musical: el muro nace en un downbeat (age=0 ahi), asi que el
+				# pulso visual cae exactamente en los acentos de la cancion.
+				var w_beat_len: float = maxf(beat_interval, 0.001)
+				var w_age: float = float(t.get("age", 0.0))
+				var wpulse: float = maxf(0.0, 1.0 - fposmod(w_age / w_beat_len, 1.0))
+				var w_smid: float = (float(t["s0"]) + float(t["s1"])) * 0.5
+				var w_gc: float = float(t["gap_center"])
+				var gap_ly: float = -(w_gc - w_smid)
+				if w_state == "warning":
+					# 1) RELLENO tenue: TODO el area letal se ve roja desde el primer
+					#    frame; el corredor entre bandas queda oscuro = el hueco.
+					# Relleno que CUBRE lo de detras (sierras atrapadas en la
+					# banda): casi opaco, el pulso del beat da vida sin abrir
+					# ventanas al fondo.
+					var fill_a: float = 0.70 + 0.15 * wpulse
+					draw_rect(Rect2(-w_half, w_size), Color(1.0, 0.2, 0.3, fill_a * w_alpha))
+					# 2) Contorno punteado de cada banda
+					var warn_col := Color(1.0, 0.25, 0.35, 0.55)
+					draw_dashed_line(Vector2(-w_half.x, -w_half.y), Vector2(w_half.x, -w_half.y), warn_col, 3.0, 16.0)
+					draw_dashed_line(Vector2(-w_half.x, w_half.y), Vector2(w_half.x, w_half.y), warn_col, 3.0, 16.0)
+					draw_dashed_line(Vector2(-w_half.x, -w_half.y), Vector2(-w_half.x, w_half.y), warn_col, 3.0, 16.0)
+					draw_dashed_line(Vector2(w_half.x, -w_half.y), Vector2(w_half.x, w_half.y), warn_col, 3.0, 16.0)
+					# 3) Canto del corredor: borde rojo vivo del lado que mira al hueco
+					var corridor_col := Color(2.0, 0.6, 0.6, 0.5 + 0.4 * wpulse)
+					draw_line(Vector2(-w_half.x, -w_half.y), Vector2(-w_half.x, w_half.y), corridor_col, 2.0 + 2.0 * wpulse)
+					# 4) Linea segura punteada + chevrons que desfilan al compas
+					var edge_ly: float = -w_half.y
+					if (float(t["s1"]) - w_gc) > (w_gc - float(t["s0"])):
+						edge_ly = w_half.y
+					var safe_col := Color(1.5, 1.5, 1.5, 0.5)
+					var arrow_gap: float = 150.0
+					var march: float = fposmod(w_age / (4.0 * w_beat_len), 1.0) * arrow_gap
+					draw_dashed_line(Vector2(-w_half.x + 60.0, gap_ly), Vector2(w_half.x - 60.0, gap_ly), safe_col, 2.5, 22.0)
+					var ax0: float = -w_half.x + 60.0 - march
+					while ax0 < w_half.x - 60.0:
+						if ax0 >= -w_half.x + 60.0:
+							var mc := Vector2(ax0, gap_ly)
+							draw_colored_polygon(PackedVector2Array([
+								mc + Vector2(0, -15.0), mc + Vector2(-9.0, 6.0), mc + Vector2(9.0, 6.0)]), safe_col)
+						ax0 += arrow_gap
+					# 5) Borde letal: linea gruesa pulsante al beat por donde entra el golpe
+					draw_line(Vector2(-w_half.x, edge_ly), Vector2(w_half.x, edge_ly),
+						Color(2.0, 0.5, 0.55, 0.35 + 0.5 * wpulse), 4.0 + 2.0 * wpulse)
+				else:
+					# Active / fade: muro solido con franjas que desfilan al compas.
+					# Casi opaco (0.92): la banda CUBRE las sierras que quedan
+					# detras; el hueco (entre bandas) sigue descubierto.
+					draw_rect(Rect2(-w_half, w_size), Color(1.0, 0.2, 0.3, 0.92 * w_alpha))
+					var stripe_n: int = maxi(6, int(w_size.x / 110.0))
+					var stripe_w: float = w_size.x / float(stripe_n)
+					# Las franjas avanzan 1 paso por beat, en fase con la musica
+					var stripe_off: float = fposmod(w_age / w_beat_len, 1.0) * stripe_w
+					for si in range(stripe_n + 1):
+						var lx: float = -w_half.x - stripe_w + si * stripe_w + stripe_off
+						draw_line(Vector2(lx, -w_half.y), Vector2(lx + stripe_w * 1.6, w_half.y),
+							Color(0, 0, 0, 0.6 * w_alpha), 3.0)
+					# Bordes HDR brillantes (largo y corto)
+					draw_line(Vector2(-w_half.x, -w_half.y), Vector2(w_half.x, -w_half.y),
+						Color(1.8, 0.45, 0.55, 0.9 * w_alpha), 4.0)
+					draw_line(Vector2(-w_half.x, w_half.y), Vector2(w_half.x, w_half.y),
+						Color(1.8, 0.45, 0.55, 0.7 * w_alpha), 3.0)
+				# Esquinas: remache neón en cada vértice para que el marco
+				# del muro lea bien también en diagonal.
+					for wcx in [-w_half.x, w_half.x]:
+						for wcy in [-w_half.y, w_half.y]:
+							var wcp := Vector2(wcx, wcy)
+							draw_line(wcp + Vector2(-9.0, 0.0), wcp + Vector2(9.0, 0.0), Color(2.0, 0.7, 0.8, 0.85 * w_alpha), 2.5)
+							draw_line(wcp + Vector2(0.0, -9.0), wcp + Vector2(0.0, 9.0), Color(2.0, 0.7, 0.8, 0.85 * w_alpha), 2.5)
+					# Canto seguro del corredor: el borde de cada banda que mira
+					# al hueco se marca cian (color de carril) unos px dentro
+					# del pasillo, para que siga legible mientras el muro
+					# barre; pulso al beat.
+					var safe_ly: float = w_half.y
+					if absf(float(t["s1"]) - w_gc) < absf(float(t["s0"]) - w_gc):
+						safe_ly = -w_half.y
+					var safe_off: float = 10.0 if safe_ly > 0.0 else -10.0
+					draw_line(Vector2(-w_half.x, safe_ly + safe_off),
+						Vector2(w_half.x, safe_ly + safe_off),
+						Color(0.0, 0.94, 1.0, (0.45 + 0.45 * wpulse) * w_alpha), 3.0)
+					# Linea central del pasillo (punteada, tenue): el objetivo
+					# visible del hueco durante el barrido.
+					draw_dashed_line(Vector2(-w_half.x + 60.0, gap_ly),
+						Vector2(w_half.x - 60.0, gap_ly),
+						Color(1.5, 1.5, 1.5, 0.30 * w_alpha), 2.0, 26.0)
+				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			"saw":
+				# Sierra giratoria: disco oscuro + 8 dientes rojos que rotan
+				# con el reloj real + aro neon + nucleo pulsante.
+				var saw_c: Vector2 = t["pos"]
+				var saw_r: float = t["radius"]
+				var saw_spin: float = Time.get_ticks_msec() * 0.004
+				draw_circle(saw_c, saw_r, Color(0.45, 0.03, 0.08, 1.0))
+				for si in range(8):
+					var sang: float = saw_spin + TAU * float(si) / 8.0
+					var sdir := Vector2(cos(sang), sin(sang))
+					draw_line(saw_c + sdir * saw_r * 0.75, saw_c + sdir * saw_r * 1.28, Color(1.0, 0.13, 0.22, 1.0), 6.0)
+				_neon_arc(saw_c, saw_r * 0.92, Color(1.0, 0.13, 0.22), 3.0)
+				var saw_pulse: float = 0.55 + 0.08 * sin(saw_spin * 0.5)
+				draw_circle(saw_c, saw_r * 0.34, Color(1.3, 0.22, 0.3, saw_pulse))
+				draw_circle(saw_c, saw_r * 0.13, Color(1.6, 0.6, 0.7, 1.0))
+			"drifter":
+				# Mina de puas: casco oscuro + 8 puas neon + nucleo.
+				var dri_c: Vector2 = t["pos"]
+				var dri_r: float = t["radius"]
+				var dri_bp: float = fmod(song_time / maxf(beat_interval, 0.001), 1.0)
+				var dri_len: float = dri_r * (1.25 + 0.25 * clampf(1.0 - dri_bp * 5.0, 0.0, 1.0))
+				draw_circle(dri_c, dri_r, Color(0.38, 0.03, 0.07, 1.0))
+				for di in range(8):
+					var ddir := Vector2.from_angle(TAU * float(di) / 8.0 + song_time * 0.6)
+					_neon_line(dri_c + ddir * dri_r * 0.7, dri_c + ddir * dri_len, Color(1.0, 0.16, 0.25), 3.0)
+				_neon_arc(dri_c, dri_r, Color(1.0, 0.16, 0.25), 3.0)
+				draw_circle(dri_c, dri_r * 0.22, Color(1.5, 0.35, 0.4, 0.9))
+			"homing":
+				# Misil: dardo que apunta a su velocidad + estela incandescente.
+				var hom_c: Vector2 = t["pos"]
+				var hom_r: float = t["radius"]
+				var hom_v: Vector2 = t["vel"]
+				var hom_dir := Vector2.DOWN
+				if hom_v.length_squared() > 1.0:
+					hom_dir = hom_v.normalized()
+				var hom_perp := Vector2(-hom_dir.y, hom_dir.x)
+				draw_line(hom_c - hom_dir * hom_r * 0.8, hom_c - hom_dir * hom_r * 1.9, Color(1.0, 0.45, 0.1, 0.55), 7.0)
+				draw_colored_polygon(PackedVector2Array([hom_c + hom_dir * hom_r * 1.1, hom_c - hom_dir * hom_r * 0.8 + hom_perp * hom_r * 0.75, hom_c, hom_c - hom_dir * hom_r * 0.8 - hom_perp * hom_r * 0.75]), Color(0.55, 0.05, 0.1, 1.0))
+				_neon_polyline(PackedVector2Array([hom_c + hom_dir * hom_r * 1.1, hom_c - hom_dir * hom_r * 0.8 + hom_perp * hom_r * 0.75, hom_c - hom_dir * hom_r * 0.8 - hom_perp * hom_r * 0.75, hom_c + hom_dir * hom_r * 1.1]), Color(1.0, 0.16, 0.25), 2.5)
+				draw_circle(hom_c, hom_r * 0.26, Color(1.0, 0.85, 0.4, 1.0))
+			"perimeter":
+				# Centinela: hexagono neon que rota lento + nucleo.
+				var per_c: Vector2 = t["pos"]
+				var per_r: float = t["radius"]
+				var per_spin: float = Time.get_ticks_msec() * 0.0012
+				var per_pts := PackedVector2Array()
+				for pi in range(6):
+					per_pts.append(per_c + Vector2.from_angle(per_spin + TAU * float(pi) / 6.0) * per_r * 1.1)
+				per_pts.append(per_pts[0])
+				draw_circle(per_c, per_r * 1.1, Color(0.35, 0.03, 0.07, 1.0))
+				_neon_polyline(per_pts, Color(1.0, 0.16, 0.25), 3.0)
+				var per_core: float = 0.5 + 0.5 * sin(per_spin * 6.0)
+				draw_circle(per_c, per_r * (0.20 + 0.12 * per_core), Color(1.4, 0.3, 0.38, 0.95))
+			_:
+				# Default hazard: disco rojo neon con nucleo.
+				var hz_c: Vector2 = t["pos"]
+				var hz_r: float = t["radius"]
+				draw_circle(hz_c, hz_r, Color(0.5, 0.04, 0.09, 0.95))
+				_neon_arc(hz_c, hz_r, Color(1.0, 0.13, 0.22), 3.5)
+				draw_circle(hz_c, hz_r * 0.30, Color(1.0, 0.2, 0.3, 0.9))
+
 func _update_fist_shield() -> void:
 	if is_paused or is_game_over:
 		_fist_was_closed = false
@@ -779,192 +976,21 @@ func _draw() -> void:
 		draw_arc(player_pos, 34.0 + 2.0 * pulse, 0, TAU, 28,
 				Color(0.5, 0.95, 1.0, 0.28 + 0.20 * pulse), 2.5)
 
-	# Draw targets & hazards
+	# Draw targets & hazards — tres pasadas para que el muro CUBRA lo que
+	# queda detras (sierras atrapadas en la banda) sin esconder los avisos:
+	#   1) hazards comunes, 2) stripe_wall opaco encima, 3) lasers arriba
+	#    (el telegraph debe ser imposible de ignorar, jamas tapado).
 	for t in targets:
-		var ttype_d: String = t.get("type", "target")
-		if ttype_d == "laser_telegraph":
-			# Aviso de laser: IMPOSIBLE de ignorar. Línea de peligro que
-			# parpadea cada vez más rápido + anillos de alarma en el ancla.
-			var bdir: Vector2 = (t.get("beam_dir", Vector2.UP) as Vector2).normalized()
-			var c: Vector2 = t["pos"] as Vector2
-			var h: float = t.get("telegraph_time", 1.3)
-			var total_t: float = t.get("telegraph_total", 1.3)
-			var urg: float = clampf(1.0 - h / total_t, 0.0, 1.0)
-			var now_s: float = Time.get_ticks_msec() * 0.001
-			# Parpadeo: arranca lento (5Hz) y acelera hasta ~13Hz cerca del disparo
-			var blink: float = 0.5 + 0.5 * sin(now_s * TAU * (5.0 + 8.0 * urg))
-			# Línea de peligro: halo rojo grueso + núcleo amarillo parpadeante
-			var lw: float = 5.0 + 7.0 * urg
-			# Largo = diagonal completa + margen: el ancla vive al borde y el
-			# beam debe cruzar TODA la pantalla en esa dirección, no medio.
-			var beam_len: float = play_size().length() + 100.0
-			draw_line(c - bdir * beam_len, c + bdir * beam_len, Color(1.0, 0.15, 0.15, 0.30), lw + 7.0)
-			draw_line(c - bdir * beam_len, c + bdir * beam_len, Color(1.0, 0.85, 0.1, 0.35 + 0.6 * blink), lw)
-			# Anillos de alarma expandiéndose desde el ancla
-			var ring_t: float = fmod(now_s * 2.2, 1.0)
-			var ring_r: float = 8.0 + ring_t * 40.0
-			draw_arc(c, ring_r, 0, TAU, 24, Color(1.0, 0.3, 0.2, 0.8 * (1.0 - ring_t)), 3.0)
-			var ring2_t: float = fmod(now_s * 2.2 + 0.5, 1.0)
-			draw_arc(c, 8.0 + ring2_t * 40.0, 0, TAU, 24, Color(1.0, 0.5, 0.1, 0.7 * (1.0 - ring2_t)), 2.0)
-			draw_circle(c, 7.0, Color(1.0, 0.2, 0.2, 0.9))
-		elif ttype_d == "laser_beam":
-			# Beam flash: núcleo blanco HDR + halo rosa que parpadea su vida corta
-			var bdir: Vector2 = (t.get("beam_dir", Vector2.UP) as Vector2).normalized()
-			var c: Vector2 = t["pos"] as Vector2
-			var lt: float = t.get("lifetime", 0.5)
-			var flash: float = 0.5 + 0.5 * sin(lt * 80.0)
-			# Igual que el telegraph: diagonal completa + margen.
-			var beam_len2: float = play_size().length() + 100.0
-			_neon_line(c - bdir * beam_len2, c + bdir * beam_len2, Color(1.0, 0.0, 0.55), 7.0)
-			draw_line(c - bdir * beam_len2, c + bdir * beam_len2, Color(2.0, 2.0, 2.0, 0.85), 4 + 3 * flash)
-		elif t.get("is_hazard", false):
-			match ttype_d:
-				"stripe_wall":
-					# Muro orientado: warning (RELLENO letal visible pulsando al beat +
-					# corredor del hueco delimitado + chevrons en fase), active (solido,
-					# franjas que desfilan al compas, borde HDR) y fade (alpha).
-					var w_alpha: float = t.get("alpha", 1.0)
-					var w_size: Vector2 = t["size"]
-					var w_state: String = t.get("state", "active")
-					var w_half: Vector2 = w_size * 0.5
-					draw_set_transform(t["pos"], t["rot"], Vector2.ONE)
-					# Fase musical: el muro nace en un downbeat (age=0 ahi), asi que el
-					# pulso visual cae exactamente en los acentos de la cancion.
-					var w_beat_len: float = maxf(beat_interval, 0.001)
-					var w_age: float = float(t.get("age", 0.0))
-					var wpulse: float = maxf(0.0, 1.0 - fposmod(w_age / w_beat_len, 1.0))
-					var w_smid: float = (float(t["s0"]) + float(t["s1"])) * 0.5
-					var w_gc: float = float(t["gap_center"])
-					var gap_ly: float = -(w_gc - w_smid)
-					if w_state == "warning":
-						# 1) RELLENO tenue: TODO el area letal se ve roja desde el primer
-						#    frame; el corredor entre bandas queda oscuro = el hueco.
-						var fill_a: float = 0.10 + 0.13 * wpulse
-						draw_rect(Rect2(-w_half, w_size), Color(1.0, 0.2, 0.3, fill_a * w_alpha))
-						# 2) Contorno punteado de cada banda
-						var warn_col := Color(1.0, 0.25, 0.35, 0.55)
-						draw_dashed_line(Vector2(-w_half.x, -w_half.y), Vector2(w_half.x, -w_half.y), warn_col, 3.0, 16.0)
-						draw_dashed_line(Vector2(-w_half.x, w_half.y), Vector2(w_half.x, w_half.y), warn_col, 3.0, 16.0)
-						draw_dashed_line(Vector2(-w_half.x, -w_half.y), Vector2(-w_half.x, w_half.y), warn_col, 3.0, 16.0)
-						draw_dashed_line(Vector2(w_half.x, -w_half.y), Vector2(w_half.x, w_half.y), warn_col, 3.0, 16.0)
-						# 3) Canto del corredor: borde rojo vivo del lado que mira al hueco
-						var corridor_col := Color(2.0, 0.6, 0.6, 0.5 + 0.4 * wpulse)
-						draw_line(Vector2(-w_half.x, -w_half.y), Vector2(-w_half.x, w_half.y), corridor_col, 2.0 + 2.0 * wpulse)
-						# 4) Linea segura punteada + chevrons que desfilan al compas
-						var edge_ly: float = -w_half.y
-						if (float(t["s1"]) - w_gc) > (w_gc - float(t["s0"])):
-							edge_ly = w_half.y
-						var safe_col := Color(1.5, 1.5, 1.5, 0.5)
-						var arrow_gap: float = 150.0
-						var march: float = fposmod(w_age / (4.0 * w_beat_len), 1.0) * arrow_gap
-						draw_dashed_line(Vector2(-w_half.x + 60.0, gap_ly), Vector2(w_half.x - 60.0, gap_ly), safe_col, 2.5, 22.0)
-						var ax0: float = -w_half.x + 60.0 - march
-						while ax0 < w_half.x - 60.0:
-							if ax0 >= -w_half.x + 60.0:
-								var mc := Vector2(ax0, gap_ly)
-								draw_colored_polygon(PackedVector2Array([
-									mc + Vector2(0, -15.0), mc + Vector2(-9.0, 6.0), mc + Vector2(9.0, 6.0)]), safe_col)
-							ax0 += arrow_gap
-						# 5) Borde letal: linea gruesa pulsante al beat por donde entra el golpe
-						draw_line(Vector2(-w_half.x, edge_ly), Vector2(w_half.x, edge_ly),
-							Color(2.0, 0.5, 0.55, 0.35 + 0.5 * wpulse), 4.0 + 2.0 * wpulse)
-					else:
-						# Active / fade: muro solido con franjas que desfilan al compas
-						draw_rect(Rect2(-w_half, w_size), Color(1.0, 0.2, 0.3, 0.30 * w_alpha))
-						var stripe_n: int = maxi(6, int(w_size.x / 110.0))
-						var stripe_w: float = w_size.x / float(stripe_n)
-						# Las franjas avanzan 1 paso por beat, en fase con la musica
-						var stripe_off: float = fposmod(w_age / w_beat_len, 1.0) * stripe_w
-						for si in range(stripe_n + 1):
-							var lx: float = -w_half.x - stripe_w + si * stripe_w + stripe_off
-							draw_line(Vector2(lx, -w_half.y), Vector2(lx + stripe_w * 1.6, w_half.y),
-								Color(0, 0, 0, 0.6 * w_alpha), 3.0)
-						# Bordes HDR brillantes (largo y corto)
-						draw_line(Vector2(-w_half.x, -w_half.y), Vector2(w_half.x, -w_half.y),
-							Color(1.8, 0.45, 0.55, 0.9 * w_alpha), 4.0)
-						draw_line(Vector2(-w_half.x, w_half.y), Vector2(w_half.x, w_half.y),
-							Color(1.8, 0.45, 0.55, 0.7 * w_alpha), 3.0)
-					# Esquinas: remache neón en cada vértice para que el marco
-					# del muro lea bien también en diagonal.
-						for wcx in [-w_half.x, w_half.x]:
-							for wcy in [-w_half.y, w_half.y]:
-								var wcp := Vector2(wcx, wcy)
-								draw_line(wcp + Vector2(-9.0, 0.0), wcp + Vector2(9.0, 0.0), Color(2.0, 0.7, 0.8, 0.85 * w_alpha), 2.5)
-								draw_line(wcp + Vector2(0.0, -9.0), wcp + Vector2(0.0, 9.0), Color(2.0, 0.7, 0.8, 0.85 * w_alpha), 2.5)
-						# Canto seguro del corredor: el borde de cada banda que mira
-						# al hueco se marca cian (color de carril) unos px dentro
-						# del pasillo, para que siga legible mientras el muro
-						# barre; pulso al beat.
-						var safe_ly: float = w_half.y
-						if absf(float(t["s1"]) - w_gc) < absf(float(t["s0"]) - w_gc):
-							safe_ly = -w_half.y
-						var safe_off: float = 10.0 if safe_ly > 0.0 else -10.0
-						draw_line(Vector2(-w_half.x, safe_ly + safe_off),
-							Vector2(w_half.x, safe_ly + safe_off),
-							Color(0.0, 0.94, 1.0, (0.45 + 0.45 * wpulse) * w_alpha), 3.0)
-						# Linea central del pasillo (punteada, tenue): el objetivo
-						# visible del hueco durante el barrido.
-						draw_dashed_line(Vector2(-w_half.x + 60.0, gap_ly),
-							Vector2(w_half.x - 60.0, gap_ly),
-							Color(1.5, 1.5, 1.5, 0.30 * w_alpha), 2.0, 26.0)
-					draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-				"saw":
-					# Sierra giratoria: disco oscuro + 8 dientes rojos que rotan
-					# con el reloj real + aro neon + nucleo pulsante.
-					var saw_c: Vector2 = t["pos"]
-					var saw_r: float = t["radius"]
-					var saw_spin: float = Time.get_ticks_msec() * 0.004
-					draw_circle(saw_c, saw_r, Color(0.45, 0.03, 0.08, 1.0))
-					for si in range(8):
-						var sang: float = saw_spin + TAU * float(si) / 8.0
-						var sdir := Vector2(cos(sang), sin(sang))
-						draw_line(saw_c + sdir * saw_r * 0.75, saw_c + sdir * saw_r * 1.28, Color(1.0, 0.13, 0.22, 1.0), 6.0)
-					_neon_arc(saw_c, saw_r * 0.92, Color(1.0, 0.13, 0.22), 3.0)
-					var saw_pulse: float = 0.55 + 0.08 * sin(saw_spin * 0.5)
-					draw_circle(saw_c, saw_r * 0.34, Color(1.3, 0.22, 0.3, saw_pulse))
-					draw_circle(saw_c, saw_r * 0.13, Color(1.6, 0.6, 0.7, 1.0))
-				"drifter":
-					# Mina de puas: casco oscuro + 8 puas neon + nucleo.
-					var dri_c: Vector2 = t["pos"]
-					var dri_r: float = t["radius"]
-					var dri_bp: float = fmod(song_time / maxf(beat_interval, 0.001), 1.0)
-					var dri_len: float = dri_r * (1.25 + 0.25 * clampf(1.0 - dri_bp * 5.0, 0.0, 1.0))
-					draw_circle(dri_c, dri_r, Color(0.38, 0.03, 0.07, 1.0))
-					for di in range(8):
-						var ddir := Vector2.from_angle(TAU * float(di) / 8.0 + song_time * 0.6)
-						_neon_line(dri_c + ddir * dri_r * 0.7, dri_c + ddir * dri_len, Color(1.0, 0.16, 0.25), 3.0)
-					_neon_arc(dri_c, dri_r, Color(1.0, 0.16, 0.25), 3.0)
-					draw_circle(dri_c, dri_r * 0.22, Color(1.5, 0.35, 0.4, 0.9))
-				"homing":
-					# Misil: dardo que apunta a su velocidad + estela incandescente.
-					var hom_c: Vector2 = t["pos"]
-					var hom_r: float = t["radius"]
-					var hom_v: Vector2 = t["vel"]
-					var hom_dir := Vector2.DOWN
-					if hom_v.length_squared() > 1.0:
-						hom_dir = hom_v.normalized()
-					var hom_perp := Vector2(-hom_dir.y, hom_dir.x)
-					draw_line(hom_c - hom_dir * hom_r * 0.8, hom_c - hom_dir * hom_r * 1.9, Color(1.0, 0.45, 0.1, 0.55), 7.0)
-					draw_colored_polygon(PackedVector2Array([hom_c + hom_dir * hom_r * 1.1, hom_c - hom_dir * hom_r * 0.8 + hom_perp * hom_r * 0.75, hom_c, hom_c - hom_dir * hom_r * 0.8 - hom_perp * hom_r * 0.75]), Color(0.55, 0.05, 0.1, 1.0))
-					_neon_polyline(PackedVector2Array([hom_c + hom_dir * hom_r * 1.1, hom_c - hom_dir * hom_r * 0.8 + hom_perp * hom_r * 0.75, hom_c - hom_dir * hom_r * 0.8 - hom_perp * hom_r * 0.75, hom_c + hom_dir * hom_r * 1.1]), Color(1.0, 0.16, 0.25), 2.5)
-					draw_circle(hom_c, hom_r * 0.26, Color(1.0, 0.85, 0.4, 1.0))
-				"perimeter":
-					# Centinela: hexagono neon que rota lento + nucleo.
-					var per_c: Vector2 = t["pos"]
-					var per_r: float = t["radius"]
-					var per_spin: float = Time.get_ticks_msec() * 0.0012
-					var per_pts := PackedVector2Array()
-					for pi in range(6):
-						per_pts.append(per_c + Vector2.from_angle(per_spin + TAU * float(pi) / 6.0) * per_r * 1.1)
-					per_pts.append(per_pts[0])
-					draw_circle(per_c, per_r * 1.1, Color(0.35, 0.03, 0.07, 1.0))
-					_neon_polyline(per_pts, Color(1.0, 0.16, 0.25), 3.0)
-					var per_core: float = 0.5 + 0.5 * sin(per_spin * 6.0)
-					draw_circle(per_c, per_r * (0.20 + 0.12 * per_core), Color(1.4, 0.3, 0.38, 0.95))
-				_:
-					# Default hazard: disco rojo neon con nucleo.
-					var hz_c: Vector2 = t["pos"]
-					var hz_r: float = t["radius"]
-					draw_circle(hz_c, hz_r, Color(0.5, 0.04, 0.09, 0.95))
-					_neon_arc(hz_c, hz_r, Color(1.0, 0.13, 0.22), 3.5)
-					draw_circle(hz_c, hz_r * 0.30, Color(1.0, 0.2, 0.3, 0.9))
+		var tt: String = t.get("type", "target")
+		if tt == "stripe_wall" or tt == "laser_telegraph" or tt == "laser_beam":
+			continue
+		_draw_one_target(t)
+	for t in targets:
+		if t.get("type", "target") != "stripe_wall":
+			continue
+		_draw_one_target(t)
+	for t in targets:
+		var tt2: String = t.get("type", "target")
+		if tt2 != "laser_telegraph" and tt2 != "laser_beam":
+			continue
+		_draw_one_target(t)
