@@ -76,7 +76,7 @@ El control por manos **no depende de ningún proyecto externo**: su lógica vive
 
 ### Que pasa si el juego no detecta la mano
 
-`HandTrackingClient` cae automáticamente al control por **teclado (flechas / WASD)** cuando no recibe datos del tracker — así el juego siempre es jugable, con mano o sin ella.
+`HandTrackingClient` cae automáticamente al control por **teclado (flechas / WASD)** cuando no recibe datos del tracker — así el juego siempre es jugable, con mano o sin ella. El nivel espera de forma segura a que aparezca la mano o se use el teclado, para que ningún peligro pueda golpear a la nave quieta durante la espera.
 
 ### Requisitos para el tracking por mano
 

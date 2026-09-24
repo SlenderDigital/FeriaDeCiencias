@@ -170,7 +170,7 @@ horizontal_alignment = 1
 [node name="ResultsDetails" type="Label" parent="HUDLayer/ResultsOverlay/Panel/VBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
-text = "Puntaje Final: 0"
+text = "Progreso Final: 0%"
 horizontal_alignment = 1
 
 [node name="BtnRestartRes" type="Button" parent="HUDLayer/ResultsOverlay/Panel/VBox"]

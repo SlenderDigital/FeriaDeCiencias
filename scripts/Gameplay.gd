@@ -56,6 +56,8 @@ var progress_pct: int = 0   # % de la canción sobrevivida: la métrica del nive
 var is_paused: bool = false
 var is_game_over: bool = false
 var _music_finished: bool = false
+var _waiting_for_control: bool = false
+var _manual_control: bool = false
 
 # Spawns (todo es peligro: hazards, muros, láseres) & Effects
 var targets: Array[Dictionary] = []
@@ -146,7 +148,31 @@ func _notification(what: int) -> void:
 		player_pos.x = clamp(player_pos.x, 50, ps.x - 50)
 		player_pos.y = clamp(player_pos.y, 80, ps.y - 50)
 
+func _update_control_gate() -> void:
+	if not HandTrackingClient:
+		return
+	if HandTrackingClient.has_hand:
+		if _waiting_for_control and not _manual_control:
+			_waiting_for_control = false
+			music.stream_paused = false
+		return
+	if _manual_control:
+		return
+	if not _waiting_for_control:
+		_waiting_for_control = true
+		music.stream_paused = true
+
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		var is_move_key: bool = event.keycode == KEY_LEFT or event.keycode == KEY_RIGHT \
+			or event.keycode == KEY_UP or event.keycode == KEY_DOWN \
+			or event.keycode == KEY_A or event.keycode == KEY_D \
+			or event.keycode == KEY_W or event.keycode == KEY_S
+		if is_move_key:
+			_manual_control = true
+			if _waiting_for_control:
+				_waiting_for_control = false
+				music.stream_paused = false
 	if event is InputEventKey and event.pressed and event.keycode == KEY_F6:
 		_toggle_debug_menu()
 		return
@@ -236,6 +262,10 @@ func _process(delta: float) -> void:
 			set_meta("shot_act3", true)
 			get_viewport().get_texture().get_image().save_png("/tmp/shot_act3.png")
 	if is_paused or is_game_over:
+		return
+	_update_control_gate()
+	if _waiting_for_control:
+		queue_redraw()
 		return
 		
 	# Anchor game clock to real audio playback when chart-driven; otherwise fall
