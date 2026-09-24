@@ -23,6 +23,31 @@ var _last_wall_dir: Vector2 = Vector2.ZERO  # anti-repetición de dirección
 var _last_wall_t: float = -100.0   # t del ultimo muro emitido (cooldown)
 var _last_wall_end: float = -100.0  # t en que termino el ultimo muro (warn+active)
 var _last_gap_u: float = 1.0  # indice del ultimo hueco EMITIDO: el siguiente queda a max 1 carril
+## --- SETPIECE DIRECTOR (estilo JSAB, plan 2026-09-24) ---
+## Un setpiece = coreografía multi-beat: lista de fases con offset en BEATS
+## desde el beat ancla. El phrase beat agenda; cada spawns_at posterior emite
+## las fases que vencen. Así un encuentro EVOLUCIONA durante la frase en vez
+## de ser un spawn suelto — "algo pasa" en cada frase.
+## Fase: {"at": int, "emit": String, "params": Dictionary} — emit es una key
+## de _build_pattern o "" (fase marcadora: Task 3 la llena).
+const SETPIECE_SCRIPTS: Dictionary = {
+	"laser_sweep_v1": [
+		{"at": 0, "emit": "laser_telegraph", "params": {}},
+		{"at": 3, "emit": "", "params": {"marker": "beam_active"}},
+	],
+	## Fallbacks heredados del setpiece viejo (breakdown los sigue usando).
+	"closing_perimeter_v1": [
+		{"at": 0, "emit": "closing_perimeter", "params": {}},
+	],
+}
+## Qué script toca por sección (la energía manda; intro/outro no agendan).
+const SETPIECE_BY_SECTION: Dictionary = {
+	"build": "laser_sweep_v1",
+	"drop": "laser_sweep_v1",
+	"drop2": "laser_sweep_v1",
+	"breakdown": "closing_perimeter_v1",
+}
+var _active_setpiece: Dictionary = {}   # {script_key, anchor_beat}
 # Rojo de peligro: TODO lo que daña es rojo, sin excepciones. El color del
 # track queda para la nave/HUD/ambiente; rojo = no lo toques.
 const DANGER_RED: Color = Color(1.0, 0.2, 0.3, 1.0)
@@ -53,6 +78,15 @@ func spawns_at(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
 	var pool: Array = sec.get("pattern_pool", ["saw"])
 	var bp: int = beat_idx % 4
 
+	# --- DIRECTOR + bomba de fases en UN solo lugar (spawns_at) ---
+	# Gameplay llama spawns_at_phrase DESPUÉS de spawns_at dentro del mismo
+	# beat, así que agendar ahí perdía la fase 0 del ancla. El director
+	# vive entero acá: en phrase beats (mod 16) agenda; en cada beat emite
+	# las fases que vencen.
+	var director_out: Array[Dictionary] = _director_pump(t, beat_idx, base_color)
+	if not director_out.is_empty():
+		out.append_array(director_out)
+
 	# --- Base: el patrón principal del beat, del pool de la sección ---
 	# Determinista: el "azar" sale del RNG semillado por track (misma canción
 	# -> misma secuencia de patrones, siempre).
@@ -77,8 +111,11 @@ func spawns_at(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
 		# traiga encuentro.
 		var on_accent_beat: bool = bool(intent["accent_beats"]) and (beat_idx % 4 == 1 or beat_idx % 4 == 3)
 		if not on_encounter_beat and not on_accent_beat:
-			return out
+			return out   # (las fases del director ya viven en out)
 		var spawns_fl: Array[Dictionary] = []
+		# Las fases del DIRECTOR viajan con el retorno del easy_mode: el beat
+		# ancla (encuentro) no puede descartarlas.
+		spawns_fl.append_array(out)
 		if on_encounter_beat:
 			spawns_fl.append_array(_build_pattern(_first_light_pattern(beat_idx, t), t, base_color, beat_idx))
 		if on_accent_beat:
@@ -198,25 +235,63 @@ func spawns_at_phrase(t: float, beat_idx: int, base_color: Color) -> Array[Dicti
 	"""Llamado en cada phrase (cada 16 beats) — setpieces / nuevo mech."""
 	if beat_idx % 16 != 0:
 		return []
-	# Los setpieces solo aparecen cuando la música lo pide (no en el intro)
+	# Los setpieces solo aparecen cuando la música lo pide (no en el intro).
+	# NOTA: el director AGENDA desde spawns_at (ver _director_pump); esta
+	# función queda como gancho de compatibilidad para llamadas externas
+	# (tests viejos) — el scheduling real ya no pasa por acá.
 	var sec := _current_section(t)
 	if not sec.is_empty() and float(sec.get("energy", 0.5)) < 0.5:
 		return []
-	# First Light usa frases authored explicitamente: el breakdown cambia el
-	# lenguaje visual y el drop/drop2 traen un laser en las frases fuertes.
-	if easy_mode:
-		var section_name: String = str(sec.get("name", ""))
-		var phrase_bar: int = beat_idx / 4
-		if section_name == "breakdown" and phrase_bar % 2 == 0:
-			return _build_pattern("closing_perimeter", t, DANGER_RED, beat_idx)
-		if section_name in ["drop", "drop2"] and phrase_bar % 2 == 0:
-			return _build_pattern("laser_telegraph", t, DANGER_RED, beat_idx)
-		return []
-	if wall_active:
-		return []
-	# Setpiece especial: closing perimeter o laser telegraph
-	var pattern: String = _pick(["closing_perimeter", "laser_telegraph"])
-	return _build_pattern(pattern, t, Color(1, 0.2, 0.3, 1), beat_idx)
+	return []
+
+## Director JSAB: agenda en phrase beats y emite las fases que vencen en el
+## beat actual. TODO dentro de spawns_at para que el orden de Gameplay
+## (spawns_at primero, spawns_at_phrase después) no pierda la fase 0.
+func _director_pump(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	# 1) Emisión: fases del setpiece activo que vencen en ESTE beat.
+	if not _active_setpiece.is_empty():
+		out.append_array(_emit_setpiece_phases(t, beat_idx, base_color))
+	# 2) Agenda: phrase beat de sección con energía >= 0.5, sin setpiece
+	#    activo, y fase 0 venciendo HOY (el ancla es este mismo beat).
+	if beat_idx % 16 == 0 and _active_setpiece.is_empty():
+		var sec := _current_section(t)
+		if not sec.is_empty() and float(sec.get("energy", 0.5)) >= 0.5:
+			var script_key: String = str(SETPIECE_BY_SECTION.get(str(sec.get("name", "")), ""))
+			if not easy_mode:
+				script_key = "laser_sweep_v1" if _rng.randf() < 0.5 else "closing_perimeter_v1"
+			if not script_key.is_empty():
+				_active_setpiece = {"script_key": script_key, "anchor_beat": beat_idx}
+				# La fase 0 vence ahora mismo: emitirla ya.
+				out.append_array(_emit_setpiece_phases(t, beat_idx, base_color))
+	return out
+
+## Emite las fases del setpiece activo que vencen en este beat y cierra la
+## coreografía cuando pasó la última fase + 2 beats. Spawn de fase lleva la
+## clave "setpiece_phase" (la bomba del test la filtra con eso).
+func _emit_setpiece_phases(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var script: Array = SETPIECE_SCRIPTS.get(str(_active_setpiece.get("script_key", "")), [])
+	if script.is_empty():
+		_active_setpiece = {}
+		return out
+	var offset: int = beat_idx - int(_active_setpiece.get("anchor_beat", -999))
+	var last_at: int = 0
+	for ph in script:
+		last_at = maxi(last_at, int(ph.get("at", 0)))
+	if offset < 0 or offset > last_at + 2:
+		_active_setpiece = {}
+		return out
+	for ph in script:
+		if int(ph.get("at", -1)) != offset:
+			continue
+		var emit_key: String = str(ph.get("emit", ""))
+		if emit_key.is_empty():
+			continue   # fase marcadora (Task 3 la llena)
+		for s in _build_pattern(emit_key, t, DANGER_RED, beat_idx):
+			s["setpiece_phase"] = true
+			out.append(s)
+	return out
 
 func _current_section(t: float) -> Dictionary:
 	for s in chart.level_sections:
