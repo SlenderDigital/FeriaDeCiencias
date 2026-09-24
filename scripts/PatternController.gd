@@ -82,7 +82,7 @@ func spawns_at(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
 		if on_encounter_beat:
 			spawns_fl.append_array(_build_pattern(_first_light_pattern(beat_idx), t, base_color, beat_idx))
 		if on_accent_beat:
-			spawns_fl.append(_saw(_rng.randf_range(play_size.x * 0.15, play_size.x * 0.85), DANGER_RED))
+			spawns_fl.append(_saw(_rng.randf_range(play_size.x * 0.15, play_size.x * 0.85), DANGER_RED, t))
 		return spawns_fl
 	if not pool.is_empty() and _rng.randf() <= density:
 		var pattern: String = _pick(pool)
@@ -99,7 +99,7 @@ func spawns_at(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
 	if not wall_active:
 		# Hits de snare (beats 2 y 4) => sierra acento. En easy_mode no hay sorpresas.
 		if not easy_mode and (bp == 1 or bp == 3) and energy >= 0.62 and _rng.randf() <= 0.6:
-			out.append(_saw(_rng.randf_range(play_size.x * 0.15, play_size.x * 0.85), Color(1, 0.2, 0.3, 1)))
+			out.append(_saw(_rng.randf_range(play_size.x * 0.15, play_size.x * 0.85), Color(1, 0.2, 0.3, 1), t))
 
 	return out
 
@@ -232,13 +232,13 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0) -
 	match pattern:
 		"saw_pair":
 			# Dos sierras en carriles opuestos: lectura de timing, no ruido.
-			out.append(_lane_saw(0.25, -50.0, -28.0))
-			out.append(_lane_saw(0.75, -50.0, 28.0))
+			out.append(_lane_saw(0.25, -50.0, -28.0, t))
+			out.append(_lane_saw(0.75, -50.0, 28.0, t))
 		"saw_weave":
 			# TresLinea con velocidades opuestas para crear una lectura de weaving.
-			out.append(_lane_saw(0.18, -45.0, -62.0))
-			out.append(_lane_saw(0.50, -85.0, 0.0))
-			out.append(_lane_saw(0.82, -45.0, 62.0))
+			out.append(_lane_saw(0.18, -45.0, -62.0, t))
+			out.append(_lane_saw(0.50, -85.0, 0.0, t))
+			out.append(_lane_saw(0.82, -45.0, 62.0, t))
 		"hazard_wall":
 			out.append(_hazard(_lane_x(fposmod((beat_idx / 4) * 0.5, 1.0))))
 		# --- NUEVOS PATRONES ---
@@ -341,11 +341,11 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0) -
 				out.append(_stripe_band(n, t_dir, tmin, tmax, gap_center + gap_half, smax, gap_center, DANGER_RED, bar_idx, gap_i))
 		"saw":
 			var x = _rng.randf_range(play_size.x * 0.15, play_size.x * 0.85)
-			out.append(_saw(x, DANGER_RED))
+			out.append(_saw(x, DANGER_RED, t))
 		"drifter_swarm":
 			for i in range(5):
 				var x = _rng.randf_range(play_size.x * 0.08, play_size.x * 0.92)
-				out.append(_drifter(x, DANGER_RED))
+				out.append(_drifter(x, DANGER_RED, t))
 		"laser_telegraph":
 			var x = _rng.randf_range(play_size.x * 0.15, play_size.x * 0.85)
 			out.append(_laser_telegraph(x))
@@ -388,19 +388,41 @@ func _stripe_band(n: Vector2, t_dir: Vector2, tmin: float, tmax: float, s0: floa
 		"bar_idx": bar_idx, "lane_index": gap_i,
 		"alpha": 1.0}
 
-func _lane_saw(u: float, y: float, vx: float) -> Dictionary:
+## Beats de cruce para la sección activa en t: cuántos beats tarda un peligro
+## en caer desde el borde superior hasta la zona del jugador (0.78 de alto).
+## Entero SIEMPRE (T4): la llegada cae sobre un beat audible. Sección calma
+## (energy<0.45) => 8 beats (163 px/s); resto => 6 beats (218 px/s).
+## easy_mode NO recorta los beats (el margen del tutorial viene de menos
+## encuentros, no de sierras más lentas: la lectura rítmica debe ser igual).
+func _crossing_beats(t: float) -> int:
+	var intent := _section_intent(t)
+	return 8 if float(intent["energy"]) < 0.45 else 6
+
+## Velocidad vertical cuantizada a beats enteros de la sección en t, para un
+## spawn que nace en y = spawn_y. La llegada a la zona del jugador (78% del
+## alto) cae en un beat audible, sin importar la altura de origen del patrón
+## (los lane_saw nacen a -45/-50/-85). Derivada del BPM y del viewport real.
+func _quantized_vy_from(t: float, spawn_y: float) -> float:
+	var travel: float = play_size.y * 0.78 - spawn_y
+	var n_beats: int = _crossing_beats(t)
+	return travel / (float(n_beats) * beat_len)
+
+func _lane_saw(u: float, y: float, vx: float, t: float = -1.0) -> Dictionary:
 	var s: Dictionary = _saw(_lane_x(u), DANGER_RED)
 	s["pos"] = Vector2(_lane_x(u), y)
-	s["vel"] = Vector2(vx, 120.0 * (0.85 if easy_mode else 1.0))
+	var vy: float = _quantized_vy_from(t, y) if t >= 0.0 else 120.0
+	s["vel"] = Vector2(vx, vy)
 	return s
 
-func _saw(x: float, c: Color) -> Dictionary:
-	return {"pos": Vector2(x, -50.0), "vel": Vector2(_rng.randf_range(-50, 50), 120.0 * (0.85 if easy_mode else 1.0)),
+func _saw(x: float, c: Color, t: float = -1.0) -> Dictionary:
+	var vy: float = _quantized_vy_from(t, -50.0) if t >= 0.0 else 120.0 * (0.85 if easy_mode else 1.0)
+	return {"pos": Vector2(x, -50.0), "vel": Vector2(_rng.randf_range(-50, 50), vy),
 		"radius": 30, "color": c, "is_hazard": true, "hit_health_bonus": -20.0 if easy_mode else -30.0, "type": "saw"}
 
-func _drifter(x: float, c: Color) -> Dictionary:
+func _drifter(x: float, c: Color, t: float = -1.0) -> Dictionary:
 	# Anillo con púas que deriva y rota
-	return {"pos": Vector2(x, -30.0), "vel": Vector2(_rng.randf_range(-40, 40), 80.0 * (0.85 if easy_mode else 1.0)),
+	var vy: float = _quantized_vy_from(t, -30.0) if t >= 0.0 else 80.0 * (0.85 if easy_mode else 1.0)
+	return {"pos": Vector2(x, -30.0), "vel": Vector2(_rng.randf_range(-40, 40), vy),
 		"radius": 28, "color": c, "is_hazard": true, "hit_health_bonus": -18.0 if easy_mode else -25.0, "type": "drifter"}
 
 func _laser_telegraph(x: float) -> Dictionary:
