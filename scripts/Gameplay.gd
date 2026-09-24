@@ -295,28 +295,20 @@ func _process(delta: float) -> void:
 
 			# Regular beat spawns
 			var spawns: Array[Dictionary] = controller.spawns_at(t, next_beat_idx, track_color)
-			for s in spawns:
-				_notify_spawn(s)
-				targets.append(s)
+			_append_spawns(spawns)
 			
 			# Downbeat patterns (every 4 beats) - big patterns
 			if chart.downbeat[next_beat_idx]:
 				if not has_wall:
-					for s in controller.spawns_at_downbeat(t, next_beat_idx, track_color):
-						_notify_spawn(s)
-						targets.append(s)
+					_append_spawns(controller.spawns_at_downbeat(t, next_beat_idx, track_color))
 			
 			# Bar patterns (every 4 beats = every downbeat) - variations
 			if next_beat_idx % 4 == 0:
-				for s in controller.spawns_at_bar(t, next_beat_idx, track_color):
-					_notify_spawn(s)
-					targets.append(s)
+				_append_spawns(controller.spawns_at_bar(t, next_beat_idx, track_color))
 			
 			# Phrase patterns (every 16 beats) - setpieces / new mechanics
 			if next_beat_idx % 16 == 0:
-				for s in controller.spawns_at_phrase(t, next_beat_idx, track_color):
-					_notify_spawn(s)
-					targets.append(s)
+				_append_spawns(controller.spawns_at_phrase(t, next_beat_idx, track_color))
 			
 			next_beat_idx += 1
 	else:
@@ -332,6 +324,16 @@ func _process(delta: float) -> void:
 	_update_sparks(delta)
 	
 	queue_redraw()
+
+func _append_spawns(spawns: Array[Dictionary]) -> void:
+	# Centraliza la Incorporacion de spawns y actualiza el gate en el mismo
+	# instante en que aparece un muro. Asi los patrones de bar/phrase del mismo
+	# beat no agregan una sierra despues de que el muro ya esta en pantalla.
+	for s in spawns:
+		_notify_spawn(s)
+		targets.append(s)
+		if s.get("type", "") == "stripe_wall" and controller:
+			controller.wall_active = true
 
 func _notify_spawn(s: Dictionary) -> void:
 	# Avisos sonoros al nacer un spawn que lo requiera.
@@ -412,8 +414,8 @@ func _neon_arc(center: Vector2, r: float, c: Color, w: float) -> void:
 
 func _draw_one_target(t: Dictionary) -> void:
 	# Dibujo de un spawn. _draw lo invoca en 3 pasadas: hazards comunes,
-	# stripe_wall opaco encima (cubre sierras atrapadas en la banda) y
-	# lasers al final (el telegraph jamas queda tapado).
+	# stripe_wall translúcido encima (deja ver las sierras atrapadas en la
+	# banda) y lasers al final (el telegraph jamas queda tapado).
 	var ttype_d: String = t.get("type", "target")
 	if ttype_d == "laser_telegraph":
 		# Aviso de laser: IMPOSIBLE de ignorar. Línea de peligro que
@@ -470,12 +472,12 @@ func _draw_one_target(t: Dictionary) -> void:
 				var w_gc: float = float(t["gap_center"])
 				var gap_ly: float = -(w_gc - w_smid)
 				if w_state == "warning":
-					# 1) RELLENO tenue: TODO el area letal se ve roja desde el primer
-					#    frame; el corredor entre bandas queda oscuro = el hueco.
-					# Relleno que CUBRE lo de detras (sierras atrapadas en la
-					# banda): casi opaco, el pulso del beat da vida sin abrir
-					# ventanas al fondo.
-					var fill_a: float = 0.70 + 0.15 * wpulse
+					# 1) RELLENO translúcido: TODO el area letal se ve roja desde el
+					#    primer frame, pero las sierras y el fondo siguen siendo
+					#    visibles a traves de la banda (no se pueden esconder).
+					#    El pulso vive en el alpha de este overlay, nunca en la
+					#    cobertura: no hay una ventana de peligro invisible.
+					var fill_a: float = 0.10 + 0.13 * wpulse
 					draw_rect(Rect2(-w_half, w_size), Color(1.0, 0.2, 0.3, fill_a * w_alpha))
 					# 2) Contorno punteado de cada banda
 					var warn_col := Color(1.0, 0.25, 0.35, 0.55)
@@ -505,10 +507,10 @@ func _draw_one_target(t: Dictionary) -> void:
 					draw_line(Vector2(-w_half.x, edge_ly), Vector2(w_half.x, edge_ly),
 						Color(2.0, 0.5, 0.55, 0.35 + 0.5 * wpulse), 4.0 + 2.0 * wpulse)
 				else:
-					# Active / fade: muro solido con franjas que desfilan al compas.
-					# Casi opaco (0.92): la banda CUBRE las sierras que quedan
-					# detras; el hueco (entre bandas) sigue descubierto.
-					draw_rect(Rect2(-w_half, w_size), Color(1.0, 0.2, 0.3, 0.92 * w_alpha))
+					# Active / fade: muro translúcido con franjas que desfilan al compas.
+					# La banda deja ver las sierras y el fondo; el hueco (entre
+					# bandas) sigue descubierto y es el unico corredor seguro.
+					draw_rect(Rect2(-w_half, w_size), Color(1.0, 0.2, 0.3, 0.30 * w_alpha))
 					var stripe_n: int = maxi(6, int(w_size.x / 110.0))
 					var stripe_w: float = w_size.x / float(stripe_n)
 					# Las franjas avanzan 1 paso por beat, en fase con la musica
@@ -976,9 +978,10 @@ func _draw() -> void:
 		draw_arc(player_pos, 34.0 + 2.0 * pulse, 0, TAU, 28,
 				Color(0.5, 0.95, 1.0, 0.28 + 0.20 * pulse), 2.5)
 
-	# Draw targets & hazards — tres pasadas para que el muro CUBRA lo que
-	# queda detras (sierras atrapadas en la banda) sin esconder los avisos:
-	#   1) hazards comunes, 2) stripe_wall opaco encima, 3) lasers arriba
+	# Draw targets & hazards — tres pasadas: el muro se dibuja DESPUES de los
+	# hazards, por lo que los deja ver a traves de la banda sin que una sierra
+	# se pinte encima del rojo. Los lasers van al final para no quedar tapados.
+	#   1) hazards comunes, 2) stripe_wall translúcido encima, 3) lasers arriba
 	#    (el telegraph debe ser imposible de ignorar, jamas tapado).
 	for t in targets:
 		var tt: String = t.get("type", "target")
