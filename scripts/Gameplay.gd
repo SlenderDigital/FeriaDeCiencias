@@ -159,18 +159,10 @@ func _notification(what: int) -> void:
 			bg_control.clear_song_clock()
 
 func _update_control_gate() -> void:
-	if not HandTrackingClient:
-		return
-	if HandTrackingClient.has_hand:
-		if _waiting_for_control and not _manual_control:
-			_waiting_for_control = false
-			music.stream_paused = false
-		return
-	if _manual_control:
-		return
-	if not _waiting_for_control:
-		_waiting_for_control = true
-		music.stream_paused = true
+	## El juego corre SIEMPRE (teclado disponible de base). La mano es un
+	# PLUS: si aparece, toma el control; si desaparece, la nave queda donde
+	# está y el jugador sigue con teclado. Nada de pausar esperando cámara.
+	return
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -484,6 +476,59 @@ func _draw_one_target(t: Dictionary) -> void:
 	# stripe_wall translúcido encima (deja ver las sierras atrapadas en la
 	# banda) y lasers al final (el telegraph jamas queda tapado).
 	var ttype_d: String = t.get("type", "target")
+	if ttype_d == "spoke_fan":
+		# JSAB abanico de rayos: telegraph = rayos granate tenues que YA rotan
+		# (se lee la dirección); active = rayos rosa HDR + núcleo blanco; fade
+		# decae. El hueco es visible por AUSENCIA de rayo — el borde del hub
+		# marca los extremos del pasillo.
+		var hub_d: Vector2 = t["pos"]
+		var rad_d: float = float(t["radius"])
+		var n_sp: int = int(t.get("spokes", 8))
+		var gap_sp: int = int(t.get("gap_spokes", 2))
+		var gap_first_d: int = int(t.get("gap_first", 0))
+		var rot_d: float = SpokeFanLogic.rotation_at(t)
+		var st_d: String = str(t.get("state", "telegraph"))
+		var alpha_d: float = 1.0
+		if st_d == "fade":
+			alpha_d = clampf(1.0 - float(t.get("state_time", 0.0)) / maxf(float(t.get("fade_beats", 2)) * beat_interval, 0.001), 0.0, 1.0)
+		var pulse_d: float = maxf(0.0, 1.0 - fposmod(float(t.get("state_time", 0.0)) / maxf(beat_interval, 0.001), 1.0))
+		for k in range(n_sp):
+			var in_gap_d: bool = false
+			for g in range(gap_sp):
+				if (gap_first_d + g) % n_sp == k:
+					in_gap_d = true
+					break
+			if in_gap_d:
+				continue
+			var ang_d: float = rot_d + TAU * float(k) / float(n_sp)
+			var dir_d := Vector2.from_angle(ang_d)
+			var tip_d: Vector2 = hub_d + dir_d * rad_d
+			if st_d == "telegraph":
+				# granate tenue, pulsa al beat, finito y delgado: AVISO legible
+				var warn_col := Color(0.55, 0.12, 0.2, (0.22 + 0.16 * pulse_d) * alpha_d)
+				draw_line(hub_d + dir_d * 24.0, tip_d, warn_col, 2.5)
+				draw_line(tip_d - dir_d * 14.0, tip_d, Color(0.75, 0.2, 0.28, 0.5 * alpha_d), 5.0)
+			else:
+				# active/fade: rosa neón pleno (el peligro ES la geometría)
+				_neon_line(hub_d + dir_d * 20.0, tip_d, Color(1.0, 0.2, 0.3), 7.0 * (0.8 + 0.2 * pulse_d))
+				draw_line(hub_d + dir_d * 20.0, tip_d, Color(2.2, 0.5, 0.6, 0.9 * alpha_d), 2.5)
+		# Hub: aro del tamaño del "ojo" seguro + núcleo
+		if st_d == "telegraph":
+			draw_arc(hub_d, 24.0, 0, TAU, 24, Color(0.7, 0.25, 0.3, 0.4 * alpha_d), 2.5)
+			draw_circle(hub_d, 7.0, Color(0.7, 0.25, 0.3, 0.6 * alpha_d))
+		else:
+			_neon_arc(hub_d, 24.0, Color(1.0, 0.2, 0.3), 3.0)
+			draw_circle(hub_d, 8.0, Color(2.4, 2.4, 2.4, 0.85 * alpha_d))  # blanco impacto
+			draw_circle(hub_d, 4.0, Color(1.0, 0.25, 0.35, alpha_d))
+		# Chevrons del hueco: marcan el pasillo seguro en active
+		if st_d != "telegraph":
+			var g_mid: float = SpokeFanLogic.gap_start_angle(t)
+			var gdir := Vector2.from_angle(g_mid)
+			var chev := hub_d + gdir * rad_d * 0.55
+			draw_colored_polygon(PackedVector2Array([
+					chev + gdir * 12.0, chev + gdir.rotated(2.5) * -9.0, chev + gdir.rotated(-2.5) * -9.0]),
+					Color(0.4, 0.95, 1.0, 0.35 * alpha_d))
+		return
 	if ttype_d == "laser_telegraph":
 		# Aviso de laser: IMPOSIBLE de ignorar. Línea de peligro que
 		# parpadea cada vez más rápido + anillos de alarma en el ancla.
@@ -762,6 +807,17 @@ func _update_targets(delta: float) -> void:
 				to_remove.append(i)
 				continue
 			t["lifetime"] = lifetime
+		elif ttype == "spoke_fan":
+			# JSAB abanico de rayos: la física vive en SpokeFanLogic (pura);
+			# Gameplay solo hace step + muerte por estado done.
+			t["state_time"] = float(t.get("state_time", 0.0))
+			var stepped: Dictionary = SpokeFanLogic.step(t, delta, beat_interval)
+			t["state"] = stepped["state"]
+			t["state_time"] = stepped["state_time"]
+			t["is_hazard"] = stepped["is_hazard"]
+			if str(stepped["state"]) == "done":
+				to_remove.append(i)
+				continue
 		elif ttype == "perimeter":
 			# Perimeter balls move toward center
 			t["pos"] += t["vel"] * delta
@@ -822,6 +878,9 @@ func _update_targets(delta: float) -> void:
 			var s_p: float = player_pos.dot(t["wall_n"])
 			hit = t.get("state", "active") == "active" \
 					and s_p > float(t["s0"]) - 16.0 and s_p < float(t["s1"]) + 16.0
+		elif ttype == "spoke_fan":
+			# Abanico de rayos: colisión polar vía la lógica pura (hueco seguro).
+			hit = SpokeFanLogic.hits_player(t, player_pos)
 		elif ttype == "laser_beam":
 			# Line-based: distancia del player a la línea infinita del beam
 			var bdir: Vector2 = (t.get("beam_dir", Vector2.UP) as Vector2).normalized()

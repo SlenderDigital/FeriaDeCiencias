@@ -35,6 +35,11 @@ const SETPIECE_SCRIPTS: Dictionary = {
 		{"at": 0, "emit": "laser_telegraph", "params": {}},
 		{"at": 3, "emit": "", "params": {"marker": "beam_active"}},
 	],
+	## T2: el drop abre con el abanico de rayos (la "ancla" JSAB) y el láser
+	## llega después: dos anclas en la misma frase, lectura escalonada.
+	"drop_opener_v1": [
+		{"at": 0, "emit": "spoke_fan", "params": {}},
+	],
 	## Fallbacks heredados del setpiece viejo (breakdown los sigue usando).
 	"closing_perimeter_v1": [
 		{"at": 0, "emit": "closing_perimeter", "params": {}},
@@ -43,8 +48,8 @@ const SETPIECE_SCRIPTS: Dictionary = {
 ## Qué script toca por sección (la energía manda; intro/outro no agendan).
 const SETPIECE_BY_SECTION: Dictionary = {
 	"build": "laser_sweep_v1",
-	"drop": "laser_sweep_v1",
-	"drop2": "laser_sweep_v1",
+	"drop": "drop_opener_v1",
+	"drop2": "drop_opener_v1",
 	"breakdown": "closing_perimeter_v1",
 }
 var _active_setpiece: Dictionary = {}   # {script_key, anchor_beat}
@@ -104,12 +109,14 @@ func spawns_at(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
 		# drops aprietan. Un solo helper decide — nada de rangos hardcodeados.
 		var intent := _section_intent(t)
 		var cadence: int = int(intent["bars_per_encounter"])
-		var on_encounter_beat: bool = beat_idx % (4 * cadence) == 0
+		# Mientras un SETPIECE vive, ES el encuentro de esas barras: ni
+		# encuentros ni acentos se apilan encima (JSAB limpia el campo
+		# alrededor de sus anclas para que se lean).
+		var setpiece_live: bool = not _active_setpiece.is_empty()
+		var on_encounter_beat: bool = not setpiece_live and beat_idx % (4 * cadence) == 0
 		# Acentos de snare en drops (beats 2 y 4): el nivel aprieta donde la
-		# batería aprieta. Un solo saw extra por acento. CADENCIA y ACENTO son
-		# ejes independientes: un beat 2/4 de drop aprieta aunque su compás no
-		# traiga encuentro.
-		var on_accent_beat: bool = bool(intent["accent_beats"]) and (beat_idx % 4 == 1 or beat_idx % 4 == 3)
+		# batería aprieta — solo si no hay coreografía en curso.
+		var on_accent_beat: bool = not setpiece_live and bool(intent["accent_beats"]) and (beat_idx % 4 == 1 or beat_idx % 4 == 3)
 		if not on_encounter_beat and not on_accent_beat:
 			return out   # (las fases del director ya viven en out)
 		var spawns_fl: Array[Dictionary] = []
@@ -288,7 +295,12 @@ func _emit_setpiece_phases(t: float, beat_idx: int, base_color: Color) -> Array[
 		var emit_key: String = str(ph.get("emit", ""))
 		if emit_key.is_empty():
 			continue   # fase marcadora (Task 3 la llena)
-		for s in _build_pattern(emit_key, t, DANGER_RED, beat_idx):
+		# VARIACIÓN por invocación (anti-hardcode): el RNG semillado del track
+		# decide los params de la fase — mismo track => misma variación, pero
+		# CADA setpiece de la partida es distinto (hub, radios, gap, giro).
+		var phase_params: Dictionary = ph.get("params", {})
+		var spawn_seed: int = int(_active_setpiece.get("anchor_beat", 0)) * 131 + offset
+		for s in _build_pattern(emit_key, t, DANGER_RED, beat_idx, phase_params, spawn_seed):
 			s["setpiece_phase"] = true
 			out.append(s)
 	return out
@@ -324,7 +336,7 @@ func _section_intent(t: float) -> Dictionary:
 		"accent_beats": energy >= 0.8,
 	}
 
-func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0) -> Array[Dictionary]:
+func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0, params: Dictionary = {}, spawn_seed: int = -1) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	match pattern:
 		"saw_pair":
@@ -446,6 +458,8 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0) -
 		"laser_telegraph":
 			var x = _rng.randf_range(play_size.x * 0.15, play_size.x * 0.85)
 			out.append(_laser_telegraph(x))
+		"spoke_fan":
+			out.append(_spoke_fan(t, beat_idx, params, spawn_seed))
 		"homing":
 			var x = _rng.randf_range(play_size.x * 0.15, play_size.x * 0.85)
 			out.append(_homing(x, DANGER_RED))
@@ -549,6 +563,64 @@ func _homing(x: float, c: Color) -> Dictionary:
 	# Proyectil teledirigido: persigue al jugador (Gameplay maneja el chase).
 	return {"pos": Vector2(x, -30.0), "vel": Vector2(0, 250.0 * (0.85 if easy_mode else 1.0)),
 		"radius": 20, "color": c, "is_hazard": true, "hit_health_bonus": -15.0 if easy_mode else -20.0, "type": "homing"}
+
+## JSAB T2 — Abanico de rayos rotando (arquetipo 30s/540s del video): hub
+## central + N rayos, hueco de >= 2 rayos (siempre legible), ciclo
+## telegraph(2 beats) -> active(4) -> fade(2). Todo beat-derivado.
+## VARIACIÓN (anti-hardcode): cada invocación del director llega con params
+## + spawn_seed — hub, radios, cantidad de rayos, hueco y sentido de giro
+## salen del RNG determinista por ancla. Mismo nivel => mismos valores
+## (reproducible), pero NO dos abanicos iguales en la partida.
+## Fairness (assert en test_spoke_fan): gap>=2 SIEMPRE, rotación >= 8
+## beats/giro SIEMPRE, nace inofensivo SIEMPRE — los rangos varían, los
+## pisos no.
+func _spoke_fan(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: int = -1) -> Dictionary:
+	# Pisos de fairness (R3: un solo lugar, test-asserted)
+	const MIN_GAP_SPOKES: int = 2
+	const TELEGRAPH_BEATS: int = 2
+	const ACTIVE_BEATS: int = 4
+	const FADE_BEATS: int = 2
+	const MIN_BEATS_PER_REV: float = 16.0
+	# RNG de la invocación (semilla por ancla: determinista, no global)
+	var vr := RandomNumberGenerator.new()
+	vr.seed = 1337 ^ spawn_seed if spawn_seed >= 0 else 1337 ^ beat_idx
+	# Rango seguro de hub: banda central (lejos de los bordes y del HUD)
+	var hub_u: float = vr.randf_range(0.32, 0.68)
+	var hub_v: float = vr.randf_range(0.30, 0.55)
+	if params.has("hub_u"):
+		hub_u = clampf(float(params["hub_u"]), 0.2, 0.8)
+	if params.has("hub_v"):
+		hub_v = clampf(float(params["hub_v"]), 0.2, 0.7)
+	var hub: Vector2 = Vector2(play_size.x * hub_u, play_size.y * hub_v)
+	# Rayos: 6..10; hueco: 2..3 (piso 2)
+	var spokes: int = vr.randi_range(6, 10)
+	var gap_spokes: int = maxi(MIN_GAP_SPOKES, vr.randi_range(2, 3))
+	if params.has("spokes"):
+		spokes = clampi(int(params["spokes"]), 6, 12)
+	if params.has("gap_spokes"):
+		gap_spokes = maxi(MIN_GAP_SPOKES, int(params["gap_spokes"]))
+	# Radio y giro: el sentido alterna para que el jugador no automatice.
+	# Radio generoso (JSAB: el abanico DOMINA la pantalla) pero acotado al
+	# MIN(w,h) para que en pantallas anchas no salga de la arena.
+	var radius_frac: float = vr.randf_range(0.55, 0.75)
+	var spin_sign: float = 1.0 if vr.randf() < 0.5 else -1.0
+	var beats_per_rev: float = vr.randf_range(MIN_BEATS_PER_REV, 24.0)
+	if params.has("spin_sign"):
+		spin_sign = float(params["spin_sign"])
+	var gap_first: int = vr.randi_range(0, spokes - 1)
+	return {
+		"type": "spoke_fan", "pos": hub, "vel": Vector2.ZERO,
+		"radius": minf(play_size.x, play_size.y) * radius_frac,
+		"spokes": spokes, "gap_spokes": gap_spokes,
+		"rot_speed": spin_sign * TAU / (beats_per_rev * beat_len),
+		"rot_phase": float(beat_idx % 4) * (TAU / float(spokes)),
+		"beats_per_rev": beats_per_rev,
+		"state": "telegraph", "state_time": 0.0,
+		"telegraph_beats": TELEGRAPH_BEATS, "active_beats": ACTIVE_BEATS, "fade_beats": FADE_BEATS,
+		"is_hazard": false, "hit_health_bonus": -20.0,
+		"color": DANGER_RED, "setpiece_phase": true,
+		"gap_first": gap_first, "beat_len": beat_len,
+	}
 
 func _perimeter_ball(cx: float, cy: float, angle: float) -> Dictionary:
 	var dir = Vector2(cos(angle), sin(angle))

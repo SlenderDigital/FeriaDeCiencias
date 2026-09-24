@@ -62,8 +62,8 @@ func _run_first_light() -> bool:
 				var ty: String = str(s.get("type", ""))
 				var encounter: String = str(s.get("encounter", ty))
 				type_counts[encounter] = int(type_counts.get(encounter, 0)) + 1
-				if ty == "laser_telegraph":
-					telegraph_count += 1
+				if ty == "laser_telegraph" or ty == "spoke_fan":
+					telegraph_count += 1   # avisos inofensivos al nacer (telegraph)
 				elif s.get("is_hazard", false):
 					hazard_count += 1
 				else:
@@ -77,9 +77,13 @@ func _run_first_light() -> bool:
 	var consumed_all := next_beat_idx == max_beats
 	var produced_something := spawn_count > 0
 	var no_targets := target_count == 0
+	# Variedad JSAB (post-T2): drops abren con el ABANICO (spoke_fan), el
+	# build trae el LÁSER, breakdown cierra el perímetro. Las tres anclas
+	# deben aparecer en el nivel completo.
 	var has_variety := int(type_counts.get("saw_pair", 0)) > 0 \
 		and int(type_counts.get("saw_weave", 0)) > 0 \
 		and int(type_counts.get("stripe_wall", 0)) > 0 \
+		and int(type_counts.get("spoke_fan", 0)) > 0 \
 		and int(type_counts.get("laser_telegraph", 0)) > 0 \
 		and int(type_counts.get("closing_perimeter", 0)) > 0
 	var ok := consumed_all and produced_something and no_targets and has_variety

@@ -32,33 +32,34 @@ func _initialize() -> void:
 		fails.append("intro (energía<0.5) no debería agendar setpiece")
 
 	# --- Beat 64 (bar 16, drop, energía 0.85): el DIRECTOR agenda vía
-	# spawns_at y emite la fase 0 (telegraph inofensivo) EN el mismo beat ---
+	# spawns_at y emite la fase 0 en el mismo beat. El DROP abre con el
+	# abanico de rayos (drop_opener_v1, T2); el láser es del build.
 	var sp_build: Array[Dictionary] = controller.spawns_at(chart.beat_times[64], 64, color)
 	var active: Dictionary = controller.get("_active_setpiece") if controller.get("_active_setpiece") != null else {}
 	if active.is_empty():
-		fails.append("build: phrase beat debería agendar setpiece (vacío tras spawns_at_phrase)")
+		fails.append("drop: phrase beat debería agendar setpiece")
 	else:
-		if str(active.get("script_key", "")) != "laser_sweep_v1":
-			fails.append("script elegido: %s, esperaba laser_sweep_v1" % str(active.get("script_key", "")))
+		if str(active.get("script_key", "")) != "drop_opener_v1":
+			fails.append("script elegido: %s, esperaba drop_opener_v1" % str(active.get("script_key", "")))
 		if int(active.get("anchor_beat", -1)) != 64:
 			fails.append("anchor_beat: %d, esperaba 64" % int(active.get("anchor_beat", -1)))
 	if not sp_build.is_empty():
-		var tele_in_build: int = 0
+		var fan_in_build: int = 0
 		for s in sp_build:
-			if s.get("type", "") == "laser_telegraph" and not bool(s.get("is_hazard", true)):
-				tele_in_build += 1
-		if tele_in_build == 0:
-			fails.append("beat ancla: la fase 0 debe emitir su telegraph en el mismo beat")
+			if s.get("type", "") == "spoke_fan" and not bool(s.get("is_hazard", true)):
+				fan_in_build += 1
+		if fan_in_build == 0:
+			fails.append("beat ancla: la fase 0 debe emitir el spoke_fan inofensivo en el mismo beat")
 
-	# --- Beat 64 otra vez por spawns_at (el ancla): fase 0 = telegraph inofensivo ---
+	# --- Beat 64 otra vez por spawns_at (el ancla): fase 0 = spoke_fan inofensivo ---
 	controller.wall_active = false
 	var at_anchor: Array[Dictionary] = controller.spawns_at(chart.beat_times[64], 64, color)
-	var telegraphs_at_anchor: int = 0
+	var fans_at_anchor: int = 0
 	for s in at_anchor:
-		if s.get("type", "") == "laser_telegraph" and not bool(s.get("is_hazard", true)):
-			telegraphs_at_anchor += 1
-	if telegraphs_at_anchor == 0:
-		fails.append("beat ancla: esperaba >=1 telegraph inofensivo de la fase 0")
+		if s.get("type", "") == "spoke_fan" and not bool(s.get("is_hazard", true)):
+			fans_at_anchor += 1
+	if fans_at_anchor == 0:
+		fails.append("beat ancla: esperaba >=1 spoke_fan inofensivo de la fase 0")
 
 	# --- Beats +1/+2: sin fases (el script v1 solo tiene fase 0) ---
 	for off in [1, 2]:
@@ -73,19 +74,15 @@ func _initialize() -> void:
 		if phase_spawns != 0:
 			fails.append("offset +%d: no debería emitir fases (hubo %d)" % [off, phase_spawns])
 
-	# --- No re-agenda mientras vive: ancla 80, phases hasta +3, cierra a +6.
-	# Los phrase beats NO existen entre 80 y 86 (el próximo es 96), así que el
-	# no-doble-arranque se prueba con el invocado DIRECTO: mientras el
-	# setpiece de 80 vive, pedir spawns_at en un beat phrase intermedio no
-	# puede pisarlo. Como no hay phrase beat en ese rango, el invariant real
-	# es: el setpiece vive hasta offset > last_at+2 y NINGÚN pump intermedio
-	# lo re-ancla.
+	# --- No re-agenda mientras vive: el setpiece de ancla 80 (drop_opener_v1,
+	# fase única at=0) cierra a offset > 0+2 = beat 83. Mientras vive (81-82)
+	# ningún pump lo re-ancla; a partir del cierre el anchor queda vacío (-1)
+	# y un nuevo phrase beat puede agendar.
 	controller.spawns_at(chart.beat_times[80], 80, color)   # phrase beat de drop: agenda
-	var anchor_80: int = 80
-	for b in range(81, 86):
+	for b in [81, 82]:
 		controller.spawns_at(chart.beat_times[b], b, color)
 		var a_mid: Dictionary = controller.get("_active_setpiece") if controller.get("_active_setpiece") != null else {}
-		if int(a_mid.get("anchor_beat", -1)) != anchor_80:
+		if not a_mid.is_empty() and int(a_mid.get("anchor_beat", -1)) != 80:
 			fails.append("beat %d: no debe re-anclear (anchor=%d)" % [b, int(a_mid.get("anchor_beat", -1))])
 			break
 
