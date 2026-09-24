@@ -65,11 +65,25 @@ func spawns_at(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
 	# First Light tiene una coreografia propia: cada compas tiene una intencion
 	# diferente en vez de sortear entre el mismo circulo rojo una y otra vez.
 	if easy_mode:
-		# Una encounter por compas: el chart sigue siendo musical sin multiplicar
-		# el mismo patrón cuatro veces en los cuatro beats del bar.
-		if beat_idx % 4 != 0:
+		# La CADENCIA sigue a la energía de la sección: intro/outro respiran
+		# (1 encuentro cada 2 compases), build/breakdown marcan el compás,
+		# drops aprietan. Un solo helper decide — nada de rangos hardcodeados.
+		var intent := _section_intent(t)
+		var cadence: int = int(intent["bars_per_encounter"])
+		var on_encounter_beat: bool = beat_idx % (4 * cadence) == 0
+		# Acentos de snare en drops (beats 2 y 4): el nivel aprieta donde la
+		# batería aprieta. Un solo saw extra por acento. CADENCIA y ACENTO son
+		# ejes independientes: un beat 2/4 de drop aprieta aunque su compás no
+		# traiga encuentro.
+		var on_accent_beat: bool = bool(intent["accent_beats"]) and (beat_idx % 4 == 1 or beat_idx % 4 == 3)
+		if not on_encounter_beat and not on_accent_beat:
 			return out
-		return _build_pattern(_first_light_pattern(beat_idx), t, base_color, beat_idx)
+		var spawns_fl: Array[Dictionary] = []
+		if on_encounter_beat:
+			spawns_fl.append_array(_build_pattern(_first_light_pattern(beat_idx), t, base_color, beat_idx))
+		if on_accent_beat:
+			spawns_fl.append(_saw(_rng.randf_range(play_size.x * 0.15, play_size.x * 0.85), DANGER_RED))
+		return spawns_fl
 	if not pool.is_empty() and _rng.randf() <= density:
 		var pattern: String = _pick(pool)
 		# Un muro a la vez: si el pool trae stripe_wall/hazard_wall mientras hay
@@ -189,6 +203,29 @@ func _current_section(t: float) -> Dictionary:
 		if t >= start and t < end:
 			return s
 	return {}
+
+## Intent de la sección activa en el tiempo t, derivado de su ENERGÍA (la del
+## chart) — nunca de rangos de compás hardcodeados. Un solo helper para
+## cadencia (T3), velocidad (T4), visuales (T5) y coreografía (T8).
+## Devuelve: {
+##   "name": String,             # nombre de la sección del chart
+##   "energy": float,            # 0..1
+##   "bars_per_encounter": int,  # 2 en intro/outro (energía baja), 1 en el resto
+##   "accent_beats": bool,       # true solo en drops (energía >= 0.8)
+## }
+func _section_intent(t: float) -> Dictionary:
+	var sec := _current_section(t)
+	var name: String = str(sec.get("name", ""))
+	var energy: float = float(sec.get("energy", 0.5))
+	if name.is_empty():
+		# Sin sección (fuera del chart): comportamiento previo conservador.
+		return {"name": "", "energy": energy, "bars_per_encounter": 1, "accent_beats": false}
+	return {
+		"name": name,
+		"energy": energy,
+		"bars_per_encounter": 2 if energy < 0.45 else 1,
+		"accent_beats": energy >= 0.8,
+	}
 
 func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
