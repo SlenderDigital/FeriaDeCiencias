@@ -147,6 +147,11 @@ func _notification(what: int) -> void:
 			controller.play_size = ps
 		player_pos.x = clamp(player_pos.x, 50, ps.x - 50)
 		player_pos.y = clamp(player_pos.y, 80, ps.y - 50)
+	elif what == NOTIFICATION_EXIT_TREE:
+		# Al salir del nivel: liberar el fondo para que el menú vuelva a su
+		# propio metrónomo (el reloj de la canción ya no se alimenta).
+		if bg_control and bg_control.has_method("clear_song_clock"):
+			bg_control.clear_song_clock()
 
 func _update_control_gate() -> void:
 	if not HandTrackingClient:
@@ -274,6 +279,10 @@ func _process(delta: float) -> void:
 		song_time = music.get_playback_position()
 	else:
 		song_time += delta
+	
+	# El fondo late con la canción REAL: sin metrónomo propio ni doble golpe.
+	if bg_control and bg_control.has_method("set_song_clock"):
+		bg_control.set_song_clock(song_time, beat_interval)
 	
 	var progress: float = clamp(song_time / total_song_duration, 0.0, 1.0)
 	

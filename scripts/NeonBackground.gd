@@ -13,6 +13,20 @@ var beat_interval: float = 60.0 / 128.0
 var pulse_rings: Array[Dictionary] = []
 var particles: Array[Dictionary] = []
 
+# --- Song-clock mode (gameplay): pulse with the REAL audio position ---
+# Gameplay feeds song_time via set_song_clock() every frame; the beat index
+# is derived from the actual playback clock so rings never drift from the
+# music. In song-clock mode there is NO SoundManager.play_beat(): the song
+# already has its own kick.
+var _song_clock_active: bool = false
+var _song_time: float = 0.0
+var _last_beat_idx: int = 0
+# Test hooks: counters asserted by tools/test_bg_clock.gd (headless).
+var song_clock_pulses: int = 0
+var song_clock_sound_calls: int = 0
+
+var _ready_is_safe: bool = false  # test hook: tools may set before add_child
+
 const MAX_PARTICLES: int = 35
 
 func _ready() -> void:
@@ -47,17 +61,47 @@ func _init_particles() -> void:
 
 func _process(delta: float) -> void:
 	time += delta * pulse_speed
-	beat_timer += delta
 	
-	if beat_timer >= beat_interval:
-		beat_timer -= beat_interval
-		_trigger_beat_pulse()
+	if _song_clock_active:
+		# Gameplay manda: pulso derivado del reloj REAL del audio. Ningún
+		# acumulador propio (el que derivaba) y ningún sonido de beat.
+		if _song_time > 0.0 and beat_interval > 0.0:
+			var bn: int = int(_song_time / beat_interval)
+			if bn != _last_beat_idx:
+				_last_beat_idx = bn
+				_emit_pulse_ring()
+				song_clock_pulses += 1
+	else:
+		beat_timer += delta
+		
+		if beat_timer >= beat_interval:
+			beat_timer -= beat_interval
+			_trigger_beat_pulse()
 		
 	_update_pulse_rings(delta)
 	_update_particles(delta)
 	queue_redraw()
 
-func _trigger_beat_pulse() -> void:
+## Reloj de la canción: Gameplay lo alimenta cada frame con la posición real
+## del audio. Mientras se alimente, el fondo pulsa con la música (sin sonido
+## propio). Deja de llamarse (p.ej. al salir del nivel) => fallback del menú.
+func set_song_clock(t: float, p_beat_interval: float) -> void:
+	if p_beat_interval > 0.0:
+		beat_interval = p_beat_interval
+	_song_time = t
+	if not _song_clock_active:
+		_song_clock_active = true
+		_last_beat_idx = int(t / maxf(beat_interval, 0.001)) if t > 0.0 else 0
+
+## Al salir del nivel: apagar el modo reloj para que el menú vuelva a su
+## metrónomo propio (delta acumulado + sonido ambiental).
+func clear_song_clock() -> void:
+	_song_clock_active = false
+	_song_time = 0.0
+	_last_beat_idx = 0
+	beat_timer = 0.0
+
+func _emit_pulse_ring() -> void:
 	var viewport_size: Vector2 = get_viewport_rect().size
 	var center: Vector2 = viewport_size * 0.5
 	pulse_rings.append({
@@ -66,6 +110,10 @@ func _trigger_beat_pulse() -> void:
 		"alpha": 0.6,
 		"color": grid_color
 	})
+
+func _trigger_beat_pulse() -> void:
+	_emit_pulse_ring()
+	song_clock_sound_calls += 1
 	
 	if SoundManager:
 		SoundManager.play_beat()
