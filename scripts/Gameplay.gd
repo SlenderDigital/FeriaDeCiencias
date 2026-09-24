@@ -64,6 +64,8 @@ const DASH_SPEED: float = 950.0
 var _dash_active: float = 0.0
 var _dash_cooldown: float = 0.0
 var _dash_dir: Vector2 = Vector2.UP
+var _last_hand_target: Vector2 = Vector2(-9999.0, -9999.0)
+var _hand_dash_dir: Vector2 = Vector2.ZERO
 var is_paused: bool = false
 var is_game_over: bool = false
 var _music_finished: bool = false
@@ -383,6 +385,8 @@ func _try_dash() -> void:
 		dir.y -= 1.0
 	if Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_S):
 		dir.y += 1.0
+	if dir.length_squared() == 0.0 and HandTrackingClient and HandTrackingClient.has_hand:
+		dir = _hand_dash_dir
 	_dash_dir = dir.normalized() if dir.length_squared() > 0.0 else Vector2.UP
 	_dash_active = DASH_TIME
 	_dash_cooldown = DASH_COOLDOWN
@@ -407,8 +411,15 @@ func _update_player_movement(delta: float) -> void:
 	if HandTrackingClient and HandTrackingClient.has_hand:
 		var ps: Vector2 = play_size()
 		var target: Vector2 = HandTrackingClient.get_palm_center() * ps
-		var alpha: float = 1.0 - exp(-25.0 * delta)
-		player_pos = player_pos.lerp(target, alpha)
+		if _last_hand_target.x < -9000.0:
+			_last_hand_target = target
+		var hand_delta: Vector2 = target - _last_hand_target
+		if hand_delta.length() > 3.0:
+			_hand_dash_dir = hand_delta.normalized()
+		_last_hand_target = target
+		if _dash_active <= 0.0:
+			var alpha: float = 1.0 - exp(-25.0 * delta)
+			player_pos = player_pos.lerp(target, alpha)
 		var ang := HandTrackingClient.get_hand_angle_deg()
 		if ang < 9990.0:
 			_smooth_rotation_toward(ang, delta)
@@ -418,6 +429,8 @@ func _update_player_movement(delta: float) -> void:
 		return
 
 	# Fallback sin mano: flechas / WASD (movimiento por velocidad)
+	_last_hand_target = Vector2(-9999.0, -9999.0)
+	_hand_dash_dir = Vector2.ZERO
 	var move_dir: Vector2 = Vector2.ZERO
 	if Input.is_key_pressed(KEY_LEFT) or Input.is_key_pressed(KEY_A):
 		move_dir.x -= 1.0
@@ -870,8 +883,7 @@ func _health_color() -> Color:
 func _update_hud_progress(p: float) -> void:
 	## Progreso del nivel: % de la canción sobrevivida (métrica principal).
 	progress_pct = int(clampf(p, 0.0, 1.0) * 100.0)
-	if score_lbl:
-		score_lbl.text = "PROGRESO: %d%%" % progress_pct
+	_update_score_hud()
 
 func _add_sparks(pos: Vector2, col: Color) -> void:
 	for i in range(8):
