@@ -140,7 +140,7 @@ text = "MEJOR PROGRESO: 0%"
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.35, 0.45, 0.85)
 theme_override_font_sizes/font_size = 13
-text = "ROJO = PELIGRO (daña)  ·  ESCUDO = ESPACIO o CLIC  ·  RÉCORD = mejor progreso"
+text = "ROJO = PELIGRO (daña)  ·  ESCUDO = ESPACIO o CLIC  ·  DASH = SHIFT  ·  RÉCORD = mejor progreso"
 
 [node name="BtnPlayLevel" type="Button" parent="Layout/Content/Panels/SongSelectPanel/VBox/Details" unique_id=57738590]
 custom_minimum_size = Vector2(0, 54)

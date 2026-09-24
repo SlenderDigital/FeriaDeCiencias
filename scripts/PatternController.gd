@@ -14,9 +14,9 @@ var play_size: Vector2 = Vector2(1280, 720)
 # compás (beat_idx / 4): el nivel sale de la canción, no del azar.
 var bpm: float = 120.0
 var beat_len: float = 0.5          # 60 / bpm
-# easy_mode: nivel 1 (First Light). Sin sierras de acento en snare,
-# sin muros en downbeat, sin laser/homing/perimetro coreografiado.
-# Lo setea Gameplay segun el track id; niveles 2-3 intactos.
+# easy_mode: First Light usa una timeline propia con encounters claros;
+# mantiene velocidad/margen-tutorial, pero si incluye muros, láseres y
+# perimeter como breakthroughs didacticos.
 var easy_mode: bool = false
 var _rng := RandomNumberGenerator.new()
 var _last_wall_dir: Vector2 = Vector2.ZERO  # anti-repetición de dirección
@@ -62,6 +62,14 @@ func spawns_at(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
 	# tiene su propio camino y no pasa por aca.
 	if wall_active:
 		return out
+	# First Light tiene una coreografia propia: cada compas tiene una intencion
+	# diferente en vez de sortear entre el mismo circulo rojo una y otra vez.
+	if easy_mode:
+		# Una encounter por compas: el chart sigue siendo musical sin multiplicar
+		# el mismo patrón cuatro veces en los cuatro beats del bar.
+		if beat_idx % 4 != 0:
+			return out
+		return _build_pattern(_first_light_pattern(beat_idx), t, base_color, beat_idx)
 	if not pool.is_empty() and _rng.randf() <= density:
 		var pattern: String = _pick(pool)
 		# Un muro a la vez: si el pool trae stripe_wall/hazard_wall mientras hay
@@ -80,6 +88,37 @@ func spawns_at(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
 			out.append(_saw(_rng.randf_range(play_size.x * 0.15, play_size.x * 0.85), Color(1, 0.2, 0.3, 1)))
 
 	return out
+
+## Timeline de encuentros de First Light. Los indices son compases, no beats:
+## cada entrada es una lectura clara que el jugador puede aprender.
+func _first_light_pattern(beat_idx: int) -> String:
+	var bar: int = beat_idx / 4
+	if bar < 4:
+		return ["saw", "saw_pair", "saw", "saw_pair"][bar]
+	if bar < 12:
+		var build := ["saw_pair", "saw", "saw_weave", "saw_pair", "saw", "saw_weave", "saw_pair", "saw"]
+		return build[(bar - 4) % build.size()]
+	if bar < 28:
+		var drop := [
+			"stripe_wall", "saw_pair", "saw", "saw_weave",
+			"saw_pair", "stripe_wall", "saw", "saw_weave",
+			"saw_pair", "saw", "saw_weave", "stripe_wall",
+			"saw_pair", "saw", "saw_weave", "saw_pair"
+		]
+		return drop[(bar - 12) % drop.size()]
+	if bar < 36:
+		var breakdown := ["saw", "saw_pair", "saw", "saw_weave"]
+		return breakdown[(bar - 28) % breakdown.size()]
+	if bar < 52:
+		var climax := [
+			"stripe_wall", "saw_pair", "saw", "saw_weave",
+			"saw_pair", "homing", "saw", "saw_weave",
+			"stripe_wall", "saw_pair", "saw", "saw_weave",
+			"homing", "saw_pair", "saw", "saw_weave"
+		]
+		return climax[(bar - 36) % climax.size()]
+	var outro := ["saw", "saw_pair", "saw", "saw_weave"]
+	return outro[(bar - 52) % outro.size()]
 
 # --- NUEVO: Usar downbeat/bars/phrases para coreografiar ---
 func spawns_at_downbeat(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
@@ -127,6 +166,16 @@ func spawns_at_phrase(t: float, beat_idx: int, base_color: Color) -> Array[Dicti
 	var sec := _current_section(t)
 	if not sec.is_empty() and float(sec.get("energy", 0.5)) < 0.5:
 		return []
+	# First Light usa frases authored explicitamente: el breakdown cambia el
+	# lenguaje visual y el drop/drop2 traen un laser en las frases fuertes.
+	if easy_mode:
+		var section_name: String = str(sec.get("name", ""))
+		var phrase_bar: int = beat_idx / 4
+		if section_name == "breakdown" and phrase_bar % 2 == 0:
+			return _build_pattern("closing_perimeter", t, DANGER_RED, beat_idx)
+		if section_name in ["drop", "drop2"] and phrase_bar % 2 == 0:
+			return _build_pattern("laser_telegraph", t, DANGER_RED, beat_idx)
+		return []
 	if wall_active:
 		return []
 	# Setpiece especial: closing perimeter o laser telegraph
@@ -144,6 +193,15 @@ func _current_section(t: float) -> Dictionary:
 func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	match pattern:
+		"saw_pair":
+			# Dos sierras en carriles opuestos: lectura de timing, no ruido.
+			out.append(_lane_saw(0.25, -50.0, -28.0))
+			out.append(_lane_saw(0.75, -50.0, 28.0))
+		"saw_weave":
+			# TresLinea con velocidades opuestas para crear una lectura de weaving.
+			out.append(_lane_saw(0.18, -45.0, -62.0))
+			out.append(_lane_saw(0.50, -85.0, 0.0))
+			out.append(_lane_saw(0.82, -45.0, 62.0))
 		"hazard_wall":
 			out.append(_hazard(_lane_x(fposmod((beat_idx / 4) * 0.5, 1.0))))
 		# --- NUEVOS PATRONES ---
@@ -265,6 +323,8 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0) -
 		_:
 			push_warning("PatternController: unknown pattern '%s'" % pattern)
 			return []
+	for s in out:
+		s["encounter"] = pattern
 	return out
 
 # --- Helpers para nuevos patrones ---
@@ -290,6 +350,12 @@ func _stripe_band(n: Vector2, t_dir: Vector2, tmin: float, tmax: float, s0: floa
 		"state": "warning", "warn_time": (2.5 if easy_mode else 2.0) * beat_len, "active_time": 2.0 * beat_len, "fade_time": 0.5 * beat_len,
 		"bar_idx": bar_idx, "lane_index": gap_i,
 		"alpha": 1.0}
+
+func _lane_saw(u: float, y: float, vx: float) -> Dictionary:
+	var s: Dictionary = _saw(_lane_x(u), DANGER_RED)
+	s["pos"] = Vector2(_lane_x(u), y)
+	s["vel"] = Vector2(vx, 120.0 * (0.85 if easy_mode else 1.0))
+	return s
 
 func _saw(x: float, c: Color) -> Dictionary:
 	return {"pos": Vector2(x, -50.0), "vel": Vector2(_rng.randf_range(-50, 50), 120.0 * (0.85 if easy_mode else 1.0)),

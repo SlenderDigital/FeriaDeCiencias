@@ -53,6 +53,17 @@ var _shield_was_ready: bool = true   # para sonido de "listo" al recargarse
 var _fist_was_closed: bool = false   # edge-trigger: un escudo por puno (requiere abrir para re-armar)
 var health: float = 100.0
 var progress_pct: int = 0   # % de la canción sobrevivida: la métrica del nivel
+var score: int = 0
+var combo: int = 0
+var best_combo: int = 0
+var _hit_since_last_beat: bool = false
+# Dash: movimiento corto y relativo a la entrada; no da invulnerabilidad.
+const DASH_TIME: float = 0.16
+const DASH_COOLDOWN: float = 1.0
+const DASH_SPEED: float = 950.0
+var _dash_active: float = 0.0
+var _dash_cooldown: float = 0.0
+var _dash_dir: Vector2 = Vector2.UP
 var is_paused: bool = false
 var is_game_over: bool = false
 var _music_finished: bool = false
@@ -124,7 +135,8 @@ func _ready() -> void:
 	if track_title_lbl:
 		track_title_lbl.text = "%s  |  BPM: %d" % [track_data.get("name", "Nivel Procedural"), int(bpm)]
 		track_title_lbl.add_theme_color_override("font_color", track_data.get("color", Color(0, 0.94, 1, 1)))
-		
+	_update_score_hud()
+
 	pause_overlay.visible = false
 	results_overlay.visible = false
 	# Overlay de daño: destello rojo full-screen sobre el mundo (bajo el HUD,
@@ -153,8 +165,10 @@ func _input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"): # ESC key
 		toggle_pause()
 	elif not is_paused and not is_game_over:
-		# Shield on Space, Enter, or Mouse Click
-		if event.is_action_pressed("ui_accept") or (event is InputEventKey and event.pressed and event.keycode == KEY_SPACE):
+		# Shift = dash; Space/Enter/click = shield.
+		if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_SHIFT:
+			_try_dash()
+		elif event.is_action_pressed("ui_accept") or (event is InputEventKey and event.pressed and event.keycode == KEY_SPACE):
 			_try_shield()
 		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			_try_shield()
@@ -280,6 +294,7 @@ func _process(delta: float) -> void:
 		var track_color: Color = track_data.get("color", Color(0, 0.94, 1, 1))
 		while next_beat_idx < chart.beat_times.size() and chart.beat_times[next_beat_idx] <= song_time:
 			var t: float = chart.beat_times[next_beat_idx]
+			_register_beat()
 			
 			# Gate: un solo stripe_wall a la vez (no se apilan muros).
 			# Se calcula ANTES de spawns_at: el pool regular tambien puede
@@ -318,6 +333,7 @@ func _process(delta: float) -> void:
 			_spawn_procedural_wave()
 			if SoundManager: SoundManager.play_beat()
 		
+	_update_dash(delta)
 	_update_player_movement(delta)
 	_update_targets(delta)
 	_update_shield(delta)
@@ -334,6 +350,50 @@ func _append_spawns(spawns: Array[Dictionary]) -> void:
 		targets.append(s)
 		if s.get("type", "") == "stripe_wall" and controller:
 			controller.wall_active = true
+
+func _register_beat() -> void:
+	if _hit_since_last_beat:
+		combo = 0
+	else:
+		combo += 1
+		best_combo = maxi(best_combo, combo)
+		score += 10 * mini(8, 1 + combo / 8)
+	_hit_since_last_beat = false
+	_update_score_hud()
+
+func _register_near_miss() -> void:
+	combo += 1
+	best_combo = maxi(best_combo, combo)
+	score += 25 * mini(8, 1 + combo / 8)
+	_update_score_hud()
+
+func _update_score_hud() -> void:
+	if score_lbl:
+		score_lbl.text = "PUNTAJE: %d  |  COMBO x%d" % [score, combo]
+
+func _try_dash() -> void:
+	if _dash_cooldown > 0.0 or _dash_active > 0.0:
+		return
+	var dir := Vector2.ZERO
+	if Input.is_key_pressed(KEY_LEFT) or Input.is_key_pressed(KEY_A):
+		dir.x -= 1.0
+	if Input.is_key_pressed(KEY_RIGHT) or Input.is_key_pressed(KEY_D):
+		dir.x += 1.0
+	if Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_W):
+		dir.y -= 1.0
+	if Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_S):
+		dir.y += 1.0
+	_dash_dir = dir.normalized() if dir.length_squared() > 0.0 else Vector2.UP
+	_dash_active = DASH_TIME
+	_dash_cooldown = DASH_COOLDOWN
+	_add_sparks(player_pos - _dash_dir * 16.0, Color(0.0, 0.94, 1.0, 1.0))
+	if SoundManager: SoundManager.play_click()
+
+func _update_dash(delta: float) -> void:
+	_dash_active = maxf(_dash_active - delta, 0.0)
+	_dash_cooldown = maxf(_dash_cooldown - delta, 0.0)
+	if _dash_active > 0.0:
+		player_pos += _dash_dir * DASH_SPEED * delta
 
 func _notify_spawn(s: Dictionary) -> void:
 	# Avisos sonoros al nacer un spawn que lo requiera.
@@ -762,7 +822,12 @@ func _update_targets(delta: float) -> void:
 			var perp: float = absf(to_p.dot(Vector2(-bdir.y, bdir.x)))
 			hit = perp < float(t["radius"]) + 16.0
 		else:
-			hit = player_pos.distance_to(t["pos"]) < (t["radius"] + 16.0)
+			hit = player_pos.distance_to(t["pos"]) < (float(t.get("radius", 24.0)) + 16.0)
+		if not hit and ttype != "stripe_wall" and ttype != "laser_telegraph" and not t.get("_near_miss_scored", false):
+			var near_radius: float = float(t.get("radius", 24.0)) + 44.0
+			if player_pos.distance_to(t["pos"]) < near_radius:
+				t["_near_miss_scored"] = true
+				_register_near_miss()
 		if hit:
 			to_remove.append(i)
 			# I-frames: durante el lapso post-golpe el peligro se consume sin drenar vida
@@ -780,6 +845,9 @@ func _update_targets(delta: float) -> void:
 			targets.remove_at(idx)
 
 func _on_hazard_hit() -> void:
+	_hit_since_last_beat = true
+	combo = 0
+	_update_score_hud()
 	_hit_iframes = HIT_IFRAMES_EASY if easy_mode else HIT_IFRAMES
 	_damage_flash = 1.0
 	_shake_time = SHAKE_TIME
@@ -838,7 +906,7 @@ func _trigger_victory() -> void:
 
 	results_title_lbl.text = "¡NIVEL PROCEDURAL COMPLETADO!"
 	results_title_lbl.add_theme_color_override("font_color", Color(0, 1, 0.5, 1))
-	results_score_lbl.text = "Progreso Final: 100%%\n%s" % ("¡NUEVO RÉCORD DE PROGRESO!" if is_new_hs else "")
+	results_score_lbl.text = "Progreso Final: 100%%\nPuntaje: %d  |  Combo máximo: x%d\n%s" % [score, best_combo, ("¡NUEVO RÉCORD DE PROGRESO!" if is_new_hs else "")]
 	results_overlay.visible = true
 
 func _trigger_game_over() -> void:
@@ -850,7 +918,7 @@ func _trigger_game_over() -> void:
 		is_new_hs = GameManager.save_score(track_data.get("id", "procedural_mvp"), progress_pct)
 	results_title_lbl.text = "MISIÓN FALLIDA"
 	results_title_lbl.add_theme_color_override("font_color", Color(1, 0.2, 0.2, 1))
-	results_score_lbl.text = "Progreso Logrado: %d%%\n%s" % [progress_pct, ("¡NUEVO RÉCORD DE PROGRESO!" if is_new_hs else "")]
+	results_score_lbl.text = "Progreso Logrado: %d%%\nPuntaje: %d  |  Combo máximo: x%d\n%s" % [progress_pct, score, best_combo, ("¡NUEVO RÉCORD DE PROGRESO!" if is_new_hs else "")]
 	results_overlay.visible = true
 
 # --- Pause & Results Overlay Signals ---
@@ -949,6 +1017,14 @@ func _draw() -> void:
 		c.a = alpha
 		draw_circle(s["pos"], 2.5, c)
 		
+	# Dash feedback: an expanding cyan wake behind the ship.
+	if _dash_active > 0.0:
+		var dash_frac: float = 1.0 - _dash_active / DASH_TIME
+		draw_line(player_pos - _dash_dir * (28.0 + dash_frac * 34.0), player_pos,
+			Color(0.0, 0.94, 1.0, 0.75 * (1.0 - dash_frac)), 5.0)
+		draw_arc(player_pos, 30.0 + dash_frac * 14.0, 0.0, TAU, 24,
+			Color(0.0, 0.94, 1.0, 0.8 * (1.0 - dash_frac)), 3.0)
+
 	# Escudo: burbuja hexagonal-neon alrededor de la nave mientras activo
 	if _shield_active > 0.0:
 		var life: float = clampf(_shield_active / SHIELD_TIME, 0.0, 1.0)
