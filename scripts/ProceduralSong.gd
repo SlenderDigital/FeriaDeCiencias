@@ -32,6 +32,13 @@ var total_beats: int = 0
 var duration: float = 0.0
 var sections: Array[Dictionary] = []   # {name,start_bar,bars,energy}
 var _noise_state: int = 0
+# --- Sidechain (T6): el bombo bombea la mezcla ---
+# Profundidad del duck (1-sc_depth = ganancia justo en el golpe) y tau de
+# recuperación (en segundos: 0.35 beats => vuelve ~pleno antes del siguiente).
+var sc_depth: float = 0.60
+var sc_tau: float = 0.16
+# Último pico de la mezcla (lo lee el test headless; 0 = sin render aún).
+var last_peak: int = 0
 
 func _noise_next() -> float:
 	## LCG determinista propio (independiente del RNG global del juego)
@@ -138,6 +145,9 @@ func render_audio() -> AudioStreamWAV:
 	var buf_bass := _new_buf(total_samples)
 	var buf_lead := _new_buf(total_samples)
 	var buf_pad := _new_buf(total_samples)
+	# Schedule de TODOS los golpes de bombo (T6): la mezcla final aplica
+	# sidechain sobre él — todo el tema menos el bombo "late" en cada golpe.
+	var kick_times: PackedFloat32Array = PackedFloat32Array()
 
 	for b in range(total_bars):
 		var sec := _section_of_bar(b)
@@ -149,13 +159,16 @@ func render_audio() -> AudioStreamWAV:
 		var third_f: float = A2 * pow(2.0, float(chord[1]) / 12.0)
 		var fifth_f: float = A2 * pow(2.0, float(chord[2]) / 12.0)
 
-		# KICK: 4-piso en drops; intro/outro/breakdown solo en 1 y 3
+		# KICK: 4-piso en drops; intro/outro/breakdown solo en 1 y 3.
 		if energy >= 0.6:
 			for k in range(4):
 				_render_kick(buf_kick, bar_t + float(k) * beat_interval)
+				kick_times.append(bar_t + float(k) * beat_interval)
 		else:
 			_render_kick(buf_kick, bar_t)
 			_render_kick(buf_kick, bar_t + 2.0 * beat_interval)
+			kick_times.append(bar_t)
+			kick_times.append(bar_t + 2.0 * beat_interval)
 
 		# SNARE en 2 y 4 (el breakdown respira sin caja)
 		if energy >= 0.5 and sname != "breakdown":
@@ -197,6 +210,16 @@ func render_audio() -> AudioStreamWAV:
 		var pad_gain: float = 1.0 - energy * 0.4
 		_render_pad3(buf_pad, bar_t, bar_len, [root_f, third_f * 2.0, fifth_f * 2.0], pad_gain)
 
+		# REDOBLE PRE-DROP (T6): semicorcheas de caja creciendo en el último
+		# compás antes de cada drop — junto al riser, vende la entrada. Gain
+		# alto (el redoble debe LEERSE sobre hats/lead del compás normal).
+		if b + 1 < total_bars:
+			var nxt_fill := _section_of_bar(b + 1)
+			if String(nxt_fill.get("name", "")) in ["drop", "drop2"] and int(nxt_fill.get("start_bar", -1)) == b + 1:
+				for k in range(16):
+					var fill_gain: float = 0.55 + 0.65 * (float(k) / 16.0)
+					_render_snare(buf_drum, bar_t + float(k) * beat_interval * 0.25, fill_gain)
+
 		# RISER: ultimo compas antes de cada drop (tension -> impacto)
 		if b + 1 < total_bars:
 			var nxt := _section_of_bar(b + 1)
@@ -216,15 +239,38 @@ func render_audio() -> AudioStreamWAV:
 		elif sname == "drop" or sname == "drop2":
 			_render_lead2(buf_lead, b, bar_t, bar_len, chord)
 
+		# ARP DE INTRO (T6): los compases 3-4 de la intro ya muestran el tema
+		# — corcheas suaves sobre la tríada, un adelanto del hook que entra
+		# en el build. La intro deja de ser pad+bombo a secas.
+		if sname == "intro" and b in [2, 3]:
+			var arp_deg: Array = [0, 1, 2, 1, 0, 2, 1, 2]
+			for k in range(8):
+				var f_arp: float = A2 * 2.0 * pow(2.0, float(chord[arp_deg[k]]) / 12.0)
+				_render_lead(buf_lead, bar_t + float(k) * beat_interval * 0.5, f_arp, 0.5)
+
 	# --- Mezcla final con headroom y fade global ---
+	# SIDECHAIN (T6): en cada golpe del schedule de bombo, TODO lo demás
+	# (drums/bass/lead/pad) cae a (1-sc_depth) y se recupera exponencialmente
+	# con tau=sc_tau. El bombo queda fuera del duck: es el que "bombea".
+	# Curva por muestra: g(t) = (1-depth) + depth * (1 - exp(-(t-tk)/tau))
+	# desde el golpe más reciente. Musicalmente: el tema RESPIRA con el kick.
 	var master: float = 0.66
 	var buf_out := _new_buf(total_samples)
 	var peak: int = 0
+	# Índice del próximo golpe de kick >= t (kick_times es creciente).
+	var k_idx: int = 0
+	var last_kick_t: float = -1e9
 	for i in range(total_samples):
+		var t_mix: float = float(i) / float(RATE)
+		# Avanzar el puntero de kicks mientras el golpe ya pasó.
+		while k_idx < kick_times.size() and kick_times[k_idx] <= t_mix:
+			last_kick_t = kick_times[k_idx]
+			k_idx += 1
+		var duck: float = _duck_gain_at(t_mix, last_kick_t)
 		var idx: int = i * 2
-		var v: int = _s16(buf_kick, idx) + _s16(buf_drum, idx) + _s16(buf_bass, idx)
-		v += _s16(buf_lead, idx) + _s16(buf_pad, idx)
-		var t: float = float(i) / float(RATE)
+		var v: int = _s16(buf_kick, idx) \
+			+ int(float(_s16(buf_drum, idx) + _s16(buf_bass, idx) + _s16(buf_lead, idx) + _s16(buf_pad, idx)) * duck)
+		var t: float = t_mix
 		var fade: float = 1.0
 		if t < 0.5:
 			fade = t / 0.5
@@ -235,6 +281,7 @@ func render_audio() -> AudioStreamWAV:
 		var out_v: int = int(clampf(sv, -32767.0, 32767.0))
 		peak = maxi(peak, absi(out_v))
 		_w16(buf_out, idx, out_v)
+	last_peak = peak
 
 	var stream := AudioStreamWAV.new()
 	stream.format = AudioStreamWAV.FORMAT_16_BITS
@@ -243,6 +290,16 @@ func render_audio() -> AudioStreamWAV:
 	stream.data = buf_out
 	print("[ProceduralSong] Lista: %d muestras, %.1fs, peak=%d/32767." % [total_samples, duration, peak])
 	return stream
+
+## Ganancia de sidechain a t_mix desde el último golpe last_kick_t (T6).
+## La mezcla llama por muestra; el test headless la aserta directamente:
+## 1-depth justo en el golpe, recuperación exponencial tau, 1.0 pasado el
+## compás del golpe (4 beats) o sin golpe previo.
+func _duck_gain_at(t_mix: float, last_kick_t: float) -> float:
+	var since_kick: float = t_mix - last_kick_t
+	if since_kick < 0.0 or since_kick >= 4.0 * beat_interval:
+		return 1.0
+	return (1.0 - sc_depth) + sc_depth * (1.0 - exp(-since_kick / sc_tau))
 
 func _new_buf(total_samples: int) -> PackedByteArray:
 	var b: PackedByteArray = PackedByteArray()
@@ -283,11 +340,11 @@ func _render_kick(buf: PackedByteArray, t0: float) -> void:
 		var cur: int = _s16(buf, idx) + int(sv)
 		_w16(buf, idx, clampi(cur, -32767, 32767))
 
-func _render_snare(buf: PackedByteArray, t0: float) -> void:
+func _render_snare(buf: PackedByteArray, t0: float, gain: float = 1.0) -> void:
 	var dur_s: float = 0.12
 	var n: int = int(RATE * dur_s)
 	var start_idx: int = int(t0 * float(RATE)) * 2
-	var amp: float = 11000.0
+	var amp: float = 11000.0 * gain
 	for i in range(n):
 		var tt: float = float(i) / float(RATE)
 		var env: float = exp(-14.0 * tt)
