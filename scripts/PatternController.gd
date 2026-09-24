@@ -367,16 +367,19 @@ func _drifter(x: float, c: Color) -> Dictionary:
 		"radius": 28, "color": c, "is_hazard": true, "hit_health_bonus": -18.0 if easy_mode else -25.0, "type": "drifter"}
 
 func _laser_telegraph(x: float) -> Dictionary:
-	# Telegraph de 1.3s (~2+ beats) -> dispara un beam en DIRECCIÓN ALEATORIA.
-	# Al tocar alarma sonora: el jugador SIEMPRE escucha el aviso.
-	# (Gameplay dispara el sonido al recibir el spawn; aquí no tocamos
-	# autoloads para que el E2E headless compile sin escena.)
+	# Telegraph de 3 BEATS -> dispara un beam en DIRECCIÓN ALEATORIA.
+	# Derivado del BPM real (no segundos fijos): el disparo cae sobre un
+	# golpe audible de la canción. Al tocar alarma sonora: el jugador
+	# SIEMPRE escucha el aviso. (Gameplay dispara el sonido al recibir el
+	# spawn; aquí no tocamos autoloads para que el E2E headless compile
+	# sin escena.)
 	var dir := Vector2.from_angle(_rng.randf() * TAU)
 	var anchor := Vector2(x, _rng.randf_range(play_size.y * 0.19, play_size.y * 0.81))
-	print("[LASER] telegraph spawn anchor=%s dir_angle=%.1f°" % [anchor, rad_to_deg(dir.angle())])
+	var telegraph_beats: float = 3.0 * beat_len
+	print("[LASER] telegraph spawn anchor=%s dir_angle=%.1f° fire_on_beat(%.3fs)" % [anchor, rad_to_deg(dir.angle()), telegraph_beats])
 	return {"pos": anchor, "vel": Vector2(0, 0),
 		"radius": 12, "color": Color(1, 0.8, 0, 1), "is_hazard": false,
-		"type": "laser_telegraph", "telegraph_time": 1.3, "telegraph_total": 1.3,
+		"type": "laser_telegraph", "telegraph_time": telegraph_beats, "telegraph_total": telegraph_beats,
 		"fired": false, "beam_dir": dir}
 
 func _homing(x: float, c: Color) -> Dictionary:
