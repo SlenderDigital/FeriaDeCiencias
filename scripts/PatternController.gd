@@ -390,13 +390,20 @@ func _stripe_band(n: Vector2, t_dir: Vector2, tmin: float, tmax: float, s0: floa
 
 ## Beats de cruce para la sección activa en t: cuántos beats tarda un peligro
 ## en caer desde el borde superior hasta la zona del jugador (0.78 de alto).
-## Entero SIEMPRE (T4): la llegada cae sobre un beat audible. Sección calma
-## (energy<0.45) => 8 beats (163 px/s); resto => 6 beats (218 px/s).
+## Siempre en la grilla audible (T4): entero, o medio beat en drop2 — la
+## canción renderiza hats de corchea (y semicorchea con energy>=0.8) en drops,
+## así que la llegada a contratiempo también cae sobre un golpe audible.
+## Sección calma (energy<0.45) => 8 beats; resto => 6; drop2 => 5.5 (el
+## clímax aprieta: +8.5% de velocidad, lectura musical intacta).
 ## easy_mode NO recorta los beats (el margen del tutorial viene de menos
 ## encuentros, no de sierras más lentas: la lectura rítmica debe ser igual).
-func _crossing_beats(t: float) -> int:
+func _crossing_beats(t: float) -> float:
 	var intent := _section_intent(t)
-	return 8 if float(intent["energy"]) < 0.45 else 6
+	if float(intent["energy"]) < 0.45:
+		return 8.0
+	if str(intent["name"]) == "drop2":
+		return 5.5
+	return 6.0
 
 ## Velocidad vertical cuantizada a beats enteros de la sección en t, para un
 ## spawn que nace en y = spawn_y. La llegada a la zona del jugador (78% del
@@ -404,8 +411,8 @@ func _crossing_beats(t: float) -> int:
 ## (los lane_saw nacen a -45/-50/-85). Derivada del BPM y del viewport real.
 func _quantized_vy_from(t: float, spawn_y: float) -> float:
 	var travel: float = play_size.y * 0.78 - spawn_y
-	var n_beats: int = _crossing_beats(t)
-	return travel / (float(n_beats) * beat_len)
+	var n_beats: float = _crossing_beats(t)
+	return travel / (n_beats * beat_len)
 
 func _lane_saw(u: float, y: float, vx: float, t: float = -1.0) -> Dictionary:
 	var s: Dictionary = _saw(_lane_x(u), DANGER_RED)

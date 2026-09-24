@@ -15,23 +15,24 @@ func _initialize() -> void:
 	var screen_h: float = 720.0
 	var player_zone_y: float = screen_h * 0.78
 
-	# Helper puro en tiempos representativos de cada sección:
-	# intro t=1s (energy 0.35 -> 8 beats), build t=15s (0.6 -> 6),
-	# drop t=30s (0.85 -> 6), breakdown t=70s (0.5 -> 6), drop2 t=80s (0.9 -> 6),
-	# outro t=100s (0.3 -> 8).
-	var expect := [[1.0, 8], [15.0, 6], [30.0, 6], [70.0, 6], [80.0, 6], [100.0, 8]]
+	# Helper puro en tiempos representativos de cada sección (bar_len=1.875s:
+	# build 4-12 = 7.5-22.5s, drop 12-28 = 22.5-52.5s, breakdown 28-36 =
+	# 52.5-67.5s, drop2 36-52 = 67.5-97.5s, outro 52-56 = 97.5-105s):
+	# intro 1s -> 8 beats, build 15s -> 6, drop 30s -> 6, breakdown 55s -> 6,
+	# drop2 80s -> 5.5 (+8.5% clímax, grilla audible de corcheas), outro 100s -> 8.
+	var expect := [[1.0, 8.0], [15.0, 6.0], [30.0, 6.0], [55.0, 6.0], [80.0, 5.5], [100.0, 8.0]]
 	for e in expect:
-		var n: int = controller._crossing_beats(e[0])
+		var n: float = controller._crossing_beats(e[0])
 		if n != e[1]:
-			fails.append("_crossing_beats(%.0fs)=%d, esperaba %d" % [e[0], n, e[1]])
+			fails.append("_crossing_beats(%.0fs)=%.1f, esperaba %.1f" % [e[0], n, e[1]])
 	# La velocidad cuantizada debe llegar EXACTO: travel = vy * n * bl.
 	for e in expect:
-		var n2: int = controller._crossing_beats(e[0])
+		var n2: float = controller._crossing_beats(e[0])
 		var vy: float = controller._quantized_vy_from(e[0], -50.0)
-		var travel: float = vy * float(n2) * bl
+		var travel: float = vy * n2 * bl
 		var target: float = player_zone_y + 50.0
 		if absf(travel - target) > 0.5:
-			fails.append("vy@%.0fs: recorre %.1fpx en %d beats, esperaba %.1fpx" % [e[0], travel, n2, target])
+			fails.append("vy@%.0fs: recorre %.1fpx en %.1f beats, esperaba %.1fpx" % [e[0], travel, n2, target])
 
 	# Spawns reales: cada saw/lane_saw/drifter emitido debe tener vy tal que
 	# la llegada a la zona del jugador (desde su y de spawn) cae en un beat.
@@ -55,9 +56,13 @@ func _initialize() -> void:
 					continue  # lane_saw puede traer vy mixta; solo caídas
 				var dist: float = player_zone_y - spawn_y
 				var n_float: float = dist / (vy2 * bl)
-				var n_int: int = int(round(n_float))
-				if absf(n_float - float(n_int)) > 0.02:
-					fails.append("beat %d (%s): llegada %.3f beats (no entera)" % [next_beat_idx, ty, n_float])
+				# Grilla audible: beat entero, o medio beat (drop2 aprieta al
+				# contratiempo de corchea). Tolerancia 2%.
+				var frac: float = n_float - floor(n_float)
+				var snap: float = minf(frac, 1.0 - frac)  # distancia al entero
+				var snap_half: float = absf(frac - 0.5)    # distancia al medio
+				if snap > 0.02 and snap_half > 0.02:
+					fails.append("beat %d (%s): llegada %.3f beats (no en grilla entera/media)" % [next_beat_idx, ty, n_float])
 				checked += 1
 			next_beat_idx += 1
 		t_time += dt

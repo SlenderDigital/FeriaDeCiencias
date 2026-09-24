@@ -28,6 +28,11 @@ var player_pos: Vector2 = Vector2(640, 560)
 var ship_rotation: float = 0.0    # grados; 0 = proa hacia +X (derecha)
 # (player_pos se re-centra al área real en _ready())
 var player_speed: float = 550.0
+# Energía de la sección activa (0..1) y su nombre — la leen los visuales
+# (T5): flash de beat, glow del fondo y tinte del breakdown escalan con la
+# música. La actualiza _process desde controller._section_intent.
+var section_energy: float = 0.5
+var section_name: String = ""
 # Estela de la nave: última posición donde se soltó una chispa de motor.
 var _trail_last: Vector2 = Vector2(-9999.0, -9999.0)
 
@@ -266,6 +271,22 @@ func _process(delta: float) -> void:
 		if spt > 20.5 and spt < 20.8 and not get_meta("shot_act3", false):
 			set_meta("shot_act3", true)
 			get_viewport().get_texture().get_image().save_png("/tmp/shot_act3.png")
+		# T5: lista genérica "t=name" separada por comas (ej.
+		# MCP_SHOT_LIST="5=intro,30=drop,55=breakdown,80=drop2").
+		var shot_list: String = OS.get_environment("MCP_SHOT_LIST")
+		if not shot_list.is_empty():
+			for entry in shot_list.split(","):
+				var parts: PackedStringArray = entry.split("=")
+				if parts.size() != 2:
+					continue
+				var want_t: float = parts[0].to_float()
+				var tag: String = parts[1]
+				var meta_key: String = "shot_%s" % tag
+				if spt > want_t and spt < want_t + 0.35 and not get_meta(meta_key, false):
+					set_meta(meta_key, true)
+					var img: Image = get_viewport().get_texture().get_image()
+					img.save_png("/tmp/shot_%s.png" % tag)
+					print("[SHOT] %s @ %.2fs -> /tmp/shot_%s.png" % [tag, spt, tag])
 	if is_paused or is_game_over:
 		return
 	_update_control_gate()
@@ -283,6 +304,13 @@ func _process(delta: float) -> void:
 	# El fondo late con la canción REAL: sin metrónomo propio ni doble golpe.
 	if bg_control and bg_control.has_method("set_song_clock"):
 		bg_control.set_song_clock(song_time, beat_interval)
+	# Energía de la sección activa -> visuales (T5) y fondo.
+	if controller:
+		var intent: Dictionary = controller._section_intent(song_time)
+		section_energy = float(intent["energy"])
+		section_name = str(intent["name"])
+		if bg_control and bg_control.has_method("set_section_mood"):
+			bg_control.set_section_mood(section_energy, section_name)
 	
 	var progress: float = clamp(song_time / total_song_duration, 0.0, 1.0)
 	
@@ -916,18 +944,22 @@ func _draw() -> void:
 		draw_set_transform(Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * sk, 0.0, Vector2.ONE)
 	# Pulso visual sincronizado con la música: flash de kick en cada beat,
 	# anillo expansivo en los hits de snare (beats 2 y 4 del compás).
+	# T5: la INTENSIDAD escala con la energía de la sección — el drop se VE
+	# más intenso que la intro; el clímax (drop2) es el pico visual.
 	if song_time > 0.0 and not is_game_over and beat_interval > 0.0:
 		var bn: float = song_time / beat_interval
 		var in_bar: float = fmod(bn, 4.0)
 		var bp: float = fmod(bn, 1.0)
 		var kick: float = clampf(1.0 - bp * 6.0, 0.0, 1.0)
+		# Energía 0.3 (intro/outro) -> flash tenue; 0.9 (drop2) -> flash pleno.
+		var energy_gain: float = clampf(0.35 + 0.65 * section_energy, 0.0, 1.0)
 		if kick > 0.0:
 			draw_rect(Rect2(Vector2.ZERO, play_size()),
-					Color(0.35, 0.55, 1.0, 0.03 * kick))
+					Color(0.35, 0.55, 1.0, 0.03 * energy_gain * kick))
 		if (in_bar >= 1.0 and in_bar < 1.25) or (in_bar >= 3.0 and in_bar < 3.25):
 			var sr: float = clampf(fmod(in_bar, 1.0) * 4.0, 0.0, 1.0)
 			draw_arc(play_size() * 0.5, 40.0 + sr * 90.0, 0, TAU, 44,
-					Color(0.5, 0.8, 1.0, 0.11 * (1.0 - sr)), 3.0)
+					Color(0.5, 0.8, 1.0, 0.11 * energy_gain * (1.0 - sr)), 3.0)
 
 	# Draw player ship (neon, rotada por la mano; 0deg = derecha)
 	var ship_col: Color = track_data.get("color", Color(0, 0.94, 1, 1))
