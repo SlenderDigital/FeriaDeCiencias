@@ -80,7 +80,7 @@ func spawns_at(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
 			return out
 		var spawns_fl: Array[Dictionary] = []
 		if on_encounter_beat:
-			spawns_fl.append_array(_build_pattern(_first_light_pattern(beat_idx), t, base_color, beat_idx))
+			spawns_fl.append_array(_build_pattern(_first_light_pattern(beat_idx, t), t, base_color, beat_idx))
 		if on_accent_beat:
 			spawns_fl.append(_saw(_rng.randf_range(play_size.x * 0.15, play_size.x * 0.85), DANGER_RED, t))
 		return spawns_fl
@@ -103,36 +103,58 @@ func spawns_at(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
 
 	return out
 
-## Timeline de encuentros de First Light. Los indices son compases, no beats:
-## cada entrada es una lectura clara que el jugador puede aprender.
-func _first_light_pattern(beat_idx: int) -> String:
+## Timeline de encuentros de First Light — DIRIGIDA POR LA SECCIÓN (T8).
+## El nombre/energía de la sección del chart manda; el "compás dentro de la
+## sección" elige la variación. Cero rangos de compás absolutos: si la canción
+## cambia (drop más corto, breakdown más largo...), el nivel la SIGUE.
+## Recibe t para ubicar la sección (beat_idx solo da el compás dentro de ella).
+func _first_light_pattern(beat_idx: int, t: float = -1.0) -> String:
 	var bar: int = beat_idx / 4
-	if bar < 4:
-		return ["saw", "saw_pair", "saw", "saw_pair"][bar]
-	if bar < 12:
-		var build := ["saw_pair", "saw", "saw_weave", "saw_pair", "saw", "saw_weave", "saw_pair", "saw"]
-		return build[(bar - 4) % build.size()]
-	if bar < 28:
-		var drop := [
-			"stripe_wall", "saw_pair", "saw", "saw_weave",
-			"saw_pair", "stripe_wall", "saw", "saw_weave",
-			"saw_pair", "saw", "saw_weave", "stripe_wall",
-			"saw_pair", "saw", "saw_weave", "saw_pair"
-		]
-		return drop[(bar - 12) % drop.size()]
-	if bar < 36:
-		var breakdown := ["saw", "saw_pair", "saw", "saw_weave"]
-		return breakdown[(bar - 28) % breakdown.size()]
-	if bar < 52:
-		var climax := [
-			"stripe_wall", "saw_pair", "saw", "saw_weave",
-			"saw_pair", "homing", "saw", "saw_weave",
-			"stripe_wall", "saw_pair", "saw", "saw_weave",
-			"homing", "saw_pair", "saw", "saw_weave"
-		]
-		return climax[(bar - 36) % climax.size()]
-	var outro := ["saw", "saw_pair", "saw", "saw_weave"]
-	return outro[(bar - 52) % outro.size()]
+	var sname: String = ""
+	if t >= 0.0:
+		sname = str(_section_intent(t)["name"])
+	# Fallback determinista (sin t): recorre las secciones por compás como
+	# están definidas en el chart — sigue siendo estructura, no constantes.
+	if sname.is_empty():
+		sname = _section_name_of_bar(bar)
+	var in_sec: int = bar - _section_start_bar(bar)
+	match sname:
+		"intro":
+			return ["saw", "saw_pair"][in_sec % 2]
+		"build":
+			var build := ["saw_pair", "saw", "saw_weave"]
+			return build[in_sec % build.size()]
+		"drop", "drop2":
+			# El drop ENSEÑA el muro; el clímax agrega homing. El primer
+			# compás de la sección abre con muro (lección clara de entrada).
+			var drop := ["stripe_wall", "saw_pair", "saw", "saw_weave", "saw_pair"]
+			if in_sec == 0:
+				return "stripe_wall"
+			var seq: Array = drop.duplicate()
+			if sname == "drop2" and in_sec % 4 == 1:
+				seq[in_sec % seq.size()] = "homing"
+			return seq[in_sec % seq.size()]
+		"breakdown":
+			var bd := ["saw", "saw_pair", "saw", "saw_weave"]
+			return bd[in_sec % bd.size()]
+		_:
+			var outro := ["saw", "saw_pair"]
+			return outro[in_sec % outro.size()]
+
+## Nombre de la sección del chart que contiene el compás bar (estructura
+## real: chart.sections en beats; bar*4 cae dentro).
+func _section_name_of_bar(bar: int) -> String:
+	var beat: int = clampi(bar * 4, 0, chart.beat_times.size() - 1)
+	var t: float = chart.beat_times[beat]
+	return str(_section_intent(t)["name"])
+
+## Compás absoluto donde EMPIEZA la sección que contiene bar.
+func _section_start_bar(bar: int) -> int:
+	var sname := _section_name_of_bar(bar)
+	for s in chart.level_sections:
+		if str(s.get("name", "")) == sname:
+			return int(float(s.get("start", 0.0)) / maxf(beat_len * 4.0, 0.001))
+	return 0
 
 # --- NUEVO: Usar downbeat/bars/phrases para coreografiar ---
 func spawns_at_downbeat(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
