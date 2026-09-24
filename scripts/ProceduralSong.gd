@@ -252,35 +252,60 @@ func render_audio() -> AudioStreamWAV:
 	# SIDECHAIN (T6): en cada golpe del schedule de bombo, TODO lo demás
 	# (drums/bass/lead/pad) cae a (1-sc_depth) y se recupera exponencialmente
 	# con tau=sc_tau. El bombo queda fuera del duck: es el que "bombea".
-	# Curva por muestra: g(t) = (1-depth) + depth * (1 - exp(-(t-tk)/tau))
-	# desde el golpe más reciente. Musicalmente: el tema RESPIRA con el kick.
+	# PRESUPUESTO (T7): la curva se PRECOMPUTA en una tabla por muestra del
+	# window (4 beats) — lookup en el loop, sin exp() por muestra. La mezcla
+	# inlines _s16/_w16: 1.27M muestras no toleran llamadas por muestra.
 	var master: float = 0.66
 	var buf_out := _new_buf(total_samples)
 	var peak: int = 0
+	var win_samples: int = int(4.0 * beat_interval * RATE)
+	var duck_tab := PackedFloat32Array()
+	duck_tab.resize(win_samples)
+	for s in range(win_samples):
+		duck_tab[s] = (1.0 - sc_depth) + sc_depth * (1.0 - exp(-(float(s) / float(RATE)) / sc_tau))
 	# Índice del próximo golpe de kick >= t (kick_times es creciente).
 	var k_idx: int = 0
 	var last_kick_t: float = -1e9
+	var fade_in_end: int = int(0.5 * RATE)
+	var tail_start: int = total_samples - int(1.0 * RATE)
 	for i in range(total_samples):
 		var t_mix: float = float(i) / float(RATE)
 		# Avanzar el puntero de kicks mientras el golpe ya pasó.
 		while k_idx < kick_times.size() and kick_times[k_idx] <= t_mix:
 			last_kick_t = kick_times[k_idx]
 			k_idx += 1
-		var duck: float = _duck_gain_at(t_mix, last_kick_t)
+		var since_samples: int = int((t_mix - last_kick_t) * RATE)
+		var duck: float = duck_tab[since_samples] if since_samples >= 0 and since_samples < win_samples else 1.0
 		var idx: int = i * 2
-		var v: int = _s16(buf_kick, idx) \
-			+ int(float(_s16(buf_drum, idx) + _s16(buf_bass, idx) + _s16(buf_lead, idx) + _s16(buf_pad, idx)) * duck)
-		var t: float = t_mix
+		# Lectura inline con sign-fixup INDIVIDUAL por buffer (el fixup tras la
+		# suma era incorrecto: un solo negativo entre cuatro basta para romper
+		# el rango y clipear la mezcla).
+		var s_kick: int = buf_kick[idx] | (buf_kick[idx + 1] << 8)
+		if s_kick >= 32768:
+			s_kick -= 65536
+		var s_drum: int = buf_drum[idx] | (buf_drum[idx + 1] << 8)
+		if s_drum >= 32768:
+			s_drum -= 65536
+		var s_bass: int = buf_bass[idx] | (buf_bass[idx + 1] << 8)
+		if s_bass >= 32768:
+			s_bass -= 65536
+		var s_lead: int = buf_lead[idx] | (buf_lead[idx + 1] << 8)
+		if s_lead >= 32768:
+			s_lead -= 65536
+		var s_pad: int = buf_pad[idx] | (buf_pad[idx + 1] << 8)
+		if s_pad >= 32768:
+			s_pad -= 65536
+		var v: int = s_kick + int(float(s_drum + s_bass + s_lead + s_pad) * duck)
 		var fade: float = 1.0
-		if t < 0.5:
-			fade = t / 0.5
-		var rem: float = duration + 0.8 - t
-		if rem < 1.0:
-			fade = minf(fade, rem / 1.0)
+		if i < fade_in_end:
+			fade = t_mix / 0.5
+		if i > tail_start:
+			fade = minf(fade, float(total_samples - i) / float(RATE))
 		var sv: float = float(v) * master * fade
 		var out_v: int = int(clampf(sv, -32767.0, 32767.0))
 		peak = maxi(peak, absi(out_v))
-		_w16(buf_out, idx, out_v)
+		buf_out[idx] = out_v & 0xFF
+		buf_out[idx + 1] = (out_v >> 8) & 0xFF
 	last_peak = peak
 
 	var stream := AudioStreamWAV.new()
