@@ -64,7 +64,22 @@ func _initialize() -> void:
 		var danger_soft := false
 		for tg in targets:
 			var ty: String = tg.get("type", "target")
-			if ty == "pulse_rings":
+			if ty == "mini_ring" or ty == "mini_fan":
+				# Jab de un compás: salir al hueco — es barato de esquivar
+				# y no vale la pena pelear; sólo si ya estamos dentro, salir.
+				if str(tg.get("state", "")) == "active":
+					var hub_j: Vector2 = tg["pos"]
+					if ty == "mini_fan":
+						var mf_gc_j: float = TAU * float(int(tg.get("gap_first", 0)) + 0.5) / float(maxi(int(tg.get("spokes", 3)), 1))
+						mf_gc_j += float(tg.get("rot_speed", 0.0)) * float(tg.get("state_time", 0.0))
+						var tgt_j: Vector2 = hub_j + Vector2.from_angle(mf_gc_j) * (float(tg.get("radius", 260.0)) * 0.72)
+						steer += (tgt_j - player).normalized() * 0.9 if (tgt_j - player).length() > 30.0 else Vector2.ZERO
+					if ty == "mini_ring" and (player - hub_j).length() > 0.01:
+						var gc_j: float = float(tg.get("gap_center", 0.0)) + float(tg.get("spin", 0.0)) * float(tg.get("state_time", 0.0))
+						var r_j: float = float(tg.get("target_radius", 300.0))
+						var tgt_rj: Vector2 = hub_j + Vector2.from_angle(gc_j) * r_j * 0.8
+						steer += (tgt_rj - player).normalized() * 0.7 if (tgt_rj - player).length() > 30.0 else Vector2.ZERO
+			elif ty == "pulse_rings":
 				# El anillo barre radialmente: quedarse en el ARCO del hueco
 				# (viajar con el hueco) y, si el anillo ya pasó el radio del
 				# jugador, no volver atrás (el anillo viene de adentro).
@@ -330,6 +345,20 @@ func _initialize() -> void:
 				tg["state"] = sq_f["state"]
 				tg["state_time"] = sq_f["state_time"]
 				tg["is_hazard"] = sq_f["is_hazard"]
+			elif ty == "mini_ring" or ty == "mini_fan":
+				tg["state_time"] = float(tg.get("state_time", 0.0)) + dt
+				var j_st: String = str(tg.get("state", "telegraph"))
+				var j_t: float = float(tg["state_time"])
+				if j_st == "telegraph" and j_t >= float(tg.get("telegraph_beats", 1)) * bl:
+					tg["state"] = "active"
+					tg["state_time"] = 0.0
+					tg["is_hazard"] = true
+				elif j_st == "active" and j_t >= float(tg.get("active_beats", 2)) * bl:
+					tg["state"] = "fade"
+					tg["state_time"] = 0.0
+					tg["is_hazard"] = false
+				elif j_st == "fade" and j_t >= float(tg.get("fade_beats", 1)) * bl:
+					tg["state"] = "done"
 			elif ty == "pulse_rings":
 				var pr_f: Dictionary = PulseRingsLogic.step(tg, dt, bl)
 				tg["state"] = pr_f["state"]
@@ -379,6 +408,37 @@ func _initialize() -> void:
 					if shield <= 0.0 and iframes <= 0.0:
 						hp -= 18.0
 						iframes = 2.0
+						hits += 1
+				continue
+			if ty2 == "mini_ring" or ty2 == "mini_fan":
+				if str(tg2.get("state", "")) == "done":
+					rem.append(i)
+					continue
+				var j_hit: bool = false
+				if str(tg2.get("state", "")) == "active":
+					if ty2 == "mini_ring":
+						var mjr2: Dictionary = {
+							"state": "active", "pos": tg2["pos"], "rings": 1,
+							"target_radius": float(tg2.get("target_radius", 300.0)),
+							"gap_angle": float(tg2.get("gap_angle", 1.2)),
+							"gap_center": float(tg2.get("gap_center", 0.0)) + float(tg2.get("spin", 0.0)) * float(tg2.get("state_time", 0.0)),
+							"gap_spin": 0.0, "beat_len": bl, "active_beats": 1,
+							"telegraph_beats": 0, "fade_beats": 1,
+							"state_time": float(tg2.get("state_time", 0.0))}
+						j_hit = PulseRingsLogic.hits_player(mjr2, player)
+					else:
+						var mjf2: Dictionary = {
+							"state": "active", "pos": tg2["pos"],
+							"spokes": int(tg2.get("spokes", 3)), "gap_spokes": int(tg2.get("gap_spokes", 1)),
+							"gap_first": int(tg2.get("gap_first", 0)), "radius": float(tg2.get("radius", 260.0)),
+							"rot_speed": float(tg2.get("rot_speed", 0.0)),
+							"telegraph_beats": 0, "state_time": float(tg2.get("state_time", 0.0))}
+						j_hit = SpokeFanLogic.hits_player(mjf2, player)
+				if j_hit:
+					rem.append(i)
+					if shield <= 0.0 and iframes <= 0.0:
+						hp -= 8.0
+						iframes = 1.5
 						hits += 1
 				continue
 			if ty2 == "pulse_rings":

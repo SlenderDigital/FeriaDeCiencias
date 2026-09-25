@@ -247,10 +247,6 @@ func spawns_at_downbeat(t: float, beat_idx: int, base_color: Color) -> Array[Dic
 	return _build_pattern("stripe_wall", t, Color(1, 0.2, 0.3, 1), beat_idx)
 
 func spawns_at_bar(t: float, beat_idx: int, base_color: Color) -> Array[Dictionary]:
-	if easy_mode:
-		return []
-	if wall_active:
-		return []
 	"""Llamado en cada bar (cada 4 beats) — variaciones coreografiadas."""
 	if beat_idx % 4 != 0:
 		return []
@@ -261,6 +257,16 @@ func spawns_at_bar(t: float, beat_idx: int, base_color: Color) -> Array[Dictiona
 	var energy: float = 0.5
 	if not sec.is_empty():
 		energy = float(sec.get("energy", 0.5))
+	# T7 MINI-JAB: la pantalla nunca queda muda. En barras de alta energía y
+	# SIN setpiece vivo, un latido (anillo mínimo o abanico de 3 rayos) ocupa
+	# el compás. La vía ANTIGUA devolvía [] en easy_mode SIEMPRE — que es
+	# exactamente el "nothing happens" que reportó el usuario: el tutorial
+	# era la sección más muda del juego.
+	var setpiece_live: bool = not _active_setpiece.is_empty()
+	if not setpiece_live and energy >= 0.7:
+		return _build_pattern("mini_jab", t, base_color, beat_idx, {}, beat_idx * 31)
+	if easy_mode:
+		return []
 	var pattern: String = "saw"
 	if energy < 0.55:
 		pattern = "saw"
@@ -503,6 +509,8 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0, p
 			out.append(_squeeze_corridor(t, beat_idx, params, spawn_seed))
 		"pulse_rings":
 			out.append(_pulse_rings(t, beat_idx, params, spawn_seed))
+		"mini_jab":
+			out.append(_mini_jab(t, beat_idx, params, spawn_seed))
 		"homing":
 			var x = _rng.randf_range(play_size.x * 0.15, play_size.x * 0.85)
 			out.append(_homing(x, DANGER_RED))
@@ -755,6 +763,45 @@ func _pulse_rings(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: 
 		"telegraph_beats": TELEGRAPH_BEATS, "active_beats": ACTIVE_BEATS, "fade_beats": FADE_BEATS,
 		"is_hazard": false, "hit_health_bonus": -18.0,
 		"color": DANGER_RED, "setpiece_phase": true, "beat_len": beat_len,
+	}
+
+## JSAB T7 — MINI-JAB: el latido entre anclas. Un anillo expansivo mínimo o
+## un abanico de 3 rayos, UN compás de vida, INOCUO al nacer (aviso, no
+## amenaza) y con colisión simple. Es la respuesta directa a "nothing
+## happens": entre setpieces, algo siempre pulsa.
+## Su vida es corta a propósito: no apila con el siguiente.
+func _mini_jab(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: int = -1) -> Dictionary:
+	var vr := RandomNumberGenerator.new()
+	vr.seed = 823 ^ spawn_seed if spawn_seed >= 0 else 823 ^ beat_idx
+	var kind: String = "mini_ring" if vr.randf() < 0.5 else "mini_fan"
+	if params.has("kind"):
+		kind = str(params["kind"])
+	var hub: Vector2 = Vector2(play_size.x * vr.randf_range(0.3, 0.7), play_size.y * vr.randf_range(0.35, 0.55))
+	if kind == "mini_ring":
+		# Anillo que se cierra rápido: 1 beat de aviso + 2 activo + 1 fade.
+		return {
+			"type": "mini_ring", "pos": hub, "vel": Vector2.ZERO,
+			"mini_jab": true,
+			"target_radius": maxf(float(play_size.y) * 0.42, 260.0),
+			"gap_angle": deg_to_rad(vr.randf_range(70.0, 110.0)),
+			"gap_center": vr.randf_range(0.0, TAU),
+			"grow_beats": 2, "spin": vr.randf_range(-0.5, 0.5),
+			"state": "telegraph", "state_time": 0.0,
+			"telegraph_beats": 1, "active_beats": 2, "fade_beats": 1,
+			"is_hazard": false, "hit_health_bonus": -8.0,
+			"color": DANGER_RED, "beat_len": beat_len,
+		}
+	# Abanico de 3 rayos: un latido, hueco amplio, gira poco.
+	return {
+		"type": "mini_fan", "pos": hub, "vel": Vector2.ZERO,
+		"mini_jab": true,
+		"spokes": 3, "gap_spokes": 1, "gap_first": vr.randi_range(0, 2),
+		"radius": maxf(float(play_size.y) * 0.40, 240.0),
+		"rot_speed": vr.randf_range(-0.6, 0.6),
+		"state": "telegraph", "state_time": 0.0,
+		"telegraph_beats": 1, "active_beats": 2, "fade_beats": 1,
+		"is_hazard": false, "hit_health_bonus": -8.0,
+		"color": DANGER_RED, "beat_len": beat_len,
 	}
 
 func _homing(x: float, c: Color) -> Dictionary:

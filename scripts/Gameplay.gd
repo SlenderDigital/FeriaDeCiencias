@@ -536,6 +536,48 @@ func _draw_one_target(t: Dictionary) -> void:
 					chev + gdir * 12.0, chev + gdir.rotated(2.5) * -9.0, chev + gdir.rotated(-2.5) * -9.0]),
 					Color(0.4, 0.95, 1.0, 0.35 * alpha_d))
 		return
+	if ttype_d == "mini_ring":
+		# T7 mini-jab: arco SENCILLO, más fino y translúcido que un setpiece
+		# (es puntuación, no un momento). Telegraph = arco tenue; active =
+		# arco hot-pink fino con el hueco visible.
+		var mj_hub: Vector2 = t["pos"]
+		var mj_st_d: String = str(t.get("state", "telegraph"))
+		var mj_gc: float = float(t.get("gap_center", 0.0)) + float(t.get("spin", 0.0)) * float(t.get("state_time", 0.0))
+		var mj_ga: float = float(t.get("gap_angle", 1.2))
+		var mj_a0: float = mj_gc + mj_ga * 0.5
+		var mj_a1: float = mj_gc - mj_ga * 0.5 + TAU
+		var mj_tgt: float = float(t.get("target_radius", 300.0))
+		var mj_al: float = 0.75 if mj_st_d != "telegraph" else 0.45
+		if mj_st_d == "fade":
+			mj_al = clampf(1.0 - float(t.get("state_time", 0.0)) / maxf(float(t.get("fade_beats", 1)) * beat_interval, 0.001), 0.0, 1.0) * 0.75
+		var mj_r: float = mj_tgt
+		if mj_st_d == "telegraph":
+			mj_r = mj_tgt * 0.35
+			draw_arc(mj_hub, mj_tgt, mj_a0, mj_a1, 32, Color(0.55, 0.15, 0.2, 0.22 * mj_al), 1.5)
+		draw_arc(mj_hub, mj_r, mj_a0, mj_a1, 32, Color(0.95, 0.25, 0.32, 0.45 * mj_al), 3.0)
+		draw_arc(mj_hub, mj_r, mj_a0, mj_a1, 32, Color(1.6, 0.5, 0.6, 0.75 * mj_al), 1.6)
+		return
+	if ttype_d == "mini_fan":
+		# T7 mini-jab abanico: 3 rayos finos desde el hub, hueco amplio.
+		var mf_hub: Vector2 = t["pos"]
+		var mf_st_d: String = str(t.get("state", "telegraph"))
+		var mf_al: float = 0.8 if mf_st_d != "telegraph" else 0.5
+		if mf_st_d == "fade":
+			mf_al = clampf(1.0 - float(t.get("state_time", 0.0)) / maxf(float(t.get("fade_beats", 1)) * beat_interval, 0.001), 0.0, 1.0) * 0.8
+		var mf_gf: int = int(t.get("gap_first", 0))
+		var mf_gap: int = int(t.get("gap_spokes", 1))
+		var mf_n: int = int(t.get("spokes", 3))
+		var mf_r: float = float(t.get("radius", 260.0))
+		var mf_rot: float = float(t.get("rot_speed", 0.0)) * float(t.get("state_time", 0.0))
+		var mf_r_eff: float = mf_r * (0.7 if mf_st_d == "telegraph" else 1.0)
+		for k in range(mf_n):
+			var kk: int = fposmod(k - mf_gf, mf_n)
+			if kk < mf_gap:
+				continue   # hueco
+			var ang: float = TAU * float(k) / float(mf_n) + mf_rot
+			_neon_line(mf_hub, mf_hub + Vector2.from_angle(ang) * mf_r_eff, Color(0.95, 0.25, 0.32), 3.0 * mf_al)
+		draw_circle(mf_hub, 4.0, Color(1.4, 0.6, 0.7, 0.6 * mf_al))
+		return
 	if ttype_d == "pulse_rings":
 		# JSAB anillos expansivos: se dibujan como ARCOS (no círculos
 		# completos) — el hueco es literalmente el espacio que falta. Telegraph
@@ -1010,6 +1052,44 @@ func _update_targets(delta: float) -> void:
 			if str(pr_step["state"]) == "done":
 				to_remove.append(i)
 				continue
+		elif ttype == "mini_ring":
+			# T7 mini-jab: anillo de un compás. Mismo motor que los anillos
+			# grandes (el jab ES un anillo, con otro tempo).
+			t["state_time"] = float(t.get("state_time", 0.0)) + delta
+			var mj_st: String = str(t.get("state", "telegraph"))
+			var mj_t: float = float(t["state_time"])
+			if mj_st == "telegraph" and mj_t >= float(t.get("telegraph_beats", 1)) * beat_interval:
+				t["state"] = "active"
+				t["state_time"] = 0.0
+				t["is_hazard"] = true
+			elif mj_st == "active" and mj_t >= float(t.get("active_beats", 2)) * beat_interval:
+				t["state"] = "fade"
+				t["state_time"] = 0.0
+				t["is_hazard"] = false
+			elif mj_st == "fade" and mj_t >= float(t.get("fade_beats", 1)) * beat_interval:
+				t["state"] = "done"
+			if str(t["state"]) == "done":
+				to_remove.append(i)
+				continue
+		elif ttype == "mini_fan":
+			# T7 mini-jab: abanico de 3 rayos, un compás. Reusa el hueco y la
+			# rotación de SpokeFanLogic pero con su propia vida corta.
+			t["state_time"] = float(t.get("state_time", 0.0)) + delta
+			var mf_st: String = str(t.get("state", "telegraph"))
+			var mf_t: float = float(t["state_time"])
+			if mf_st == "telegraph" and mf_t >= float(t.get("telegraph_beats", 1)) * beat_interval:
+				t["state"] = "active"
+				t["state_time"] = 0.0
+				t["is_hazard"] = true
+			elif mf_st == "active" and mf_t >= float(t.get("active_beats", 2)) * beat_interval:
+				t["state"] = "fade"
+				t["state_time"] = 0.0
+				t["is_hazard"] = false
+			elif mf_st == "fade" and mf_t >= float(t.get("fade_beats", 1)) * beat_interval:
+				t["state"] = "done"
+			if str(t["state"]) == "done":
+				to_remove.append(i)
+				continue
 		elif ttype == "perimeter":
 			# Perimeter balls move toward center
 			t["pos"] += t["vel"] * delta
@@ -1085,6 +1165,32 @@ func _update_targets(delta: float) -> void:
 		elif ttype == "pulse_rings":
 			# Anillos expansivos: banda radial (motor puro).
 			hit = PulseRingsLogic.hits_player(t, player_pos)
+		elif ttype == "mini_ring":
+			# Mini-jab anillo: banda radial como los anillos grandes, pero con
+			# la ventana corta del jab. Reusa el motor construyendo un dict
+			# equivalente (mismos keys: state/target_radius/gap_*).
+			if str(t.get("state", "")) == "active":
+				var mjr: Dictionary = {
+					"state": "active", "pos": t["pos"],
+					"rings": 1, "target_radius": float(t.get("target_radius", 300.0)),
+					"gap_angle": float(t.get("gap_angle", 1.2)),
+					"gap_center": float(t.get("gap_center", 0.0)) + float(t.get("spin", 0.0)) * float(t.get("state_time", 0.0)),
+					"gap_spin": 0.0, "beat_len": beat_interval,
+					"active_beats": 1, "telegraph_beats": 0, "fade_beats": 1,
+					"state_time": float(t.get("state_time", 0.0)),
+				}
+				hit = PulseRingsLogic.hits_player(mjr, player_pos)
+		elif ttype == "mini_fan":
+			# Mini-jab abanico: 3 rayos con hueco, en su ventana corta.
+			if str(t.get("state", "")) == "active":
+				var mjf: Dictionary = {
+					"state": "active", "pos": t["pos"],
+					"spokes": int(t.get("spokes", 3)), "gap_spokes": int(t.get("gap_spokes", 1)),
+					"gap_first": int(t.get("gap_first", 0)), "radius": float(t.get("radius", 260.0)),
+					"rot_speed": float(t.get("rot_speed", 0.0)),
+					"telegraph_beats": 0, "state_time": float(t.get("state_time", 0.0)),
+				}
+				hit = SpokeFanLogic.hits_player(mjf, player_pos)
 		elif ttype == "laser_beam":
 			# Line-based: distancia del player a la línea infinita del beam
 			var bdir: Vector2 = (t.get("beam_dir", Vector2.UP) as Vector2).normalized()
