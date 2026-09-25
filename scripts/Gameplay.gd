@@ -529,6 +529,39 @@ func _draw_one_target(t: Dictionary) -> void:
 					chev + gdir * 12.0, chev + gdir.rotated(2.5) * -9.0, chev + gdir.rotated(-2.5) * -9.0]),
 					Color(0.4, 0.95, 1.0, 0.35 * alpha_d))
 		return
+	if ttype_d == "waveform_wall":
+		# JSAB muro de ONDA: columnas que emergen desde abajo siguiendo el
+		# perfil. Telegraph = columnas tenues que ya insinúan la forma (se lee
+		# POR DÓNDE pasa la onda antes de que llegue); active = columnas
+		# hot-pink con borde neón y cresta blanca; fade decae.
+		var cols_w: int = int(t.get("columns", 8))
+		var colw_w: float = float(t.get("col_w", 160.0))
+		var st_w: String = str(t.get("state", "telegraph"))
+		var alpha_w: float = 1.0
+		if st_w == "fade":
+			alpha_w = clampf(1.0 - float(t.get("state_time", 0.0)) / maxf(float(t.get("fade_beats", 2)) * beat_interval, 0.001), 0.0, 1.0)
+		var play_w0: Vector2 = play_size
+		for c in range(cols_w):
+			var h_w: float = WaveformLogic.column_height(t, c)
+			var x0_w: float = float(c) * colw_w
+			var x1_w: float = x0_w + colw_w
+			var bottom_w: float = play_w0.y
+			if st_w == "telegraph":
+				# aviso: relleno granate translúcido + borde superior tenue
+				draw_rect(Rect2(Vector2(x0_w + 1.0, h_w), Vector2(colw_w - 2.0, bottom_w - h_w)),
+					Color(0.35, 0.06, 0.12, 0.35 * alpha_w))
+				draw_line(Vector2(x0_w, h_w), Vector2(x1_w, h_w), Color(0.7, 0.2, 0.28, 0.55 * alpha_w), 2.0)
+			else:
+				# active: columna llena con neón, cresta con brillo
+				draw_rect(Rect2(Vector2(x0_w + 1.0, h_w), Vector2(colw_w - 2.0, bottom_w - h_w)),
+					Color(0.55, 0.06, 0.14, 0.62 * alpha_w))
+				_neon_line(Vector2(x0_w, h_w), Vector2(x1_w, h_w), Color(1.0, 0.2, 0.3), 5.0)
+				# crestas más altas: remate blanco de impacto
+				if h_w < float(t.get("peak_line", 400.0)) + 6.0:
+					draw_line(Vector2(x0_w, h_w), Vector2(x1_w, h_w), Color(2.0, 0.6, 0.7, 0.85 * alpha_w), 2.0)
+			# separadores verticales tenues: la retícula hace legible la onda
+			draw_line(Vector2(x0_w, h_w), Vector2(x0_w, bottom_w), Color(0.3, 0.1, 0.16, 0.3 * alpha_w), 1.0)
+		return
 	if ttype_d == "laser_sweep":
 		# JSAB láser que barre: telegraph = ARCO completo del recorrido con
 		# haz fantasma en ang_start (el jugador lee HACIA dónde viene); active
@@ -862,6 +895,15 @@ func _update_targets(delta: float) -> void:
 			if str(sw_step["state"]) == "done":
 				to_remove.append(i)
 				continue
+		elif ttype == "waveform_wall":
+			# JSAB muro de onda: motor puro WaveformLogic.
+			var wf_step: Dictionary = WaveformLogic.step(t, delta, beat_interval)
+			t["state"] = wf_step["state"]
+			t["state_time"] = wf_step["state_time"]
+			t["is_hazard"] = wf_step["is_hazard"]
+			if str(wf_step["state"]) == "done":
+				to_remove.append(i)
+				continue
 		elif ttype == "perimeter":
 			# Perimeter balls move toward center
 			t["pos"] += t["vel"] * delta
@@ -928,6 +970,9 @@ func _update_targets(delta: float) -> void:
 		elif ttype == "laser_sweep":
 			# Láser que barre: colisión del motor puro.
 			hit = SweepLogic.hits_player(t, player_pos)
+		elif ttype == "waveform_wall":
+			# Muro de onda: colisión del motor puro (perfil por columna).
+			hit = WaveformLogic.hits_player(t, player_pos)
 		elif ttype == "laser_beam":
 			# Line-based: distancia del player a la línea infinita del beam
 			var bdir: Vector2 = (t.get("beam_dir", Vector2.UP) as Vector2).normalized()

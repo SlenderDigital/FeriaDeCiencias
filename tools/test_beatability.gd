@@ -64,7 +64,32 @@ func _initialize() -> void:
 		var danger_soft := false
 		for tg in targets:
 			var ty: String = tg.get("type", "target")
-			if ty == "laser_sweep":
+			if ty == "waveform_wall":
+				# La onda sube desde abajo: quedarse ARRIBA de la cresta más
+				# alta en su X (y si el techo está cerca de la fila del
+				# jugador, moverse al trough más bajo más cercano).
+				if str(tg.get("state", "")) == "telegraph" or str(tg.get("state", "")) == "active":
+					var wf_state: String = str(tg.get("state", ""))
+					var cols_f: int = int(tg.get("columns", 8))
+					var colw_f: float = float(tg.get("col_w", 100.0))
+					var my_idx: int = clampi(int(player.x / maxf(colw_f, 1.0)), 0, cols_f - 1)
+					# buscar el trough más cercano (columna más baja)
+					var best_i: int = my_idx
+					var best_h: float = WaveformLogic.column_height(tg, my_idx)
+					for o in range(-4, 5):
+						var ci: int = clampi(my_idx + o, 0, cols_f - 1)
+						var ch: float = WaveformLogic.column_height(tg, ci)
+						if ch > best_h:
+							best_h = ch
+							best_i = ci
+					var target_x: float = (float(best_i) + 0.5) * colw_f
+					# arriba del hueco, en la fila de juego
+					var safe_y: float = minf(player.y, float(tg.get("peak_line", 400.0)) - 70.0)
+					var tgt: Vector2 = Vector2(target_x, safe_y)
+					steer += (tgt - player).normalized() * 1.3 if (tgt - player).length() > 18.0 else Vector2.ZERO
+					if wf_state == "active" and WaveformLogic.hits_player(tg, player):
+						danger_close = true
+			elif ty == "laser_sweep":
 				# LECTURA HUMANA del arco: durante telegraph el arco completo
 				# está dibujado — si el ángulo del jugador cae DENTRO de la
 				# cuña del barrido, salir TANGENCIALMENTE por el extremo más
@@ -262,6 +287,11 @@ func _initialize() -> void:
 				tg["state"] = sw_f["state"]
 				tg["state_time"] = sw_f["state_time"]
 				tg["is_hazard"] = sw_f["is_hazard"]
+			elif ty == "waveform_wall":
+				var wf_f: Dictionary = WaveformLogic.step(tg, dt, bl)
+				tg["state"] = wf_f["state"]
+				tg["state_time"] = wf_f["state_time"]
+				tg["is_hazard"] = wf_f["is_hazard"]
 			elif ty == "homing":
 				var dir: Vector2 = (player - (tg["pos"] as Vector2)).normalized()
 				tg["vel"] = (tg["vel"] as Vector2).lerp(dir * 250.0, 0.1)
@@ -302,6 +332,17 @@ func _initialize() -> void:
 					rem.append(i)
 					continue
 				if SpokeFanLogic.hits_player(tg2, player):
+					rem.append(i)
+					if shield <= 0.0 and iframes <= 0.0:
+						hp -= 18.0
+						iframes = 2.0
+						hits += 1
+				continue
+			if ty2 == "waveform_wall":
+				if str(tg2.get("state", "")) == "done":
+					rem.append(i)
+					continue
+				if WaveformLogic.hits_player(tg2, player):
 					rem.append(i)
 					if shield <= 0.0 and iframes <= 0.0:
 						hp -= 18.0

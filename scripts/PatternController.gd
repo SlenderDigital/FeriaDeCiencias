@@ -38,6 +38,11 @@ const SETPIECE_SCRIPTS: Dictionary = {
 	"sweep_build_v1": [
 		{"at": 0, "emit": "laser_sweep", "params": {}},
 	],
+	## T4: el breakdown abre con el muro de ONDA (la "arena invertida" del
+	## video): el espacio se cierra desde abajo y el juego se lee al revés.
+	"wave_breakdown_v1": [
+		{"at": 0, "emit": "waveform_wall", "params": {}},
+	],
 	## T2: el drop abre con el abanico de rayos (la "ancla" JSAB) y el láser
 	## llega después: dos anclas en la misma frase, lectura escalonada.
 	"drop_opener_v1": [
@@ -53,7 +58,7 @@ const SETPIECE_BY_SECTION: Dictionary = {
 	"build": "sweep_build_v1",
 	"drop": "drop_opener_v1",
 	"drop2": "drop_opener_v1",
-	"breakdown": "closing_perimeter_v1",
+	"breakdown": "wave_breakdown_v1",
 }
 var _active_setpiece: Dictionary = {}   # {script_key, anchor_beat}
 # Rojo de peligro: TODO lo que daña es rojo, sin excepciones. El color del
@@ -479,6 +484,8 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0, p
 			out.append(_spoke_fan(t, beat_idx, params, spawn_seed))
 		"laser_sweep":
 			out.append(_laser_sweep(t, beat_idx, params, spawn_seed))
+		"waveform_wall":
+			out.append(_waveform_wall(t, beat_idx, params, spawn_seed))
 		"homing":
 			var x = _rng.randf_range(play_size.x * 0.15, play_size.x * 0.85)
 			out.append(_homing(x, DANGER_RED))
@@ -613,6 +620,44 @@ func _laser_sweep(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: 
 		"state": "telegraph", "state_time": 0.0,
 		"telegraph_beats": TELEGRAPH_BEATS, "active_beats": ACTIVE_BEATS, "fade_beats": FADE_BEATS,
 		"is_hazard": false, "hit_health_bonus": -20.0,
+		"color": DANGER_RED, "setpiece_phase": true, "beat_len": beat_len,
+	}
+
+## JSAB T4 — Muro de ONDA que sube desde abajo (arquetipo 45s/1350s del
+## video): una fila de columnas que crecen desde el borde inferior siguiendo
+## un perfil senoidal desfasado por columna. Telegraph 2 / active 4 / fade 2.
+## Fairness: la cresta queda ACOTADA (peak_line <= 62% del alto) dejando
+## margen de reacción sobre la fila del jugador; el trough más bajo siempre
+## cae por debajo del área (nunca se cierra entero el paso).
+## Parametrizado por seed de ancla, como el resto de los setpieces.
+func _waveform_wall(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: int = -1) -> Dictionary:
+	const TELEGRAPH_BEATS: int = 2
+	const ACTIVE_BEATS: int = 4
+	const FADE_BEATS: int = 2
+	var vr := RandomNumberGenerator.new()
+	vr.seed = 613 ^ spawn_seed if spawn_seed >= 0 else 613 ^ beat_idx
+	var columns: int = vr.randi_range(8, 14)
+	if params.has("columns"):
+		columns = clampi(int(params["columns"]), 6, 20)
+	# Cresta: 0.48..0.60 del alto (nunca más: el jugador al 78% tiene 18% de
+	# margen vertical para reaccionar desde el aviso).
+	var peak_frac: float = vr.randf_range(0.48, 0.60)
+	if params.has("peak_frac"):
+		peak_frac = clampf(float(params["peak_frac"]), 0.35, 0.62)
+	# Perfil: 1.5..3.5 ciclos a lo ancho + desfasamiento aleatorio.
+	var cycles: float = vr.randf_range(1.5, 3.5)
+	var phase: float = vr.randf_range(0.0, TAU)
+	return {
+		"type": "waveform_wall", "pos": Vector2.ZERO, "vel": Vector2.ZERO,
+		"columns": columns, "col_w": play_size.x / float(columns),
+		"wave_cycles": cycles, "wave_phase": phase, "wave_amp": peak_frac * 0.5,
+		"base_line": play_size.y * (peak_frac + 0.18),   # trough bajo el área
+		"peak_line": play_size.y * peak_frac,              # techo de la onda
+		"peak_frac": peak_frac,
+		"rise_beats": ACTIVE_BEATS,                        # toda la ventana activa
+		"state": "telegraph", "state_time": 0.0,
+		"telegraph_beats": TELEGRAPH_BEATS, "active_beats": ACTIVE_BEATS, "fade_beats": FADE_BEATS,
+		"is_hazard": false, "hit_health_bonus": -18.0,
 		"color": DANGER_RED, "setpiece_phase": true, "beat_len": beat_len,
 	}
 
