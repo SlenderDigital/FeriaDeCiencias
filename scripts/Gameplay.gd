@@ -540,7 +540,7 @@ func _draw_one_target(t: Dictionary) -> void:
 		var alpha_w: float = 1.0
 		if st_w == "fade":
 			alpha_w = clampf(1.0 - float(t.get("state_time", 0.0)) / maxf(float(t.get("fade_beats", 2)) * beat_interval, 0.001), 0.0, 1.0)
-		var play_w0: Vector2 = play_size
+		var play_w0: Vector2 = play_size()
 		for c in range(cols_w):
 			var h_w: float = WaveformLogic.column_height(t, c)
 			var x0_w: float = float(c) * colw_w
