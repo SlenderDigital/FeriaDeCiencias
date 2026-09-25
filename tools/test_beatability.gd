@@ -64,7 +64,32 @@ func _initialize() -> void:
 		var danger_soft := false
 		for tg in targets:
 			var ty: String = tg.get("type", "target")
-			if ty == "squeeze_corridor":
+			if ty == "pulse_rings":
+				# El anillo barre radialmente: quedarse en el ARCO del hueco
+				# (viajar con el hueco) y, si el anillo ya pasó el radio del
+				# jugador, no volver atrás (el anillo viene de adentro).
+				if str(tg.get("state", "")) == "telegraph" or str(tg.get("state", "")) == "active":
+					var hub_pr: Vector2 = tg["pos"]
+					var g_pr: float = PulseRingsLogic.gap_angle(tg)
+					var row_pr: float = float(tg.get("player_row", 560.0))
+					var to_me: Vector2 = player - hub_pr
+					var ang_me: float = to_me.angle()
+					var d_ang_pr: float = fposmod(g_pr - ang_me + PI, TAU) - PI
+					if absf(d_ang_pr) > float(tg.get("gap_angle", 1.0)) * 0.5:
+						# fuera del arco: moverse hacia el hueco
+						var tgt_pr: Vector2 = hub_pr + Vector2.from_angle(g_pr) * to_me.length()
+						steer += (tgt_pr - player).normalized() * 1.3 if (tgt_pr - player).length() > 18.0 else Vector2.ZERO
+					else:
+						# en el arco: mantener la distancia al hub (radial)
+						var r_now: float = PulseRingsLogic.ring_radius(tg, 0)
+						if absf(to_me.length() - r_now) < 90.0:
+							# el anillo está encima: correr a una banda segura
+							var alt_r: float = maxf(to_me.length() - 150.0, 40.0)
+							var tgt2_pr: Vector2 = hub_pr + Vector2.from_angle(g_pr) * alt_r
+							steer += (tgt2_pr - player).normalized() * 1.1
+					if str(tg.get("state", "")) == "active" and PulseRingsLogic.hits_player(tg, player):
+						danger_close = true
+			elif ty == "squeeze_corridor":
 				# El corredor se cierra: quedarse en el CENTRO del bolsillo
 				# (leer el telegraph y estar ahí cuando aprieta).
 				if str(tg.get("state", "")) == "telegraph" or str(tg.get("state", "")) == "active":
@@ -305,6 +330,11 @@ func _initialize() -> void:
 				tg["state"] = sq_f["state"]
 				tg["state_time"] = sq_f["state_time"]
 				tg["is_hazard"] = sq_f["is_hazard"]
+			elif ty == "pulse_rings":
+				var pr_f: Dictionary = PulseRingsLogic.step(tg, dt, bl)
+				tg["state"] = pr_f["state"]
+				tg["state_time"] = pr_f["state_time"]
+				tg["is_hazard"] = pr_f["is_hazard"]
 			elif ty == "homing":
 				var dir: Vector2 = (player - (tg["pos"] as Vector2)).normalized()
 				tg["vel"] = (tg["vel"] as Vector2).lerp(dir * 250.0, 0.1)
@@ -345,6 +375,17 @@ func _initialize() -> void:
 					rem.append(i)
 					continue
 				if SpokeFanLogic.hits_player(tg2, player):
+					rem.append(i)
+					if shield <= 0.0 and iframes <= 0.0:
+						hp -= 18.0
+						iframes = 2.0
+						hits += 1
+				continue
+			if ty2 == "pulse_rings":
+				if str(tg2.get("state", "")) == "done":
+					rem.append(i)
+					continue
+				if PulseRingsLogic.hits_player(tg2, player):
 					rem.append(i)
 					if shield <= 0.0 and iframes <= 0.0:
 						hp -= 18.0

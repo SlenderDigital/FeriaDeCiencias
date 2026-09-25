@@ -54,6 +54,11 @@ const SETPIECE_SCRIPTS: Dictionary = {
 		{"at": 0, "emit": "spoke_fan", "params": {}},
 		{"at": 4, "emit": "squeeze_corridor", "params": {}},
 	],
+	## T6: el outro cierra con los anillos — el espacio se cierra en círculos
+	## mientras la música se apaga (el final se siente, no se anuncia).
+	"outro_rings_v1": [
+		{"at": 0, "emit": "pulse_rings", "params": {}},
+	],
 	## Fallbacks heredados del setpiece viejo (breakdown los sigue usando).
 	"closing_perimeter_v1": [
 		{"at": 0, "emit": "closing_perimeter", "params": {}},
@@ -65,6 +70,7 @@ const SETPIECE_BY_SECTION: Dictionary = {
 	"drop": "drop_opener_v1",
 	"drop2": "climax_squeeze_v1",
 	"breakdown": "wave_breakdown_v1",
+	"outro": "outro_rings_v1",
 }
 var _active_setpiece: Dictionary = {}   # {script_key, anchor_beat}
 # Rojo de peligro: TODO lo que daña es rojo, sin excepciones. El color del
@@ -285,13 +291,14 @@ func _director_pump(t: float, beat_idx: int, base_color: Color) -> Array[Diction
 	# 1) Emisión: fases del setpiece activo que vencen en ESTE beat.
 	if not _active_setpiece.is_empty():
 		out.append_array(_emit_setpiece_phases(t, beat_idx, base_color))
-	# 2) Agenda: phrase beat de sección con energía >= 0.5, sin setpiece
+	# 2) Agenda: phrase beat de sección con script propio, sin setpiece
 	#    activo, y SIN MURO en pantalla (entrada limpia: JSAB nunca abre su
 	#    ancla sobre un mulo que barre — el jugador lee el aviso, no pelea
-	#    dos cosas a la vez). Fase 0 venciendo HOY (el ancla es este beat).
+	#    dos cosas a la vez). El MAPA manda sobre la energía: el outro tiene
+	#    un script (los anillos del final) aunque sea la sección más calma.
 	if beat_idx % 16 == 0 and _active_setpiece.is_empty() and not wall_active:
 		var sec := _current_section(t)
-		if not sec.is_empty() and float(sec.get("energy", 0.5)) >= 0.5:
+		if not sec.is_empty() and not SETPIECE_BY_SECTION.get(str(sec.get("name", "")), "").is_empty():
 			var script_key: String = str(SETPIECE_BY_SECTION.get(str(sec.get("name", "")), ""))
 			if not easy_mode:
 				script_key = "laser_sweep_v1" if _rng.randf() < 0.5 else "closing_perimeter_v1"
@@ -494,6 +501,8 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0, p
 			out.append(_waveform_wall(t, beat_idx, params, spawn_seed))
 		"squeeze_corridor":
 			out.append(_squeeze_corridor(t, beat_idx, params, spawn_seed))
+		"pulse_rings":
+			out.append(_pulse_rings(t, beat_idx, params, spawn_seed))
 		"homing":
 			var x = _rng.randf_range(play_size.x * 0.15, play_size.x * 0.85)
 			out.append(_homing(x, DANGER_RED))
@@ -706,6 +715,48 @@ func _squeeze_corridor(t: float, beat_idx: int, params: Dictionary = {}, spawn_s
 		"color": DANGER_RED, "setpiece_phase": true, "beat_len": beat_len,
 	}
 
+## JSAB T6 — ANILLOS que se expanden desde el hub con un hueco rotante
+## (arquetipo 1350s del video: el espacio se cierra en círculos). Telegraph 2 /
+## active 4 / fade 2. El radio crece a velocidad BEAT-DERIVADA y CRUZA la fila
+## del jugador (78% del alto) en un número entero de beats — misma regla de
+## grilla que T4. El hueco >= 50° (fairness, test-asserted) y ROTA lento, así
+## que el jugador debe viajar con él. Parametrizado por seed de ancla.
+func _pulse_rings(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: int = -1) -> Dictionary:
+	const TELEGRAPH_BEATS: int = 2
+	const ACTIVE_BEATS: int = 4
+	const FADE_BEATS: int = 2
+	var vr := RandomNumberGenerator.new()
+	vr.seed = 271 ^ spawn_seed if spawn_seed >= 0 else 271 ^ beat_idx
+	var rings_n: int = vr.randi_range(2, 3)
+	if params.has("rings"):
+		rings_n = clampi(int(params["rings"]), 2, 5)
+	# Hub en la banda central-alta (el espacio jugable es abajo).
+	var hub: Vector2 = Vector2(play_size.x * vr.randf_range(0.35, 0.65), play_size.y * vr.randf_range(0.30, 0.45))
+	var player_row: float = play_size.y * 0.78
+	# Radio objetivo: el anillo tiene que CRUZAR la fila del jugador Y
+	# seguir cerrando más allá (el espacio se cierra en círculos): desde el
+	# hub a la fila y un 40% extra, con piso de 400px.
+	var to_row: float = absf(player_row - hub.y)
+	var target_radius: float = maxf(to_row * 1.4, 400.0)
+	# El hueco: >= 50 grados.
+	var gap_deg: float = vr.randf_range(50.0, 90.0)
+	if params.has("gap_deg"):
+		gap_deg = clampf(float(params["gap_deg"]), 50.0, 140.0)
+	# El hueco rota lento (el jugador viaja con el hueco).
+	var gap_spin: float = signf(vr.randf_range(0.15, 0.35))
+	return {
+		"type": "pulse_rings", "pos": hub, "vel": Vector2.ZERO,
+		"rings": rings_n, "target_radius": target_radius,
+		"player_row": player_row,
+		"gap_angle": deg_to_rad(gap_deg), "gap_center": vr.randf_range(0.0, TAU),
+		"gap_spin": gap_spin,
+		"grow_beats": ACTIVE_BEATS,     # el anillo 0 cruza la fila en active_beats
+		"state": "telegraph", "state_time": 0.0,
+		"telegraph_beats": TELEGRAPH_BEATS, "active_beats": ACTIVE_BEATS, "fade_beats": FADE_BEATS,
+		"is_hazard": false, "hit_health_bonus": -18.0,
+		"color": DANGER_RED, "setpiece_phase": true, "beat_len": beat_len,
+	}
+
 func _homing(x: float, c: Color) -> Dictionary:
 	# Proyectil teledirigido: persigue al jugador (Gameplay maneja el chase).
 	return {"pos": Vector2(x, -30.0), "vel": Vector2(0, 250.0 * (0.85 if easy_mode else 1.0)),
@@ -773,4 +824,3 @@ func _perimeter_ball(cx: float, cy: float, angle: float) -> Dictionary:
 	var dir = Vector2(cos(angle), sin(angle))
 	return {"pos": Vector2(cx, cy) + dir * 500, "vel": -dir * 100.0,
 		"radius": 40, "color": Color(1, 0.2, 0.3, 1), "is_hazard": true, "hit_health_bonus": -40.0, "type": "perimeter"}
-

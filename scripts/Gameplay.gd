@@ -471,6 +471,13 @@ func _neon_arc(center: Vector2, r: float, c: Color, w: float) -> void:
 	draw_arc(center, r, 0, TAU, 32, Color(c.r, c.g, c.b, 0.5), w * 1.7)
 	draw_arc(center, r, 0, TAU, 32, Color(minf(c.r * 1.7, 4.0), minf(c.g * 1.7, 4.0), minf(c.b * 1.7, 4.0), 1.0), w)
 
+## Arco neón de un sector (start..end): el hueco de los anillos se dibuja
+## literalmente como el espacio que falta del arco.
+func _neon_arc_full(center: Vector2, r: float, from_a: float, to_a: float, c: Color, w: float) -> void:
+	draw_arc(center, r, from_a, to_a, 40, Color(c.r, c.g, c.b, 0.18), w * 3.2)
+	draw_arc(center, r, from_a, to_a, 40, Color(c.r, c.g, c.b, 0.5), w * 1.7)
+	draw_arc(center, r, from_a, to_a, 40, Color(minf(c.r * 1.7, 4.0), minf(c.g * 1.7, 4.0), minf(c.b * 1.7, 4.0), 1.0), w)
+
 func _draw_one_target(t: Dictionary) -> void:
 	# Dibujo de un spawn. _draw lo invoca en 3 pasadas: hazards comunes,
 	# stripe_wall translúcido encima (deja ver las sierras atrapadas en la
@@ -528,6 +535,43 @@ func _draw_one_target(t: Dictionary) -> void:
 			draw_colored_polygon(PackedVector2Array([
 					chev + gdir * 12.0, chev + gdir.rotated(2.5) * -9.0, chev + gdir.rotated(-2.5) * -9.0]),
 					Color(0.4, 0.95, 1.0, 0.35 * alpha_d))
+		return
+	if ttype_d == "pulse_rings":
+		# JSAB anillos expansivos: se dibujan como ARCOS (no círculos
+		# completos) — el hueco es literalmente el espacio que falta. Telegraph
+		# = arcos tenues del tamaño final (se lee DÓNDE va a cerrar); active =
+		# arcos hot-pink con núcleo blanco; fade decae.
+		var hub_r: Vector2 = t["pos"]
+		var n_r: int = int(t.get("rings", 2))
+		var g_ang_r: float = PulseRingsLogic.gap_angle(t)
+		var gap_r: float = float(t.get("gap_angle", 1.0))
+		var st_r: String = str(t.get("state", "telegraph"))
+		var alpha_r: float = 1.0
+		if st_r == "fade":
+			alpha_r = clampf(1.0 - float(t.get("state_time", 0.0)) / maxf(float(t.get("fade_beats", 2)) * beat_interval, 0.001), 0.0, 1.0)
+		var pulse_r: float = maxf(0.0, 1.0 - fposmod(float(t.get("state_time", 0.0)) / maxf(beat_interval, 0.001), 1.0))
+		for i_r in range(n_r):
+			var r_r: float = PulseRingsLogic.ring_radius(t, i_r)
+			if r_r < 8.0:
+				continue
+			# el arco va del final del hueco al principio (el hueco queda abierto)
+			var a_start: float = g_ang_r + gap_r * 0.5
+			var a_end: float = g_ang_r - gap_r * 0.5 + TAU
+			if st_r == "telegraph":
+				var ghost_r: float = float(t.get("target_radius", 460.0)) * (1.0 + 0.30 * float(i_r))
+				draw_arc(hub_r, ghost_r, a_start, a_end, 40, Color(0.6, 0.15, 0.22, (0.20 + 0.12 * pulse_r) * alpha_r), 2.0)
+			else:
+				_neon_arc_full(hub_r, r_r, a_start, a_end, Color(1.0, 0.2, 0.3), 6.0 * (0.85 + 0.15 * pulse_r))
+		# hub: núcleo blanco de impacto
+		if st_r != "telegraph":
+			draw_circle(hub_r, 7.0, Color(2.3, 2.3, 2.3, 0.8 * alpha_r))
+		# chevrons en el hueco: el pasillo seguro, marcado
+		if st_r != "telegraph":
+			var chev_r: Vector2 = hub_r + Vector2.from_angle(g_ang_r) * (PulseRingsLogic.ring_radius(t, 0) * 0.5)
+			var d_r: Vector2 = (chev_r - hub_r).normalized()
+			draw_colored_polygon(PackedVector2Array([
+					chev_r + d_r * 13.0, chev_r + d_r.rotated(2.5) * -9.0, chev_r + d_r.rotated(-2.5) * -9.0]),
+				Color(0.4, 0.95, 1.0, 0.34 * alpha_r))
 		return
 	if ttype_d == "squeeze_corridor":
 		# JSAB corredor bilateral: dos paredes squeezing el espacio. Telegraph =
@@ -957,6 +1001,15 @@ func _update_targets(delta: float) -> void:
 			if str(sq_step["state"]) == "done":
 				to_remove.append(i)
 				continue
+		elif ttype == "pulse_rings":
+			# JSAB anillos expansivos: motor puro PulseRingsLogic.
+			var pr_step: Dictionary = PulseRingsLogic.step(t, delta, beat_interval)
+			t["state"] = pr_step["state"]
+			t["state_time"] = pr_step["state_time"]
+			t["is_hazard"] = pr_step["is_hazard"]
+			if str(pr_step["state"]) == "done":
+				to_remove.append(i)
+				continue
 		elif ttype == "perimeter":
 			# Perimeter balls move toward center
 			t["pos"] += t["vel"] * delta
@@ -1029,6 +1082,9 @@ func _update_targets(delta: float) -> void:
 		elif ttype == "squeeze_corridor":
 			# Corredor bilateral: franja izquierda/derecha (motor puro).
 			hit = SqueezeLogic.hits_player(t, player_pos)
+		elif ttype == "pulse_rings":
+			# Anillos expansivos: banda radial (motor puro).
+			hit = PulseRingsLogic.hits_player(t, player_pos)
 		elif ttype == "laser_beam":
 			# Line-based: distancia del player a la línea infinita del beam
 			var bdir: Vector2 = (t.get("beam_dir", Vector2.UP) as Vector2).normalized()

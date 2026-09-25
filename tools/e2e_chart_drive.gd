@@ -62,7 +62,7 @@ func _run_first_light() -> bool:
 				var ty: String = str(s.get("type", ""))
 				var encounter: String = str(s.get("encounter", ty))
 				type_counts[encounter] = int(type_counts.get(encounter, 0)) + 1
-				if ty == "laser_telegraph" or ty == "spoke_fan" or ty == "laser_sweep" or ty == "waveform_wall" or ty == "squeeze_corridor":
+				if ty == "laser_telegraph" or ty == "spoke_fan" or ty == "laser_sweep" or ty == "waveform_wall" or ty == "squeeze_corridor" or ty == "pulse_rings":
 					telegraph_count += 1   # avisos inofensivos al nacer (telegraph)
 				elif s.get("is_hazard", false):
 					hazard_count += 1
@@ -85,7 +85,7 @@ func _run_first_light() -> bool:
 		and int(type_counts.get("stripe_wall", 0)) > 0 \
 		and int(type_counts.get("spoke_fan", 0)) > 0 \
 		and (int(type_counts.get("laser_telegraph", 0)) > 0 or int(type_counts.get("laser_sweep", 0)) > 0) \
-		and (int(type_counts.get("waveform_wall", 0)) > 0 or int(type_counts.get("closing_perimeter", 0)) > 0)
+		and (int(type_counts.get("waveform_wall", 0)) > 0 or int(type_counts.get("pulse_rings", 0)) > 0)
 	var ok := consumed_all and produced_something and no_targets and has_variety
 
 	print("[E2E] first_light: beats=%d consumed=%d spawns=%d (hazards=%d telegraphs=%d targets=%d) types=%s %s" % [
