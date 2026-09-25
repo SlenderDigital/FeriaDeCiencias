@@ -64,7 +64,15 @@ func _initialize() -> void:
 		var danger_soft := false
 		for tg in targets:
 			var ty: String = tg.get("type", "target")
-			if ty == "waveform_wall":
+			if ty == "squeeze_corridor":
+				# El corredor se cierra: quedarse en el CENTRO del bolsillo
+				# (leer el telegraph y estar ahí cuando aprieta).
+				if str(tg.get("state", "")) == "telegraph" or str(tg.get("state", "")) == "active":
+					var tgt_c: Vector2 = Vector2(SqueezeLogic.gap_center(tg), player.y)
+					steer += (tgt_c - player).normalized() * 1.5 if absf(tgt_c.x - player.x) > 12.0 else Vector2.ZERO
+					if str(tg.get("state", "")) == "active" and SqueezeLogic.hits_player(tg, player):
+						danger_close = true
+			elif ty == "waveform_wall":
 				# La onda sube desde abajo: quedarse ARRIBA de la cresta más
 				# alta en su X (y si el techo está cerca de la fila del
 				# jugador, moverse al trough más bajo más cercano).
@@ -292,6 +300,11 @@ func _initialize() -> void:
 				tg["state"] = wf_f["state"]
 				tg["state_time"] = wf_f["state_time"]
 				tg["is_hazard"] = wf_f["is_hazard"]
+			elif ty == "squeeze_corridor":
+				var sq_f: Dictionary = SqueezeLogic.step(tg, dt, bl)
+				tg["state"] = sq_f["state"]
+				tg["state_time"] = sq_f["state_time"]
+				tg["is_hazard"] = sq_f["is_hazard"]
 			elif ty == "homing":
 				var dir: Vector2 = (player - (tg["pos"] as Vector2)).normalized()
 				tg["vel"] = (tg["vel"] as Vector2).lerp(dir * 250.0, 0.1)
@@ -332,6 +345,17 @@ func _initialize() -> void:
 					rem.append(i)
 					continue
 				if SpokeFanLogic.hits_player(tg2, player):
+					rem.append(i)
+					if shield <= 0.0 and iframes <= 0.0:
+						hp -= 18.0
+						iframes = 2.0
+						hits += 1
+				continue
+			if ty2 == "squeeze_corridor":
+				if str(tg2.get("state", "")) == "done":
+					rem.append(i)
+					continue
+				if SqueezeLogic.hits_player(tg2, player):
 					rem.append(i)
 					if shield <= 0.0 and iframes <= 0.0:
 						hp -= 18.0

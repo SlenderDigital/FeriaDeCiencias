@@ -62,7 +62,7 @@ func _run_first_light() -> bool:
 				var ty: String = str(s.get("type", ""))
 				var encounter: String = str(s.get("encounter", ty))
 				type_counts[encounter] = int(type_counts.get(encounter, 0)) + 1
-				if ty == "laser_telegraph" or ty == "spoke_fan" or ty == "laser_sweep" or ty == "waveform_wall":
+				if ty == "laser_telegraph" or ty == "spoke_fan" or ty == "laser_sweep" or ty == "waveform_wall" or ty == "squeeze_corridor":
 					telegraph_count += 1   # avisos inofensivos al nacer (telegraph)
 				elif s.get("is_hazard", false):
 					hazard_count += 1

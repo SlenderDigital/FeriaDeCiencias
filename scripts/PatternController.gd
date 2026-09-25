@@ -48,6 +48,12 @@ const SETPIECE_SCRIPTS: Dictionary = {
 	"drop_opener_v1": [
 		{"at": 0, "emit": "spoke_fan", "params": {}},
 	],
+	## T5: el CLÍMAX (drop2) encadena dos anclas en la misma frase: el abanico
+	## abre y, 4 beats más tarde, el corredor aprieta el espacio que quedó.
+	"climax_squeeze_v1": [
+		{"at": 0, "emit": "spoke_fan", "params": {}},
+		{"at": 4, "emit": "squeeze_corridor", "params": {}},
+	],
 	## Fallbacks heredados del setpiece viejo (breakdown los sigue usando).
 	"closing_perimeter_v1": [
 		{"at": 0, "emit": "closing_perimeter", "params": {}},
@@ -57,7 +63,7 @@ const SETPIECE_SCRIPTS: Dictionary = {
 const SETPIECE_BY_SECTION: Dictionary = {
 	"build": "sweep_build_v1",
 	"drop": "drop_opener_v1",
-	"drop2": "drop_opener_v1",
+	"drop2": "climax_squeeze_v1",
 	"breakdown": "wave_breakdown_v1",
 }
 var _active_setpiece: Dictionary = {}   # {script_key, anchor_beat}
@@ -486,6 +492,8 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0, p
 			out.append(_laser_sweep(t, beat_idx, params, spawn_seed))
 		"waveform_wall":
 			out.append(_waveform_wall(t, beat_idx, params, spawn_seed))
+		"squeeze_corridor":
+			out.append(_squeeze_corridor(t, beat_idx, params, spawn_seed))
 		"homing":
 			var x = _rng.randf_range(play_size.x * 0.15, play_size.x * 0.85)
 			out.append(_homing(x, DANGER_RED))
@@ -655,6 +663,43 @@ func _waveform_wall(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed
 		"peak_line": play_size.y * peak_frac,              # techo de la onda
 		"peak_frac": peak_frac,
 		"rise_beats": ACTIVE_BEATS,                        # toda la ventana activa
+		"state": "telegraph", "state_time": 0.0,
+		"telegraph_beats": TELEGRAPH_BEATS, "active_beats": ACTIVE_BEATS, "fade_beats": FADE_BEATS,
+		"is_hazard": false, "hit_health_bonus": -18.0,
+		"color": DANGER_RED, "setpiece_phase": true, "beat_len": beat_len,
+	}
+
+## JSAB T5 — CORREDOR que se cierra desde los costados (arquetipo 225s del
+## video: dos paredes que aprietan el espacio jugable). Telegraph 2 / active 4
+## / fade 2. La velocidad de cierre es BEAT-DERIVADA y el pasillo NUNCA baja
+## de min_gap (fairness dura: siempre hay un bolsillo cómodo; el nivel
+## aprieta pero no mata). Parametrizado por seed de ancla.
+func _squeeze_corridor(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: int = -1) -> Dictionary:
+	const TELEGRAPH_BEATS: int = 2
+	const ACTIVE_BEATS: int = 4
+	const FADE_BEATS: int = 2
+	var vr := RandomNumberGenerator.new()
+	vr.seed = 419 ^ spawn_seed if spawn_seed >= 0 else 419 ^ beat_idx
+	# Pasillo inicial: 70..85% del ancho (aprieta de ahí, no de la nada).
+	var start_frac: float = vr.randf_range(0.70, 0.85)
+	# Bolsillo mínimo: 28..38% del ancho — SIEMPRE transitable.
+	var min_frac: float = vr.randf_range(0.28, 0.38)
+	if params.has("start_frac"):
+		start_frac = clampf(float(params["start_frac"]), 0.4, 0.95)
+	if params.has("min_frac"):
+		min_frac = clampf(float(params["min_frac"]), 0.2, 0.6)
+	# El centro del pasillo se desplaza un poco (no siempre al medio): el
+	# jugador tiene que elegir dónde quedarse.
+	var drift: float = vr.randf_range(-0.12, 0.12)
+	return {
+		"type": "squeeze_corridor", "pos": Vector2.ZERO, "vel": Vector2.ZERO,
+		"play_w": play_size.x,
+		"start_gap": play_size.x * start_frac,
+		"min_gap": play_size.x * min_frac,
+		"gap_center": play_size.x * (0.5 + drift),
+		"gap_drift": play_size.x * drift,
+		"band_half": 46.0,          # halfwidth visual de cada pared
+		"close_beats": ACTIVE_BEATS,
 		"state": "telegraph", "state_time": 0.0,
 		"telegraph_beats": TELEGRAPH_BEATS, "active_beats": ACTIVE_BEATS, "fade_beats": FADE_BEATS,
 		"is_hazard": false, "hit_health_bonus": -18.0,

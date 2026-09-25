@@ -529,6 +529,50 @@ func _draw_one_target(t: Dictionary) -> void:
 					chev + gdir * 12.0, chev + gdir.rotated(2.5) * -9.0, chev + gdir.rotated(-2.5) * -9.0]),
 					Color(0.4, 0.95, 1.0, 0.35 * alpha_d))
 		return
+	if ttype_d == "squeeze_corridor":
+		# JSAB corredor bilateral: dos paredes squeezing el espacio. Telegraph =
+		# contornos tenues marcando DÓNDE va a apretar (leer el bolsillo antes);
+		# active = paredes hot-pink macizas con borde neón y chevrons apuntando
+		# al pasillo; fade decae.
+		var ps_s: Vector2 = play_size()
+		var edges_s: Vector2 = SqueezeLogic.band_inner_edges(t)
+		var half_s: float = float(t.get("band_half", 46.0))
+		var st_s2: String = str(t.get("state", "telegraph"))
+		var alpha_s2: float = 1.0
+		if st_s2 == "fade":
+			alpha_s2 = clampf(1.0 - float(t.get("state_time", 0.0)) / maxf(float(t.get("fade_beats", 2)) * beat_interval, 0.001), 0.0, 1.0)
+		var pulse_s2: float = maxf(0.0, 1.0 - fposmod(float(t.get("state_time", 0.0)) / maxf(beat_interval, 0.001), 1.0))
+		for side_i in range(2):
+			var inner_x: float = edges_s.x if side_i == 0 else edges_s.y
+			var outer_x: float = 0.0 if side_i == 0 else ps_s.x
+			var r := Rect2(
+				Vector2(outer_x, 0.0) if side_i == 0 else Vector2(inner_x, 0.0),
+				Vector2(inner_x - outer_x, ps_s.y) if side_i == 0 else Vector2(ps_s.x - inner_x, ps_s.y))
+			if st_s2 == "telegraph":
+				# aviso: relleno granate muy tenue + borde interior pulsante
+				draw_rect(r, Color(0.28, 0.05, 0.10, 0.30 * alpha_s2))
+				draw_line(Vector2(inner_x, 0.0), Vector2(inner_x, ps_s.y),
+					Color(0.75, 0.22, 0.3, (0.45 + 0.3 * pulse_s2) * alpha_s2), 2.5)
+			else:
+				draw_rect(r, Color(0.5, 0.05, 0.12, 0.6 * alpha_s2))
+				_neon_line(Vector2(inner_x, 0.0), Vector2(inner_x, ps_s.y), Color(1.0, 0.2, 0.3), 6.0)
+				# franjas internas: la textura hace legible la presión
+				var stripe_sp: float = 74.0
+				var sx: float = outer_x + stripe_sp * 0.5
+				while sx < inner_x:
+					draw_line(Vector2(sx, 0.0), Vector2(sx, ps_s.y), Color(0.2, 0.05, 0.08, 0.4 * alpha_s2), 1.5)
+					sx += stripe_sp
+			# chevrons apuntando al pasillo (le say "aquí adentro")
+			var dir_c: float = 1.0 if side_i == 0 else -1.0
+			for cy_s in range(3):
+				var cyy: float = ps_s.y * (0.3 + 0.2 * float(cy_s))
+				var cxp: float = inner_x + dir_c * 26.0
+				draw_colored_polygon(PackedVector2Array([
+						Vector2(cxp + dir_c * 14.0, cyy),
+						Vector2(cxp - dir_c * 8.0, cyy - 11.0),
+						Vector2(cxp - dir_c * 8.0, cyy + 11.0)]),
+					Color(0.4, 0.95, 1.0, 0.30 * alpha_s2))
+		return
 	if ttype_d == "waveform_wall":
 		# JSAB muro de ONDA: columnas que emergen desde abajo siguiendo el
 		# perfil. Telegraph = columnas tenues que ya insinúan la forma (se lee
@@ -904,6 +948,15 @@ func _update_targets(delta: float) -> void:
 			if str(wf_step["state"]) == "done":
 				to_remove.append(i)
 				continue
+		elif ttype == "squeeze_corridor":
+			# JSAB corredor bilateral: motor puro SqueezeLogic.
+			var sq_step: Dictionary = SqueezeLogic.step(t, delta, beat_interval)
+			t["state"] = sq_step["state"]
+			t["state_time"] = sq_step["state_time"]
+			t["is_hazard"] = sq_step["is_hazard"]
+			if str(sq_step["state"]) == "done":
+				to_remove.append(i)
+				continue
 		elif ttype == "perimeter":
 			# Perimeter balls move toward center
 			t["pos"] += t["vel"] * delta
@@ -973,6 +1026,9 @@ func _update_targets(delta: float) -> void:
 		elif ttype == "waveform_wall":
 			# Muro de onda: colisión del motor puro (perfil por columna).
 			hit = WaveformLogic.hits_player(t, player_pos)
+		elif ttype == "squeeze_corridor":
+			# Corredor bilateral: franja izquierda/derecha (motor puro).
+			hit = SqueezeLogic.hits_player(t, player_pos)
 		elif ttype == "laser_beam":
 			# Line-based: distancia del player a la línea infinita del beam
 			var bdir: Vector2 = (t.get("beam_dir", Vector2.UP) as Vector2).normalized()
