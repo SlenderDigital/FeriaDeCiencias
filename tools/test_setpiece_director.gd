@@ -87,8 +87,10 @@ func _initialize() -> void:
 			break
 
 	# --- Cierre: offset > última fase + 2 => _active_setpiece se limpia ---
+	# (el setpiece del ancla 64 es drop_opener_v1: fase única at=0, cierra en
+	#  offset > 0+2, es decir beat 67 en adelante)
 	var last_at: int = 0
-	var script: Array = controller.get("SETPIECE_SCRIPTS").get("laser_sweep_v1", []) if controller.get("SETPIECE_SCRIPTS") != null else []
+	var script: Array = controller.get("SETPIECE_SCRIPTS").get("drop_opener_v1", []) if controller.get("SETPIECE_SCRIPTS") != null else []
 	for ph in script:
 		last_at = maxi(last_at, int(ph.get("at", 0)))
 	var clear_beat: int = 64 + last_at + 3

@@ -41,6 +41,12 @@ func _initialize() -> void:
 					telegraph_count += 1
 					# fire_time = momento del spawn + duración del telegraph
 					fire_times.append(chart.beat_times[next_beat_idx] + float(s["telegraph_time"]))
+				elif s.get("type", "") == "laser_sweep":
+					# T3: el barrido reemplaza al láser puntual en build. Su
+					# ventana active abre a telegraph_beats del spawn — mismo
+					# contrato: cae en la grilla de beats.
+					telegraph_count += 1
+					fire_times.append(chart.beat_times[next_beat_idx] + float(s.get("telegraph_beats", 2)) * beat_len)
 				elif s.get("type", "") == "stripe_wall":
 					controller.wall_active = true
 					wall_until_beat = next_beat_idx + 5
@@ -48,7 +54,7 @@ func _initialize() -> void:
 		t_time += dt
 
 	if telegraph_count == 0:
-		fails.append("no se generó ningún telegraph — el E2E esperaría >0")
+		fails.append("ni telegraphs ni sweeps — el E2E esperaría >0")
 	# Cotejar cada fire_time contra la grilla de beats del chart: debe caer a
 	# <= 1 frame (dt) de un beat. fire_time = beat_k + 3*beat_len → es el beat
 	# k+3 de la grilla (la grilla es uniforme: t = i*beat_len desde 0).
@@ -59,7 +65,7 @@ func _initialize() -> void:
 			fails.append("fire_time %.4fs no está en la grilla (off=%.4fs > frame)" % [ft, off])
 
 	if fails.is_empty():
-		print("[LASER-BEAT] PASS — %d telegraphs, todos disparan sobre un beat del chart" % telegraph_count)
+		print("[LASER-BEAT] PASS — %d avisos (telegraph+sweep), todos activan sobre un beat del chart" % telegraph_count)
 		quit(0)
 	else:
 		for f in fails:

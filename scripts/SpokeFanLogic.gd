@@ -55,21 +55,27 @@ static func gap_start_angle(fan: Dictionary) -> float:
 
 ## Colisión jugador-vs-rayo. Solo en active; dentro del radio; ángulo del
 ## jugador sobre un rayo sólido (ancho del rayo ~26px => halfwidth angular).
+## El OJO del hub (dist < EYE_RADIUS) es seguro SIEMPRE — y es GRANDE (~90px):
+## cerca del hub los rayos son angularmente enormes (atan2(13, 34) ~ 21°),
+## así que un ojo chico no puede ser seguro; JSAB usa un ojo generoso.
+const EYE_RADIUS: float = 90.0
 static func hits_player(fan: Dictionary, player: Vector2) -> bool:
 	if str(fan.get("state", "")) != "active":
 		return false
 	var hub: Vector2 = fan["pos"]
 	var d: Vector2 = player - hub
 	var dist: float = d.length()
-	if dist > float(fan["radius"]) or dist < 24.0:
-		return false   # dentro del hub es seguro (el ojo del huracán)
+	if dist > float(fan["radius"]) or dist < EYE_RADIUS:
+		return false   # dentro del ojo del hub es seguro (el ojo del huracán)
 	var ang: float = atan2(d.y, d.x)
 	var n: int = int(fan.get("spokes", 8))
 	var gap: int = int(fan.get("gap_spokes", 2))
 	var gap_first: int = int(fan.get("gap_first", 0))
 	var rot: float = rotation_at(fan)
-	# Ancho angular del rayo: ~13px de halfwidth en la distancia del jugador.
-	var spoke_half: float = atan2(13.0, maxf(dist, 30.0))
+	# Ancho angular del rayo: ~13px de halfwidth, medido en el PUNTO más
+	# cercano del jugador al rayo (borde interno del rayo a EYE_RADIUS +
+	# halfwidth): el ojo (dist < 34) es seguro de verdad.
+	var spoke_half: float = atan2(13.0, maxf(dist, EYE_RADIUS + 13.0))
 	var spoke_arc: float = TAU / float(n)
 	# El hueco ocupa [gap_first, gap_first+gap) mod n. Un rayo k es sólido
 	# si k no cae en el arco del hueco.

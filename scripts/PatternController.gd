@@ -35,6 +35,9 @@ const SETPIECE_SCRIPTS: Dictionary = {
 		{"at": 0, "emit": "laser_telegraph", "params": {}},
 		{"at": 3, "emit": "", "params": {"marker": "beam_active"}},
 	],
+	"sweep_build_v1": [
+		{"at": 0, "emit": "laser_sweep", "params": {}},
+	],
 	## T2: el drop abre con el abanico de rayos (la "ancla" JSAB) y el láser
 	## llega después: dos anclas en la misma frase, lectura escalonada.
 	"drop_opener_v1": [
@@ -47,7 +50,7 @@ const SETPIECE_SCRIPTS: Dictionary = {
 }
 ## Qué script toca por sección (la energía manda; intro/outro no agendan).
 const SETPIECE_BY_SECTION: Dictionary = {
-	"build": "laser_sweep_v1",
+	"build": "sweep_build_v1",
 	"drop": "drop_opener_v1",
 	"drop2": "drop_opener_v1",
 	"breakdown": "closing_perimeter_v1",
@@ -162,6 +165,10 @@ func _first_light_pattern(beat_idx: int, t: float = -1.0) -> String:
 	if sname.is_empty():
 		sname = _section_name_of_bar(bar)
 	var in_sec: int = bar - _section_start_bar(bar)
+	# SETPIECE MANDA: mientras una coreografía vive, los muros del pool se
+	# saltan — dos anclas a la vez no se leen (el bot se comió 4 muros en el
+	# drop mientras esquivaba el abanico). El setpiece ES el momento.
+	var setpiece_live: bool = not _active_setpiece.is_empty()
 	match sname:
 		"intro":
 			return ["saw", "saw_pair"][in_sec % 2]
@@ -170,14 +177,18 @@ func _first_light_pattern(beat_idx: int, t: float = -1.0) -> String:
 			return build[in_sec % build.size()]
 		"drop", "drop2":
 			# El drop ENSEÑA el muro; el clímax agrega homing. El primer
-			# compás de la sección abre con muro (lección clara de entrada).
+			# compás de la sección abre con muro (lección clara de entrada),
+			# salvo que la coreografía del setpiece esté en curso.
 			var drop := ["stripe_wall", "saw_pair", "saw", "saw_weave", "saw_pair"]
-			if in_sec == 0:
+			if in_sec == 0 and not setpiece_live:
 				return "stripe_wall"
 			var seq: Array = drop.duplicate()
 			if sname == "drop2" and in_sec % 4 == 1:
 				seq[in_sec % seq.size()] = "homing"
-			return seq[in_sec % seq.size()]
+			var pick: String = str(seq[in_sec % seq.size()])
+			if setpiece_live and (pick == "stripe_wall" or pick == "hazard_wall"):
+				pick = "saw_pair"   # variación viva sin apilar un segundo ancla
+			return pick
 		"breakdown":
 			var bd := ["saw", "saw_pair", "saw", "saw_weave"]
 			return bd[in_sec % bd.size()]
@@ -211,6 +222,10 @@ func spawns_at_downbeat(t: float, beat_idx: int, base_color: Color) -> Array[Dic
 	# Las secciones tranquilas no lanzan muros: la energía manda la dificultad
 	var sec := _current_section(t)
 	if not sec.is_empty() and float(sec.get("energy", 0.5)) < 0.45:
+		return []
+	# JSAB: mientras un SETPIECE vive, ES el momento — los muros grandes no
+	# se apilan encima (el campo se limpia alrededor de las anclas).
+	if not _active_setpiece.is_empty():
 		return []
 	return _build_pattern("stripe_wall", t, Color(1, 0.2, 0.3, 1), beat_idx)
 
@@ -260,8 +275,10 @@ func _director_pump(t: float, beat_idx: int, base_color: Color) -> Array[Diction
 	if not _active_setpiece.is_empty():
 		out.append_array(_emit_setpiece_phases(t, beat_idx, base_color))
 	# 2) Agenda: phrase beat de sección con energía >= 0.5, sin setpiece
-	#    activo, y fase 0 venciendo HOY (el ancla es este mismo beat).
-	if beat_idx % 16 == 0 and _active_setpiece.is_empty():
+	#    activo, y SIN MURO en pantalla (entrada limpia: JSAB nunca abre su
+	#    ancla sobre un mulo que barre — el jugador lee el aviso, no pelea
+	#    dos cosas a la vez). Fase 0 venciendo HOY (el ancla es este beat).
+	if beat_idx % 16 == 0 and _active_setpiece.is_empty() and not wall_active:
 		var sec := _current_section(t)
 		if not sec.is_empty() and float(sec.get("energy", 0.5)) >= 0.5:
 			var script_key: String = str(SETPIECE_BY_SECTION.get(str(sec.get("name", "")), ""))
@@ -460,6 +477,8 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0, p
 			out.append(_laser_telegraph(x))
 		"spoke_fan":
 			out.append(_spoke_fan(t, beat_idx, params, spawn_seed))
+		"laser_sweep":
+			out.append(_laser_sweep(t, beat_idx, params, spawn_seed))
 		"homing":
 			var x = _rng.randf_range(play_size.x * 0.15, play_size.x * 0.85)
 			out.append(_homing(x, DANGER_RED))
@@ -558,6 +577,44 @@ func _laser_telegraph(x: float) -> Dictionary:
 		"radius": 12, "color": Color(1, 0.8, 0, 1), "is_hazard": false,
 		"type": "laser_telegraph", "telegraph_time": telegraph_beats, "telegraph_total": telegraph_beats,
 		"fired": false, "beam_dir": dir}
+
+## JSAB T3 — Láser que BARRE la pantalla (arquetipo 90s del video): hub en un
+## borde/corner, haz que rota de ang_start a ang_end durante la ventana
+## active. Telegraph 2 beats (muestra el ARCO completo a recorrer), active 4
+## beats, fade 2. Fairness: <= 90°/beat (test-asserted), ancho de haz ~12px.
+## Parametrizado como el spoke_fan: hub, ángulos y sentido por seed de ancla.
+func _laser_sweep(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: int = -1) -> Dictionary:
+	const TELEGRAPH_BEATS: int = 2
+	const ACTIVE_BEATS: int = 4
+	const FADE_BEATS: int = 2
+	var vr := RandomNumberGenerator.new()
+	vr.seed = 977 ^ spawn_seed if spawn_seed >= 0 else 977 ^ beat_idx
+	# Hub en un lateral (izq/der alternado), altura banda central
+	var side: float = -1.0 if vr.randf() < 0.5 else 1.0
+	if params.has("side"):
+		side = float(params["side"])
+	var hub: Vector2 = Vector2(
+		-60.0 if side < 0.0 else play_size.x + 60.0,
+		play_size.y * vr.randf_range(0.25, 0.6))
+	# Barrido: 60..90° total, de punta a punta de la pantalla, sentido
+	# determinista por seed. ang_base apunta hacia adentro.
+	var sweep_deg: float = vr.randf_range(60.0, 90.0)
+	var ang_base: float = 0.0 if side < 0.0 else PI   # hacia adentro
+	var spin: float = 1.0 if vr.randf() < 0.5 else -1.0
+	if params.has("spin"):
+		spin = float(params["spin"])
+	var ang_start: float = ang_base - spin * deg_to_rad(sweep_deg) * 0.5
+	var ang_end: float = ang_base + spin * deg_to_rad(sweep_deg) * 0.5
+	return {
+		"type": "laser_sweep", "pos": hub, "vel": Vector2.ZERO,
+		"radius": 12.0, "beam_len": play_size.x * 1.35,
+		"ang_start": ang_start, "ang_end": ang_end,
+		"sweep_deg_per_beat": sweep_deg / float(ACTIVE_BEATS),
+		"state": "telegraph", "state_time": 0.0,
+		"telegraph_beats": TELEGRAPH_BEATS, "active_beats": ACTIVE_BEATS, "fade_beats": FADE_BEATS,
+		"is_hazard": false, "hit_health_bonus": -20.0,
+		"color": DANGER_RED, "setpiece_phase": true, "beat_len": beat_len,
+	}
 
 func _homing(x: float, c: Color) -> Dictionary:
 	# Proyectil teledirigido: persigue al jugador (Gameplay maneja el chase).

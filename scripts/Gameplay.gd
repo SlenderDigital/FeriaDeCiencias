@@ -529,6 +529,41 @@ func _draw_one_target(t: Dictionary) -> void:
 					chev + gdir * 12.0, chev + gdir.rotated(2.5) * -9.0, chev + gdir.rotated(-2.5) * -9.0]),
 					Color(0.4, 0.95, 1.0, 0.35 * alpha_d))
 		return
+	if ttype_d == "laser_sweep":
+		# JSAB láser que barre: telegraph = ARCO completo del recorrido con
+		# haz fantasma en ang_start (el jugador lee HACIA dónde viene); active
+		# = haz rosa HDR barriendo con estela en el arco; fade decae.
+		var hub_s: Vector2 = t["pos"]
+		var a0: float = float(t.get("ang_start", 0.0))
+		var a1: float = float(t.get("ang_end", 0.0))
+		var blen: float = float(t.get("beam_len", 1700.0))
+		var st_s: String = str(t.get("state", "telegraph"))
+		var alpha_s: float = 1.0
+		if st_s == "fade":
+			alpha_s = clampf(1.0 - float(t.get("state_time", 0.0)) / maxf(float(t.get("fade_beats", 2)) * beat_interval, 0.001), 0.0, 1.0)
+		var pulse_s: float = maxf(0.0, 1.0 - fposmod(float(t.get("state_time", 0.0)) / maxf(beat_interval, 0.001), 1.0))
+		# Arco del recorrido (siempre visible mientras vive)
+		var arc_from: float = minf(a0, a1)
+		var arc_to: float = maxf(a0, a1)
+		var arc_col: Color = Color(0.55, 0.12, 0.2, (0.25 + 0.15 * pulse_s) * alpha_s)
+		if st_s == "telegraph":
+			arc_col = Color(0.55, 0.12, 0.2, (0.3 + 0.25 * pulse_s) * alpha_s)
+		draw_arc(hub_s, 46.0, arc_from, arc_to, 28, arc_col, 2.5)
+		if st_s == "telegraph":
+			# haz fantasma en ang_start: por dónde ENTRARÁ
+			var ghost := Vector2.from_angle(a0)
+			draw_line(hub_s, hub_s + ghost * blen, Color(0.75, 0.2, 0.28, (0.3 + 0.2 * pulse_s) * alpha_s), 3.0)
+			var tip_g: Vector2 = hub_s + ghost * blen
+			draw_circle(tip_g, 6.0, Color(0.8, 0.25, 0.3, 0.6 * alpha_s))
+		else:
+			# haz activo barriendo (easeInOut — arranca y frena en el beat)
+			var bdir_s := Vector2.from_angle(SweepLogic.beam_angle(t))
+			_neon_line(hub_s, hub_s + bdir_s * blen, Color(1.0, 0.2, 0.3), 8.0 * (0.85 + 0.15 * pulse_s))
+			draw_line(hub_s, hub_s + bdir_s * blen, Color(2.2, 0.5, 0.6, 0.95 * alpha_s), 3.0)
+			# hub con núcleo blanco (impacto)
+			_neon_arc(hub_s, 20.0, Color(1.0, 0.2, 0.3, 0.9 * alpha_s), 3.0)
+			draw_circle(hub_s, 7.0, Color(2.4, 2.4, 2.4, 0.85 * alpha_s))
+		return
 	if ttype_d == "laser_telegraph":
 		# Aviso de laser: IMPOSIBLE de ignorar. Línea de peligro que
 		# parpadea cada vez más rápido + anillos de alarma en el ancla.
@@ -818,6 +853,15 @@ func _update_targets(delta: float) -> void:
 			if str(stepped["state"]) == "done":
 				to_remove.append(i)
 				continue
+		elif ttype == "laser_sweep":
+			# JSAB láser que barre: motor puro SweepLogic.
+			var sw_step: Dictionary = SweepLogic.step(t, delta, beat_interval)
+			t["state"] = sw_step["state"]
+			t["state_time"] = sw_step["state_time"]
+			t["is_hazard"] = sw_step["is_hazard"]
+			if str(sw_step["state"]) == "done":
+				to_remove.append(i)
+				continue
 		elif ttype == "perimeter":
 			# Perimeter balls move toward center
 			t["pos"] += t["vel"] * delta
@@ -881,6 +925,9 @@ func _update_targets(delta: float) -> void:
 		elif ttype == "spoke_fan":
 			# Abanico de rayos: colisión polar vía la lógica pura (hueco seguro).
 			hit = SpokeFanLogic.hits_player(t, player_pos)
+		elif ttype == "laser_sweep":
+			# Láser que barre: colisión del motor puro.
+			hit = SweepLogic.hits_player(t, player_pos)
 		elif ttype == "laser_beam":
 			# Line-based: distancia del player a la línea infinita del beam
 			var bdir: Vector2 = (t.get("beam_dir", Vector2.UP) as Vector2).normalized()
