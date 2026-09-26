@@ -645,7 +645,7 @@ func _laser_sweep(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: 
 		"state": "telegraph", "state_time": 0.0,
 		"telegraph_beats": TELEGRAPH_BEATS, "active_beats": ACTIVE_BEATS, "fade_beats": FADE_BEATS,
 		"is_hazard": false, "hit_health_bonus": -20.0,
-		"color": DANGER_RED, "setpiece_phase": true, "beat_len": beat_len,
+		"color": DANGER_RED, "setpiece_phase": true, "just_activated": true, "beat_len": beat_len,
 	}
 
 ## JSAB T4 — Muro de ONDA que sube desde abajo (arquetipo 45s/1350s del
@@ -683,7 +683,7 @@ func _waveform_wall(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed
 		"state": "telegraph", "state_time": 0.0,
 		"telegraph_beats": TELEGRAPH_BEATS, "active_beats": ACTIVE_BEATS, "fade_beats": FADE_BEATS,
 		"is_hazard": false, "hit_health_bonus": -18.0,
-		"color": DANGER_RED, "setpiece_phase": true, "beat_len": beat_len,
+		"color": DANGER_RED, "setpiece_phase": true, "just_activated": true, "beat_len": beat_len,
 	}
 
 ## JSAB T5 — CORREDOR que se cierra desde los costados (arquetipo 225s del
@@ -720,7 +720,7 @@ func _squeeze_corridor(t: float, beat_idx: int, params: Dictionary = {}, spawn_s
 		"state": "telegraph", "state_time": 0.0,
 		"telegraph_beats": TELEGRAPH_BEATS, "active_beats": ACTIVE_BEATS, "fade_beats": FADE_BEATS,
 		"is_hazard": false, "hit_health_bonus": -18.0,
-		"color": DANGER_RED, "setpiece_phase": true, "beat_len": beat_len,
+		"color": DANGER_RED, "setpiece_phase": true, "just_activated": true, "beat_len": beat_len,
 	}
 
 ## JSAB T6 — ANILLOS que se expanden desde el hub con un hueco rotante
@@ -762,7 +762,7 @@ func _pulse_rings(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: 
 		"state": "telegraph", "state_time": 0.0,
 		"telegraph_beats": TELEGRAPH_BEATS, "active_beats": ACTIVE_BEATS, "fade_beats": FADE_BEATS,
 		"is_hazard": false, "hit_health_bonus": -18.0,
-		"color": DANGER_RED, "setpiece_phase": true, "beat_len": beat_len,
+		"color": DANGER_RED, "setpiece_phase": true, "just_activated": true, "beat_len": beat_len,
 	}
 
 ## JSAB T7 — MINI-JAB: el latido entre anclas. Un anillo expansivo mínimo o
@@ -781,7 +781,7 @@ func _mini_jab(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: int
 		# Anillo que se cierra rápido: 1 beat de aviso + 2 activo + 1 fade.
 		return {
 			"type": "mini_ring", "pos": hub, "vel": Vector2.ZERO,
-			"mini_jab": true,
+			"mini_jab": true, "just_activated": true,
 			"target_radius": maxf(float(play_size.y) * 0.42, 260.0),
 			"gap_angle": deg_to_rad(vr.randf_range(70.0, 110.0)),
 			"gap_center": vr.randf_range(0.0, TAU),
@@ -794,7 +794,7 @@ func _mini_jab(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: int
 	# Abanico de 3 rayos: un latido, hueco amplio, gira poco.
 	return {
 		"type": "mini_fan", "pos": hub, "vel": Vector2.ZERO,
-		"mini_jab": true,
+		"mini_jab": true, "just_activated": true,
 		"spokes": 3, "gap_spokes": 1, "gap_first": vr.randi_range(0, 2),
 		"radius": maxf(float(play_size.y) * 0.40, 240.0),
 		"rot_speed": vr.randf_range(-0.6, 0.6),
@@ -863,7 +863,7 @@ func _spoke_fan(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: in
 		"state": "telegraph", "state_time": 0.0,
 		"telegraph_beats": TELEGRAPH_BEATS, "active_beats": ACTIVE_BEATS, "fade_beats": FADE_BEATS,
 		"is_hazard": false, "hit_health_bonus": -20.0,
-		"color": DANGER_RED, "setpiece_phase": true,
+		"color": DANGER_RED, "setpiece_phase": true, "just_activated": true,
 		"gap_first": gap_first, "beat_len": beat_len,
 	}
 

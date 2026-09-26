@@ -54,6 +54,11 @@ const SHAKE_AMP: float = 12.0
 var _damage_flash: float = 0.0
 var _shake_time: float = 0.0
 var _damage_overlay: ColorRect
+# T8 IMPACTO: el golpe se siente. Trauma de cámara + flash blanco, ambos en
+# ImpactFeel (motor puro, el mismo que testea tools/test_impact.gd). El
+# hit-stop congela la ESCENA, nunca el reloj de audio (FREEZES_MUSIC_CLOCK).
+var _impact: Dictionary = {}
+var _hitstop_remaining: float = 0.0
 var _shield_was_ready: bool = true   # para sonido de "listo" al recargarse
 var _fist_was_closed: bool = false   # edge-trigger: un escudo por puno (requiere abrir para re-armar)
 var health: float = 100.0
@@ -292,7 +297,14 @@ func _process(delta: float) -> void:
 		song_time = music.get_playback_position()
 	else:
 		song_time += delta
-	
+
+	# T8 HIT-STOP: a partir de acá, el mundo se congela con delta=0 durante
+	# 50ms. song_time ya se leyó del AUDIO (arriba), así que la canción sigue
+	# sonando y el reloj del nivel no se mueve: el freeze es 100% visual y
+	# no puede desincronizar el chart.
+	if _hitstop_remaining > 0.0:
+		delta = 0.0
+
 	# El fondo late con la canción REAL: sin metrónomo propio ni doble golpe.
 	if bg_control and bg_control.has_method("set_song_clock"):
 		bg_control.set_song_clock(song_time, beat_interval)
@@ -968,6 +980,11 @@ func _update_shield(delta: float) -> void:
 		_damage_flash = maxf(_damage_flash - delta * 3.5, 0.0)
 	if _shake_time > 0.0:
 		_shake_time = maxf(_shake_time - delta, 0.0)
+	# T8: impacto (trauma + flash) decae en 2 beats; el hit-stop se consume.
+	if not _impact.is_empty():
+		ImpactFeel.step(_impact, delta, beat_interval)
+	if _hitstop_remaining > 0.0:
+		_hitstop_remaining = maxf(_hitstop_remaining - delta, 0.0)
 	if _damage_overlay:
 		_damage_overlay.color.a = _damage_flash * 0.35
 
@@ -1055,6 +1072,7 @@ func _update_targets(delta: float) -> void:
 		elif ttype == "mini_ring":
 			# T7 mini-jab: anillo de un compás. Mismo motor que los anillos
 			# grandes (el jab ES un anillo, con otro tempo).
+			var mj_prev: String = str(t.get("state", "telegraph"))
 			t["state_time"] = float(t.get("state_time", 0.0)) + delta
 			var mj_st: String = str(t.get("state", "telegraph"))
 			var mj_t: float = float(t["state_time"])
@@ -1068,6 +1086,9 @@ func _update_targets(delta: float) -> void:
 				t["is_hazard"] = false
 			elif mj_st == "fade" and mj_t >= float(t.get("fade_beats", 1)) * beat_interval:
 				t["state"] = "done"
+			# T8: el impacto es al ACTIVAR (telegraph -> active)
+			if mj_prev == "telegraph" and str(t["state"]) == "active":
+				_impact_on_activation(t)
 			if str(t["state"]) == "done":
 				to_remove.append(i)
 				continue
@@ -1134,6 +1155,12 @@ func _update_targets(delta: float) -> void:
 		else:
 			# Standard movement
 			t["pos"] += t["vel"] * delta
+		# T8 IMPACTO: un setpiece/jab que ACABÓ de activarse (telegraph ->
+		# active) es el momento que se siente: trauma + flash. Se detecta acá,
+		# una sola vez para todos los tipos (los Logic ya resolvieron su state).
+		if t.get("just_activated", false) and str(t.get("state", "")) == "active" and not bool(t.get("_impact_done", false)):
+			t["_impact_done"] = true
+			_impact_on_activation(t)
 		
 		# Telegraph inofensivo: es solo el aviso; el daño lo hace el beam.
 		if ttype == "laser_telegraph":
@@ -1219,11 +1246,32 @@ func _on_hazard_hit() -> void:
 	_hit_iframes = HIT_IFRAMES_EASY if easy_mode else HIT_IFRAMES
 	_damage_flash = 1.0
 	_shake_time = SHAKE_TIME
+	# T8: hit-stop — la escena congela 50ms, la CANCIÓN SIGUE (por eso el
+	# reloj del nivel no se desincroniza). Nunca se apila y nunca durante un
+	# telegraph (sólo con iframes, o sea contra un golpe real).
+	var hs: Dictionary = ImpactFeel.request_hitstop(0.05, true, _hitstop_remaining)
+	_hitstop_remaining = float(hs["remaining"])
 	health -= 18.0
 	if SoundManager: SoundManager.play_back()
-	
-	if health <= 0:
+
+	if health <= 0.0:
 		_trigger_game_over()
+
+## T8: un setpiece/jab se activó. Trauma de cámara + flash blanco, escalados
+## por la energía de la sección (un golpe en el breakdown no se siente como
+## uno en el drop) y por el tipo (ancla vs punctuación de jab).
+func _impact_on_activation(t: Dictionary) -> void:
+	var sec_energy: float = 0.6
+	if controller and controller.has_method("_current_section"):
+		var sec: Dictionary = controller._current_section(song_time)
+		if not sec.is_empty():
+			sec_energy = float(sec.get("energy", 0.6))
+	var is_anchor: bool = bool(t.get("setpiece_phase", false))
+	var kind_scale: float = 1.0 if is_anchor else 0.45
+	_impact = ImpactFeel.new_impact(1.0, sec_energy, kind_scale)
+	# el temblor de daño (rojo) y el de impacto (blanco) se suman: el golpe
+	# feels distinto al de un setpiece activándose.
+	_shake_time = maxf(_shake_time, ImpactFeel.DECAY_BEATS * beat_interval)
 
 func _health_color() -> Color:
 	## Color de vida compartido: lo usan el anillo de la nave y (antes) la
@@ -1306,11 +1354,24 @@ func _on_btn_main_menu_pressed() -> void:
 		get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
 
 func _draw() -> void:
-	# Vibracion de pantalla (juice): offset aleatorio decreciente mientras
-	# _shake_time corre. Afecta TODO el mundo dibujado, no el HUD.
+	# T8: el trauma de impacto se SUMA al temblor de daño (un solo
+	# draw_set_transform: el segundo sobrescribiría al primero). El temblor
+	# de impacto es determinista (dos senos), el de daño aleatorio.
+	var world_offset: Vector2 = Vector2.ZERO
 	if _shake_time > 0.0:
 		var sk: float = pow(_shake_time / SHAKE_TIME, 2.0) * SHAKE_AMP
-		draw_set_transform(Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * sk, 0.0, Vector2.ONE)
+		world_offset += Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * sk
+	if not _impact.is_empty() and float(_impact.get("trauma", 0.0)) > 0.001:
+		world_offset += ImpactFeel.shake_offset(_impact, 26.0)
+	if world_offset != Vector2.ZERO:
+		draw_set_transform(world_offset, 0.0, Vector2.ONE)
+	# T8 FLASH BLANCO de impacto: cubre TODO, sin temblor (el blanco es la
+	# luz, no el golpe). Sólo cuando un setpiece/jab se activa; decae antes
+	# que el trauma y dura 2 beats como máximo.
+	var impact_flash: float = float(_impact.get("flash", 0.0)) if not _impact.is_empty() else 0.0
+	if impact_flash > 0.002:
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		draw_rect(Rect2(Vector2.ZERO, play_size()), Color(1.0, 1.0, 1.0, impact_flash * 0.22))
 	# Pulso visual sincronizado con la música: flash de kick en cada beat,
 	# anillo expansivo en los hits de snare (beats 2 y 4 del compás).
 	# T5: la INTENSIDAD escala con la energía de la sección — el drop se VE
