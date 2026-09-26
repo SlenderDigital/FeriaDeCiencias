@@ -578,37 +578,56 @@ func _draw_one_target(t: Dictionary) -> void:
 		if st_d == "fade":
 			alpha_d = clampf(1.0 - float(t.get("state_time", 0.0)) / maxf(float(t.get("fade_beats", 2)) * beat_interval, 0.001), 0.0, 1.0)
 		var pulse_d: float = maxf(0.0, 1.0 - fposmod(float(t.get("state_time", 0.0)) / maxf(beat_interval, 0.001), 1.0))
-		# T10 — CUERPO DEL ROTOR. space-bunny, 4a pasada: "the gap is a hole
-		# in the render, not a shape the player can see". Un hueco que sólo se
-		# define como AUSENCIA de rojo es indistinguible de "aún no
-		# aparecieron rayos". Ahora el rotor tiene cuerpo: un anillo
-		# translúcido que marca el TERRITORIO letal, con el SECTOR SEGURO
-		# recortado y teñido en el único color frío de la gramática (cian) y
-		# sus dos radios de borde como marcadores duros. El pasillo se ve
-		# porque está DIBUJADO, no porque falta algo.
+		# T10 — CUERPO DEL ROTOR. space-bunny, 4a/5a pasada: "the gap is a hole
+		# in the render" y luego "the annulus is the same maroon as the beams, so
+		# there is zero figure/ground between the lethal container and the lethal
+		# content". Ahora el anillo tiene ARO (rim) y va un paso hacia neutral:
+		# el rojo se reserva para los RAYOS, y el contenedor es vino desaturado
+		# con borde visible, para que los rayos se lean como contenido DENTRO
+		# de algo. El sector seguro conserva el cian (único color frío del set).
 		var sector_from: float = rot_d + TAU * float(gap_first_d) / float(n_sp)
 		var sector_to: float = sector_from + TAU * float(gap_sp) / float(n_sp)
-		var body_col := Color(0.45, 0.05, 0.12, 0.20 if st_d != "telegraph" else 0.10)
-		var safe_col := Color(0.30, 0.92, 1.0, 0.13 if st_d != "telegraph" else 0.09)
+		var body_col := Color(0.20, 0.08, 0.14, 0.26 if st_d != "telegraph" else 0.14)
+		var rim_col := Color(0.55, 0.30, 0.42, 0.45 if st_d != "telegraph" else 0.28)
+		var safe_col := Color(0.30, 0.92, 1.0, 0.20 if st_d != "telegraph" else 0.14)
 		# territories: dos polígonos anulares (sector lethal + sector seguro)
 		var lethal_pts := PackedVector2Array()
 		var safe_pts := PackedVector2Array()
 		var seg: int = 26
+		# el rotor se dibuja acotado a la arena (min con el radio pedido): el
+		# disco entero cruzando el borde se leia como un viñeteado, no como
+		# una maquina (5a pasada).
+		var body_r: float = minf(rad_d, play_size().length() * 0.5)
 		for a_i in range(seg + 1):
 			var aa: float = sector_from + (sector_to - sector_from) * float(a_i) / float(seg)
-			safe_pts.append(hub_d + Vector2.from_angle(aa) * rad_d)
+			safe_pts.append(hub_d + Vector2.from_angle(aa) * body_r)
 			var ab: float = sector_to + (sector_from + TAU - sector_to) * float(a_i) / float(seg)
-			lethal_pts.append(hub_d + Vector2.from_angle(ab) * rad_d)
+			lethal_pts.append(hub_d + Vector2.from_angle(ab) * body_r)
 		lethal_pts.append(hub_d)
 		safe_pts.append(hub_d)
 		draw_colored_polygon(lethal_pts, body_col)
 		draw_colored_polygon(safe_pts, safe_col)
+		# T10: el aro se dibuja hasta el borde de la ventana de juego, no
+		# como un círculo completo que se sale del área (se veía el disco
+		# entero cruzando el borde en 72%). El rotor pertenece a la ARENA.
+		var rim_max: float = body_r
+		draw_arc(hub_d, rim_max, 0.0, TAU, 64, rim_col, 3.0)
 		# los dos radios del sector SEGURO como marcadores duros
 		for b_i in range(2):
 			var b_ang: float = sector_from if b_i == 0 else sector_to
 			var b_dir := Vector2.from_angle(b_ang)
-			draw_line(hub_d + b_dir * 26.0, hub_d + b_dir * rad_d,
+			var b_tip: Vector2 = hub_d + b_dir * rim_max
+			draw_line(hub_d + b_dir * 26.0, b_tip,
 				Color(0.45, 0.95, 1.0, 0.45 * alpha_d), 3.0)
+			# marcador de flecha en el borde: hace visible DÓNDE termina el
+			# pasillo, que es lo que el jugador tiene que alcanzar
+			var perp := b_dir.rotated(PI * 0.5)
+			draw_colored_polygon(PackedVector2Array([
+					b_tip + b_dir * 11.0, b_tip + perp * 8.0, b_tip - perp * 8.0]),
+				Color(0.45, 0.95, 1.0, 0.55 * alpha_d))
+		# marca interior del borde: un anillo fino claro, para que el rotor se
+		# lea como una MÁQUINA y no como un viñeteado
+		draw_arc(hub_d, rim_max * 0.94, 0.0, TAU, 64, Color(0.45, 0.30, 0.38, 0.18 * alpha_d), 1.5)
 		for k in range(n_sp):
 			var in_gap_d: bool = false
 			for g in range(gap_sp):
