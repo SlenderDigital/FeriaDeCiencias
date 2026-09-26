@@ -1,4 +1,17 @@
 extends Node2D
+
+# T9: PRELOADS EXPLÍCITOS de los motores puros. Godot 4.7 + el editor del MCP
+# pierden la tabla global de class_name al reescanear (3 veces en esta tarea:
+# "Identifier PilotLogic not declared"). Con preload, la dependencia es
+# explícita y ningún re-scan puede romperla.
+const _SpokeFanLogic: GDScript = preload("res://scripts/SpokeFanLogic.gd")
+const _SweepLogic: GDScript = preload("res://scripts/SweepLogic.gd")
+const _WaveformLogic: GDScript = preload("res://scripts/WaveformLogic.gd")
+const _SqueezeLogic: GDScript = preload("res://scripts/SqueezeLogic.gd")
+const _PulseRingsLogic: GDScript = preload("res://scripts/PulseRingsLogic.gd")
+const _ImpactFeel: GDScript = preload("res://scripts/ImpactFeel.gd")
+const _PilotLogic: GDScript = preload("res://scripts/PilotLogic.gd")
+const _PatternLanguage: GDScript = preload("res://scripts/PatternLanguage.gd")
 ## Gameplay — Rhythm Action Gameplay Scene for Abstract Pulse
 ## Runs the procedural MVP level, handles arrow key movement, spawns algorithmic beats/hazards, tracks health/progress, and manages game loop overlays.
 
@@ -51,6 +64,12 @@ var easy_mode: bool = false
 # Juice de daño: flash rojo de pantalla + vibracion al recibir un golpe.
 const SHAKE_TIME: float = 0.25
 const SHAKE_AMP: float = 12.0
+# Antigüedad máxima de un paquete de landmarks para que la mano siga
+# "guiando": más viejo que esto, el teclado recupera el control.
+const _HAND_FRESH_SEC: float = 0.35
+# T9: velocidad del piloto automático (px/s). Un humano con la mano es más
+# rápido en 有些 tramos; el piloto se limita a lo que una esquiva justa permite.
+const _PILOT_SPEED: float = 520.0
 var _damage_flash: float = 0.0
 var _shake_time: float = 0.0
 var _damage_overlay: ColorRect
@@ -58,7 +77,17 @@ var _damage_overlay: ColorRect
 # ImpactFeel (motor puro, el mismo que testea tools/test_impact.gd). El
 # hit-stop congela la ESCENA, nunca el reloj de audio (FREEZES_MUSIC_CLOCK).
 var _impact: Dictionary = {}
-var _hitstop_remaining: float = 0.0
+# T8 HIT-STOP: se mide contra el RELOJ REAL (no contra delta): si se
+# contara con delta, el propio freeze pondría delta=0 y el contador nunca
+# llegaría a cero — el juego se congelaría para siempre. Un hit contra
+# _hitstop_until (timestamp) no puede hacer eso.
+var _hitstop_until: float = 0.0
+# T9: destello cuando el escudo BLOQUEA un peligro (feedback honesto)
+var _shield_block_flash: float = 0.0
+# T9 AUTOPLAY: el piloto conduce la nave cuando MCP_AUTOPLAY=1, para poder
+# verificar el juego real (grabarlo y evaluarlo) sin jugador humano.
+var _autoplay: bool = false
+var _autoplay_target: Vector2 = Vector2(640, 560)
 var _shield_was_ready: bool = true   # para sonido de "listo" al recargarse
 var _fist_was_closed: bool = false   # edge-trigger: un escudo por puno (requiere abrir para re-armar)
 var health: float = 100.0
@@ -86,6 +115,11 @@ func play_size() -> Vector2:
 	return s
 
 func _ready() -> void:
+	# T9 AUTOPLAY: el piloto conduce (para verificación grabada, no para jugar).
+	# El MCP arranca el juego desde el EDITOR, que no hereda mi shell: por eso
+	# MCP_AUTOPLAY=1 también se puede activar con un archivo bandera.
+	_autoplay = OS.get_environment("MCP_AUTOPLAY") == "1" \
+		or FileAccess.file_exists("/tmp/jsab_autoplay.flag")
 	var seed_val: int = 1337
 	if GameManager:
 		track_data = GameManager.get_current_track()
@@ -126,8 +160,8 @@ func _ready() -> void:
 		if easy_mode:
 			health = 125.0   # un golpe extra de margen en el tutorial
 			print("[Gameplay] easy_mode ON (First Light): hazards x0.85, warn muros 2.5 beats, iframes 2.0s")
-		music.stream = song.render_audio()
 		bpm = chart.bpm
+		music.stream = song.render_audio_cached(seed_val, bpm)
 		total_song_duration = chart.duration
 		beat_interval = 60.0 / bpm
 		music.play()
@@ -260,8 +294,12 @@ func _restart_with_level(index: int) -> void:
 
 func _process(delta: float) -> void:
 	# [VALIDACION] temporal
-	if OS.get_environment("MCP_SHOTS") == "1" and not is_game_over:
+	var shots_on: bool = OS.get_environment("MCP_SHOTS") == "1" \
+		or FileAccess.file_exists("/tmp/jsab_autoplay.flag")
+	if shots_on and not is_game_over:
 		var spt: float = song_time
+		if OS.get_environment("MCP_SHOT_DEBUG") == "1" and fmod(float(Time.get_ticks_msec()), 2000.0) < 20.0:
+			print("[CLOCK] song_time=%.2f playing=%s paused=%s" % [spt, str(music.playing), str(music.stream_paused)])
 		if spt > 8.9 and spt < 9.2 and not get_meta("shot_act2", false):
 			set_meta("shot_act2", true)
 			get_viewport().get_texture().get_image().save_png("/tmp/shot_act2.png")
@@ -270,7 +308,17 @@ func _process(delta: float) -> void:
 			get_viewport().get_texture().get_image().save_png("/tmp/shot_act3.png")
 		# T5: lista genérica "t=name" separada por comas (ej.
 		# MCP_SHOT_LIST="5=intro,30=drop,55=breakdown,80=drop2").
+		# T9: el MCP arranca el juego desde el EDITOR, que no hereda el entorno
+		# de mi shell — por eso la lista también se puede leer de un archivo.
+		# /tmp/jsab_shot_list.txt tiene precedencia si existe.
 		var shot_list: String = OS.get_environment("MCP_SHOT_LIST")
+		if FileAccess.file_exists("/tmp/jsab_shot_list.txt"):
+			var f := FileAccess.open("/tmp/jsab_shot_list.txt", FileAccess.READ)
+			if f:
+				var from_file: String = f.get_as_text().strip_edges()
+				f.close()
+				if not from_file.is_empty():
+					shot_list = from_file
 		if not shot_list.is_empty():
 			for entry in shot_list.split(","):
 				var parts: PackedStringArray = entry.split("=")
@@ -302,8 +350,18 @@ func _process(delta: float) -> void:
 	# 50ms. song_time ya se leyó del AUDIO (arriba), así que la canción sigue
 	# sonando y el reloj del nivel no se mueve: el freeze es 100% visual y
 	# no puede desincronizar el chart.
-	if _hitstop_remaining > 0.0:
+	# El RELOJ REAL (no delta) decide si seguimos congelados — ver la nota
+	# de _hitstop_until: contar con delta nunca terminaría.
+	if Time.get_ticks_msec() / 1000.0 < _hitstop_until:
 		delta = 0.0
+
+	# T9 AUTOPLAY: con MCP_AUTOPLAY=1 el piloto conduce la nave. Es lo que
+	# permite verificar el juego de verdad (grabarlo, mirarlo, evaluarlo con
+	# space-bunny) sin que la partida muera sola al 49%. El piloto elige
+	# puntos validados por tools/test_pilot.gd contra la colisión real.
+	if _autoplay:
+		_autoplay_target = _pilot_desired(delta)
+		player_pos = _PilotLogic.steer_step(player_pos, _autoplay_target, _PILOT_SPEED, delta)
 
 	# El fondo late con la canción REAL: sin metrónomo propio ni doble golpe.
 	if bg_control and bg_control.has_method("set_song_clock"):
@@ -415,7 +473,16 @@ func _notify_spawn(s: Dictionary) -> void:
 
 func _update_player_movement(delta: float) -> void:
 	# Con mano: posicion absoluta de la palma + rotacion pulgar->indice (port de Player.cpp)
-	if HandTrackingClient and HandTrackingClient.has_hand:
+	# ARBITRAJE: la mano manda SOLO si está realmente guiando. Antes la mano
+	# tomaba el control exclusivo apenas HandTrackingClient.has_hand era true,
+	# y con landmarks ruidosos (o una mano a medio cuadro) la nave se iba
+	# mientras el teclado no hacía NADA — el jugador quedaba fuera del juego.
+	# Ahora: si el jugador toca una tecla, el teclado manda; si la mano lleva
+	# un tiempo sin landmarks fresco, el teclado vuelve a estar disponible.
+	var hand_guiding: bool = false
+	if HandTrackingClient:
+		hand_guiding = HandTrackingClient.has_hand and HandTrackingClient.is_fresh(_HAND_FRESH_SEC)
+	if hand_guiding and not _manual_control:
 		var ps: Vector2 = play_size()
 		var target: Vector2 = HandTrackingClient.get_palm_center() * ps
 		var alpha: float = 1.0 - exp(-25.0 * delta)
@@ -505,7 +572,7 @@ func _draw_one_target(t: Dictionary) -> void:
 		var n_sp: int = int(t.get("spokes", 8))
 		var gap_sp: int = int(t.get("gap_spokes", 2))
 		var gap_first_d: int = int(t.get("gap_first", 0))
-		var rot_d: float = SpokeFanLogic.rotation_at(t)
+		var rot_d: float = _SpokeFanLogic.rotation_at(t)
 		var st_d: String = str(t.get("state", "telegraph"))
 		var alpha_d: float = 1.0
 		if st_d == "fade":
@@ -524,7 +591,7 @@ func _draw_one_target(t: Dictionary) -> void:
 			var tip_d: Vector2 = hub_d + dir_d * rad_d
 			if st_d == "telegraph":
 				# granate tenue, pulsa al beat, finito y delgado: AVISO legible
-				var warn_col := Color(0.55, 0.12, 0.2, (0.22 + 0.16 * pulse_d) * alpha_d)
+				var warn_col := Color(0.85, 0.20, 0.30, (0.46 + 0.22 * pulse_d) * alpha_d)
 				draw_line(hub_d + dir_d * 24.0, tip_d, warn_col, 2.5)
 				draw_line(tip_d - dir_d * 14.0, tip_d, Color(0.75, 0.2, 0.28, 0.5 * alpha_d), 5.0)
 			else:
@@ -541,7 +608,7 @@ func _draw_one_target(t: Dictionary) -> void:
 			draw_circle(hub_d, 4.0, Color(1.0, 0.25, 0.35, alpha_d))
 		# Chevrons del hueco: marcan el pasillo seguro en active
 		if st_d != "telegraph":
-			var g_mid: float = SpokeFanLogic.gap_start_angle(t)
+			var g_mid: float = _SpokeFanLogic.gap_start_angle(t)
 			var gdir := Vector2.from_angle(g_mid)
 			var chev := hub_d + gdir * rad_d * 0.55
 			draw_colored_polygon(PackedVector2Array([
@@ -597,7 +664,7 @@ func _draw_one_target(t: Dictionary) -> void:
 		# arcos hot-pink con núcleo blanco; fade decae.
 		var hub_r: Vector2 = t["pos"]
 		var n_r: int = int(t.get("rings", 2))
-		var g_ang_r: float = PulseRingsLogic.gap_angle(t)
+		var g_ang_r: float = _PulseRingsLogic.gap_angle(t)
 		var gap_r: float = float(t.get("gap_angle", 1.0))
 		var st_r: String = str(t.get("state", "telegraph"))
 		var alpha_r: float = 1.0
@@ -605,7 +672,7 @@ func _draw_one_target(t: Dictionary) -> void:
 			alpha_r = clampf(1.0 - float(t.get("state_time", 0.0)) / maxf(float(t.get("fade_beats", 2)) * beat_interval, 0.001), 0.0, 1.0)
 		var pulse_r: float = maxf(0.0, 1.0 - fposmod(float(t.get("state_time", 0.0)) / maxf(beat_interval, 0.001), 1.0))
 		for i_r in range(n_r):
-			var r_r: float = PulseRingsLogic.ring_radius(t, i_r)
+			var r_r: float = _PulseRingsLogic.ring_radius(t, i_r)
 			if r_r < 8.0:
 				continue
 			# el arco va del final del hueco al principio (el hueco queda abierto)
@@ -613,7 +680,7 @@ func _draw_one_target(t: Dictionary) -> void:
 			var a_end: float = g_ang_r - gap_r * 0.5 + TAU
 			if st_r == "telegraph":
 				var ghost_r: float = float(t.get("target_radius", 460.0)) * (1.0 + 0.30 * float(i_r))
-				draw_arc(hub_r, ghost_r, a_start, a_end, 40, Color(0.6, 0.15, 0.22, (0.20 + 0.12 * pulse_r) * alpha_r), 2.0)
+				draw_arc(hub_r, ghost_r, a_start, a_end, 40, Color(0.9, 0.25, 0.34, (0.44 + 0.20 * pulse_r) * alpha_r), 3.0)
 			else:
 				_neon_arc_full(hub_r, r_r, a_start, a_end, Color(1.0, 0.2, 0.3), 6.0 * (0.85 + 0.15 * pulse_r))
 		# hub: núcleo blanco de impacto
@@ -621,7 +688,7 @@ func _draw_one_target(t: Dictionary) -> void:
 			draw_circle(hub_r, 7.0, Color(2.3, 2.3, 2.3, 0.8 * alpha_r))
 		# chevrons en el hueco: el pasillo seguro, marcado
 		if st_r != "telegraph":
-			var chev_r: Vector2 = hub_r + Vector2.from_angle(g_ang_r) * (PulseRingsLogic.ring_radius(t, 0) * 0.5)
+			var chev_r: Vector2 = hub_r + Vector2.from_angle(g_ang_r) * (_PulseRingsLogic.ring_radius(t, 0) * 0.5)
 			var d_r: Vector2 = (chev_r - hub_r).normalized()
 			draw_colored_polygon(PackedVector2Array([
 					chev_r + d_r * 13.0, chev_r + d_r.rotated(2.5) * -9.0, chev_r + d_r.rotated(-2.5) * -9.0]),
@@ -633,7 +700,7 @@ func _draw_one_target(t: Dictionary) -> void:
 		# active = paredes hot-pink macizas con borde neón y chevrons apuntando
 		# al pasillo; fade decae.
 		var ps_s: Vector2 = play_size()
-		var edges_s: Vector2 = SqueezeLogic.band_inner_edges(t)
+		var edges_s: Vector2 = _SqueezeLogic.band_inner_edges(t)
 		var half_s: float = float(t.get("band_half", 46.0))
 		var st_s2: String = str(t.get("state", "telegraph"))
 		var alpha_s2: float = 1.0
@@ -648,7 +715,7 @@ func _draw_one_target(t: Dictionary) -> void:
 				Vector2(inner_x - outer_x, ps_s.y) if side_i == 0 else Vector2(ps_s.x - inner_x, ps_s.y))
 			if st_s2 == "telegraph":
 				# aviso: relleno granate muy tenue + borde interior pulsante
-				draw_rect(r, Color(0.28, 0.05, 0.10, 0.30 * alpha_s2))
+				draw_rect(r, Color(0.45, 0.08, 0.14, 0.46 * alpha_s2))
 				draw_line(Vector2(inner_x, 0.0), Vector2(inner_x, ps_s.y),
 					Color(0.75, 0.22, 0.3, (0.45 + 0.3 * pulse_s2) * alpha_s2), 2.5)
 			else:
@@ -684,14 +751,14 @@ func _draw_one_target(t: Dictionary) -> void:
 			alpha_w = clampf(1.0 - float(t.get("state_time", 0.0)) / maxf(float(t.get("fade_beats", 2)) * beat_interval, 0.001), 0.0, 1.0)
 		var play_w0: Vector2 = play_size()
 		for c in range(cols_w):
-			var h_w: float = WaveformLogic.column_height(t, c)
+			var h_w: float = _WaveformLogic.column_height(t, c)
 			var x0_w: float = float(c) * colw_w
 			var x1_w: float = x0_w + colw_w
 			var bottom_w: float = play_w0.y
 			if st_w == "telegraph":
 				# aviso: relleno granate translúcido + borde superior tenue
 				draw_rect(Rect2(Vector2(x0_w + 1.0, h_w), Vector2(colw_w - 2.0, bottom_w - h_w)),
-					Color(0.35, 0.06, 0.12, 0.35 * alpha_w))
+					Color(0.52, 0.09, 0.16, 0.50 * alpha_w))
 				draw_line(Vector2(x0_w, h_w), Vector2(x1_w, h_w), Color(0.7, 0.2, 0.28, 0.55 * alpha_w), 2.0)
 			else:
 				# active: columna llena con neón, cresta con brillo
@@ -720,9 +787,9 @@ func _draw_one_target(t: Dictionary) -> void:
 		# Arco del recorrido (siempre visible mientras vive)
 		var arc_from: float = minf(a0, a1)
 		var arc_to: float = maxf(a0, a1)
-		var arc_col: Color = Color(0.55, 0.12, 0.2, (0.25 + 0.15 * pulse_s) * alpha_s)
+		var arc_col: Color = Color(0.88, 0.22, 0.32, (0.48 + 0.22 * pulse_s) * alpha_s)
 		if st_s == "telegraph":
-			arc_col = Color(0.55, 0.12, 0.2, (0.3 + 0.25 * pulse_s) * alpha_s)
+			arc_col = Color(0.95, 0.30, 0.42, (0.55 + 0.28 * pulse_s) * alpha_s)
 		draw_arc(hub_s, 46.0, arc_from, arc_to, 28, arc_col, 2.5)
 		if st_s == "telegraph":
 			# haz fantasma en ang_start: por dónde ENTRARÁ
@@ -732,7 +799,7 @@ func _draw_one_target(t: Dictionary) -> void:
 			draw_circle(tip_g, 6.0, Color(0.8, 0.25, 0.3, 0.6 * alpha_s))
 		else:
 			# haz activo barriendo (easeInOut — arranca y frena en el beat)
-			var bdir_s := Vector2.from_angle(SweepLogic.beam_angle(t))
+			var bdir_s := Vector2.from_angle(_SweepLogic.beam_angle(t))
 			_neon_line(hub_s, hub_s + bdir_s * blen, Color(1.0, 0.2, 0.3), 8.0 * (0.85 + 0.15 * pulse_s))
 			draw_line(hub_s, hub_s + bdir_s * blen, Color(2.2, 0.5, 0.6, 0.95 * alpha_s), 3.0)
 			# hub con núcleo blanco (impacto)
@@ -873,8 +940,14 @@ func _draw_one_target(t: Dictionary) -> void:
 			"saw":
 				# Sierra giratoria: disco oscuro + 8 dientes rojos que rotan
 				# con el reloj real + aro neon + nucleo pulsante.
+				# T9 (coherencia): lethality >= 0.75 = LETAL CON NÚCLEO
+				# BLANCO HDR. Las sierras del tutorial (0.5) quedan en rojo
+				# simple: se leen como "proyectil", no como "momento". Antes
+				# todo era el mismo rojo saturado y el jugador no distinguía
+				# un saw de un fan (space-bunny: "dos lenguajes en un frame").
 				var saw_c: Vector2 = t["pos"]
 				var saw_r: float = t["radius"]
+				var saw_lethal: bool = _PatternLanguage.lethality_of(ttype_d) >= 0.75
 				var saw_spin: float = Time.get_ticks_msec() * 0.004
 				draw_circle(saw_c, saw_r, Color(0.45, 0.03, 0.08, 1.0))
 				for si in range(8):
@@ -884,6 +957,9 @@ func _draw_one_target(t: Dictionary) -> void:
 				_neon_arc(saw_c, saw_r * 0.92, Color(1.0, 0.13, 0.22), 3.0)
 				var saw_pulse: float = 0.55 + 0.08 * sin(saw_spin * 0.5)
 				draw_circle(saw_c, saw_r * 0.34, Color(1.3, 0.22, 0.3, saw_pulse))
+				if saw_lethal:
+					# remate blanco: este saw mata y hay que leerlo como tal
+					draw_circle(saw_c, saw_r * 0.16, Color(2.4, 2.0, 2.0, 0.9))
 				draw_circle(saw_c, saw_r * 0.13, Color(1.6, 0.6, 0.7, 1.0))
 			"drifter":
 				# Mina de puas: casco oscuro + 8 puas neon + nucleo.
@@ -978,13 +1054,14 @@ func _update_shield(delta: float) -> void:
 		_hit_iframes = maxf(_hit_iframes - delta, 0.0)
 	if _damage_flash > 0.0:
 		_damage_flash = maxf(_damage_flash - delta * 3.5, 0.0)
+	if _shield_block_flash > 0.0:
+		_shield_block_flash = maxf(_shield_block_flash - delta, 0.0)
 	if _shake_time > 0.0:
 		_shake_time = maxf(_shake_time - delta, 0.0)
-	# T8: impacto (trauma + flash) decae en 2 beats; el hit-stop se consume.
+	# T8: impacto (trauma + flash) decae en 2 beats. El hit-stop NO se cuenta
+	# acá: su reloj es real (ver _hitstop_until), no el delta del mundo.
 	if not _impact.is_empty():
-		ImpactFeel.step(_impact, delta, beat_interval)
-	if _hitstop_remaining > 0.0:
-		_hitstop_remaining = maxf(_hitstop_remaining - delta, 0.0)
+		_ImpactFeel.step(_impact, delta, beat_interval)
 	if _damage_overlay:
 		_damage_overlay.color.a = _damage_flash * 0.35
 
@@ -1026,7 +1103,7 @@ func _update_targets(delta: float) -> void:
 			# JSAB abanico de rayos: la física vive en SpokeFanLogic (pura);
 			# Gameplay solo hace step + muerte por estado done.
 			t["state_time"] = float(t.get("state_time", 0.0))
-			var stepped: Dictionary = SpokeFanLogic.step(t, delta, beat_interval)
+			var stepped: Dictionary = _SpokeFanLogic.step(t, delta, beat_interval)
 			t["state"] = stepped["state"]
 			t["state_time"] = stepped["state_time"]
 			t["is_hazard"] = stepped["is_hazard"]
@@ -1034,8 +1111,8 @@ func _update_targets(delta: float) -> void:
 				to_remove.append(i)
 				continue
 		elif ttype == "laser_sweep":
-			# JSAB láser que barre: motor puro SweepLogic.
-			var sw_step: Dictionary = SweepLogic.step(t, delta, beat_interval)
+			# JSAB láser que barre: motor puro _SweepLogic.
+			var sw_step: Dictionary = _SweepLogic.step(t, delta, beat_interval)
 			t["state"] = sw_step["state"]
 			t["state_time"] = sw_step["state_time"]
 			t["is_hazard"] = sw_step["is_hazard"]
@@ -1043,8 +1120,8 @@ func _update_targets(delta: float) -> void:
 				to_remove.append(i)
 				continue
 		elif ttype == "waveform_wall":
-			# JSAB muro de onda: motor puro WaveformLogic.
-			var wf_step: Dictionary = WaveformLogic.step(t, delta, beat_interval)
+			# JSAB muro de onda: motor puro _WaveformLogic.
+			var wf_step: Dictionary = _WaveformLogic.step(t, delta, beat_interval)
 			t["state"] = wf_step["state"]
 			t["state_time"] = wf_step["state_time"]
 			t["is_hazard"] = wf_step["is_hazard"]
@@ -1052,8 +1129,8 @@ func _update_targets(delta: float) -> void:
 				to_remove.append(i)
 				continue
 		elif ttype == "squeeze_corridor":
-			# JSAB corredor bilateral: motor puro SqueezeLogic.
-			var sq_step: Dictionary = SqueezeLogic.step(t, delta, beat_interval)
+			# JSAB corredor bilateral: motor puro _SqueezeLogic.
+			var sq_step: Dictionary = _SqueezeLogic.step(t, delta, beat_interval)
 			t["state"] = sq_step["state"]
 			t["state_time"] = sq_step["state_time"]
 			t["is_hazard"] = sq_step["is_hazard"]
@@ -1061,8 +1138,8 @@ func _update_targets(delta: float) -> void:
 				to_remove.append(i)
 				continue
 		elif ttype == "pulse_rings":
-			# JSAB anillos expansivos: motor puro PulseRingsLogic.
-			var pr_step: Dictionary = PulseRingsLogic.step(t, delta, beat_interval)
+			# JSAB anillos expansivos: motor puro _PulseRingsLogic.
+			var pr_step: Dictionary = _PulseRingsLogic.step(t, delta, beat_interval)
 			t["state"] = pr_step["state"]
 			t["state_time"] = pr_step["state_time"]
 			t["is_hazard"] = pr_step["is_hazard"]
@@ -1124,6 +1201,12 @@ func _update_targets(delta: float) -> void:
 			# un downbeat, los pulsos visuales caen en los acentos de la cancion.
 			t["age"] = float(t.get("age", 0.0)) + delta
 			var wstate: String = t.get("state", "active")
+			# T9: el muro sólo hace daño en active. Un "golpe que no daña"
+			# venía de que la fase warning se dibujaba casi idéntica a la
+			# letal: el jugador veía un muro rojo y no pasaba nada. Ahora la
+			# diferencia visual es explícita (línea de borde fina, sin
+			# relleno letal) y el daño empieza exactamente cuando el muro
+			# se vuelve macizo.
 			if wstate == "warning":
 				var wt: float = t.get("warn_time", 1.2) - delta
 				t["warn_time"] = wt
@@ -1168,7 +1251,15 @@ func _update_targets(delta: float) -> void:
 
 		# Check collision with player ship (con escudo activo: atravesar todo,
 		# sin recibir daño)
+		# T9: antes el escudo hacía `continue` y ya: el peligro NI se dañaba
+		# NI se consumía NI daba feedback. El jugador atravesaba un abanico
+		# entero creyendo que no había nada ("golpea y no daña"). Ahora el
+		# escudo consume el peligro (es lo que ES) y deja un destello de
+		# bloqueo: ves que tu escudo te salvó, que es información honesta.
 		if _shield_active > 0.0:
+			if _pilot_hits(t, player_pos) or ttype == "stripe_wall":
+				to_remove.append(i)
+				_shield_block_flash = 0.12
 			continue
 		var hit: bool = false
 		if ttype == "stripe_wall":
@@ -1179,19 +1270,19 @@ func _update_targets(delta: float) -> void:
 					and s_p > float(t["s0"]) - 16.0 and s_p < float(t["s1"]) + 16.0
 		elif ttype == "spoke_fan":
 			# Abanico de rayos: colisión polar vía la lógica pura (hueco seguro).
-			hit = SpokeFanLogic.hits_player(t, player_pos)
+			hit = _SpokeFanLogic.hits_player(t, player_pos)
 		elif ttype == "laser_sweep":
 			# Láser que barre: colisión del motor puro.
-			hit = SweepLogic.hits_player(t, player_pos)
+			hit = _SweepLogic.hits_player(t, player_pos)
 		elif ttype == "waveform_wall":
 			# Muro de onda: colisión del motor puro (perfil por columna).
-			hit = WaveformLogic.hits_player(t, player_pos)
+			hit = _WaveformLogic.hits_player(t, player_pos)
 		elif ttype == "squeeze_corridor":
 			# Corredor bilateral: franja izquierda/derecha (motor puro).
-			hit = SqueezeLogic.hits_player(t, player_pos)
+			hit = _SqueezeLogic.hits_player(t, player_pos)
 		elif ttype == "pulse_rings":
 			# Anillos expansivos: banda radial (motor puro).
-			hit = PulseRingsLogic.hits_player(t, player_pos)
+			hit = _PulseRingsLogic.hits_player(t, player_pos)
 		elif ttype == "mini_ring":
 			# Mini-jab anillo: banda radial como los anillos grandes, pero con
 			# la ventana corta del jab. Reusa el motor construyendo un dict
@@ -1206,7 +1297,7 @@ func _update_targets(delta: float) -> void:
 					"active_beats": 1, "telegraph_beats": 0, "fade_beats": 1,
 					"state_time": float(t.get("state_time", 0.0)),
 				}
-				hit = PulseRingsLogic.hits_player(mjr, player_pos)
+				hit = _PulseRingsLogic.hits_player(mjr, player_pos)
 		elif ttype == "mini_fan":
 			# Mini-jab abanico: 3 rayos con hueco, en su ventana corta.
 			if str(t.get("state", "")) == "active":
@@ -1217,7 +1308,7 @@ func _update_targets(delta: float) -> void:
 					"rot_speed": float(t.get("rot_speed", 0.0)),
 					"telegraph_beats": 0, "state_time": float(t.get("state_time", 0.0)),
 				}
-				hit = SpokeFanLogic.hits_player(mjf, player_pos)
+				hit = _SpokeFanLogic.hits_player(mjf, player_pos)
 		elif ttype == "laser_beam":
 			# Line-based: distancia del player a la línea infinita del beam
 			var bdir: Vector2 = (t.get("beam_dir", Vector2.UP) as Vector2).normalized()
@@ -1227,10 +1318,16 @@ func _update_targets(delta: float) -> void:
 		else:
 			hit = player_pos.distance_to(t["pos"]) < (float(t.get("radius", 24.0)) + 16.0)
 		if hit:
-			to_remove.append(i)
-			# I-frames: durante el lapso post-golpe el peligro se consume sin drenar vida
+			# T9: el I-frame protege SOLO al jugador, no al peligro. Antes
+			# el objeto se consumía igual: el jugador cruzaba el abanico o
+			# el muro durante los 2s de invulnerabilidad y se lo comía sin
+			# ver nada ("golpea y no daña"). Ahora el peligro SIGUE VIVO y el
+			# jugador lo atraviesa protegido; si vuelve a tocarlo cuando ya
+			# no tiene iframes, ahí sí duele (que es lo justo: el aviso se
+			# sintió, el golpe se cuenta una vez).
 			if _hit_iframes <= 0.0:
-				_on_hazard_hit()
+				to_remove.append(i)
+				_on_hazard_hit(float(t.get("hit_health_bonus", -1.0)), ttype)
 			continue
 
 		# Fuera de pantalla (stripe_wall se autogestiona su ciclo)
@@ -1242,16 +1339,31 @@ func _update_targets(delta: float) -> void:
 		if idx < targets.size():
 			targets.remove_at(idx)
 
-func _on_hazard_hit() -> void:
+func _on_hazard_hit(source_bonus: float = -1.0, source_type: String = "") -> void:
 	_hit_iframes = HIT_IFRAMES_EASY if easy_mode else HIT_IFRAMES
 	_damage_flash = 1.0
 	_shake_time = SHAKE_TIME
 	# T8: hit-stop — la escena congela 50ms, la CANCIÓN SIGUE (por eso el
-	# reloj del nivel no se desincroniza). Nunca se apila y nunca durante un
-	# telegraph (sólo con iframes, o sea contra un golpe real).
-	var hs: Dictionary = ImpactFeel.request_hitstop(0.05, true, _hitstop_remaining)
-	_hitstop_remaining = float(hs["remaining"])
-	health -= 18.0
+	# reloj del nivel no se desincroniza). Nunca se apila (el motor devuelve
+	# la pausa viva) y nunca durante un telegraph (sólo con iframes).
+	var still_frozen: bool = Time.get_ticks_msec() / 1000.0 < _hitstop_until
+	var hs: Dictionary = _ImpactFeel.request_hitstop(0.05, true, 0.05 if still_frozen else 0.0)
+	var applied: float = float(hs["applied"])
+	if applied > 0.0:
+		_hitstop_until = Time.get_ticks_msec() / 1000.0 + applied
+	# Daño por golpe: el tutorial (easy_mode) tiene 125 HP, así que a 18 por
+	# golpe morías al SEXTO impacto — demasiado para un nivel tutorial. La
+	# media del gameplay de JSAB perdona más: 12 en easy, 18 en normal.
+	# Cada peligro trae su propio hit_health_bonus (un mini-jab pica menos que
+	# un setpiece); si no lo trae, se usa la escala del modo.
+	var dmg: float = 12.0 if easy_mode else 18.0
+	if source_bonus < 0.0:
+		dmg *= absf(source_bonus) / 18.0
+	health -= dmg
+	# T9: diagnóstico de por qué murió el piloto (qué peligro lo tomó y a qué
+	# hora de la canción). Sólo con el flag, para no ensuciar la corrida real.
+	if OS.get_environment("MCP_HITLOG") == "1" or FileAccess.file_exists("/tmp/jsab_hitlog.flag"):
+		print("[HIT] t=%.1f %s dmg=%.0f hp=%.0f" % [song_time, source_type, dmg, health])
 	if SoundManager: SoundManager.play_back()
 
 	if health <= 0.0:
@@ -1268,10 +1380,113 @@ func _impact_on_activation(t: Dictionary) -> void:
 			sec_energy = float(sec.get("energy", 0.6))
 	var is_anchor: bool = bool(t.get("setpiece_phase", false))
 	var kind_scale: float = 1.0 if is_anchor else 0.45
-	_impact = ImpactFeel.new_impact(1.0, sec_energy, kind_scale)
+	_impact = _ImpactFeel.new_impact(1.0, sec_energy, kind_scale)
 	# el temblor de daño (rojo) y el de impacto (blanco) se suman: el golpe
 	# feels distinto al de un setpiece activándose.
-	_shake_time = maxf(_shake_time, ImpactFeel.DECAY_BEATS * beat_interval)
+	_shake_time = maxf(_shake_time, _ImpactFeel.DECAY_BEATS * beat_interval)
+
+## T9: el punto que el piloto quiere alcanzar este frame. El setpiece (o jab)
+## vivo MANDA —es el momento del nivel— y sólo si no hay ninguno se esquivan
+## los proyectiles sueltos. La decisión es la misma que test_pilot valida
+## contra la colisión real.
+func _pilot_desired(frame_dt: float) -> Vector2:
+	var best_target: Vector2 = player_pos
+	var best_priority: float = -1.0
+	# 1) Si hay un setpiece/jab VIVO, él manda: es el momento del nivel.
+	for t in targets:
+		var ty_sp: String = str(t.get("type", ""))
+		if ty_sp not in ["spoke_fan", "laser_sweep", "waveform_wall", "squeeze_corridor",
+				"pulse_rings", "mini_ring", "mini_fan", "stripe_wall"]:
+			continue
+		# ¿estamos en peligro AHORA con este? -> máxima prioridad, y el punto
+		# tiene que seguir libre al llegar (predicción).
+		if _pilot_hits(t, player_pos):
+			return _PilotLogic.safe_point_eta(t, player_pos, _PILOT_SPEED, frame_dt)
+		# si no hay peligro inmediato, un punto seguro de este setpiece sirve
+		# como destino (lejos de donde está el hazard).
+		if str(t.get("state", "")) in ["telegraph", "active"]:
+			return _PilotLogic.safe_point_eta(t, player_pos, _PILOT_SPEED, frame_dt)
+	# 2) Sólo proyectiles sueltos: elegir el punto LIBRE más cercano (el piloto
+	#    barre la pantalla como un humano, no huye de un saw y se mete en otro).
+	return _best_free_spot(frame_dt)
+
+## ¿el punto está dentro de este objetivo? Usa la MISMA colisión del juego.
+func _pilot_hits(t: Dictionary, p: Vector2) -> bool:
+	var ty: String = str(t.get("type", ""))
+	match ty:
+		"spoke_fan":
+			return _SpokeFanLogic.hits_player(t, p)
+		"laser_sweep":
+			return _SweepLogic.hits_player(t, p)
+		"waveform_wall":
+			return _WaveformLogic.hits_player(t, p)
+		"squeeze_corridor":
+			return _SqueezeLogic.hits_player(t, p)
+		"pulse_rings":
+			return _PulseRingsLogic.hits_player(t, p)
+		"saw", "homing", "drifter", "saw_pair", "saw_weave", "drifter_swarm":
+			if t.has("pos"):
+				return player_pos.distance_to(t["pos"]) < 90.0
+	return false
+
+## El punto LIBRE más cercano. El piloto anterior huía de UN saw y se
+## metía en el siguiente (5 de los 10 golpes de la corrida instrumentada
+## fueron saws). Esto puntúa una rejilla de candidatos contra TODA la
+## geometría viva y elige el más seguro y alcanzable — que es lo que hace un
+## jugador que mira la pantalla en vez de reaccionar a un solo objeto.
+func _best_free_spot(frame_dt: float) -> Vector2:
+	var best: Vector2 = player_pos
+	var best_score: float = -1.0e9
+	var steps_x: int = 8
+	var steps_y: int = 5
+	for ix in range(steps_x + 1):
+		for iy in range(steps_y + 1):
+			var c: Vector2 = Vector2(lerpf(90.0, 1190.0, float(ix) / float(steps_x)),
+				lerpf(200.0, 630.0, float(iy) / float(steps_y)))
+			# ¿libre ahora?
+			var clear_now: bool = true
+			for t in targets:
+				if _pilot_hits(t, c):
+					clear_now = false
+					break
+			if not clear_now:
+				continue
+			# ¿libre al llegar? (el juego sigue corriendo mientras viaja)
+			var clear_eta: bool = true
+			var dist: float = c.distance_to(player_pos)
+			var n_steps: int = clampi(int(ceil(dist / maxf(_PILOT_SPEED * frame_dt, 1.0))) + 1, 1, 24)
+			for s in range(1, n_steps + 1):
+				var p: Vector2 = player_pos.lerp(c, float(s) / float(n_steps))
+				for t2 in targets:
+					if _pilot_hits(t2, p):
+						clear_eta = false
+						break
+				if not clear_eta:
+					break
+			if not clear_eta:
+				continue
+			# Puntaje: seguridad (ya filtrada) + preferencia por el centro
+			# preferencia por la fila del jugador (y media) y por no movernos mucho
+			var score: float = 200.0
+			score -= dist * 0.35
+			score -= absf(c.y - 470.0) * 0.25
+			for t3 in targets:
+				if t3.has("pos"):
+					score += minf(c.distance_to(t3["pos"]), 400.0) * 0.18
+			if score > best_score:
+				best_score = score
+				best = c
+	return best
+
+## Huir de un proyectil suelto: alejarse en la dirección opuesta.
+func _flee_from(t: Dictionary) -> Vector2:
+	if not t.has("pos"):
+		return player_pos
+	var d: Vector2 = player_pos - (t["pos"] as Vector2)
+	if d.length() < 0.01:
+		return Vector2(640, 300)
+	return Vector2(clampf(player_pos.x + d.normalized().x * 150.0, 40.0, 1240.0),
+		clampf(player_pos.y + d.normalized().y * 150.0, 150.0, 640.0))
 
 func _health_color() -> Color:
 	## Color de vida compartido: lo usan el anillo de la nave y (antes) la
@@ -1344,7 +1559,41 @@ func _on_btn_resume_pressed() -> void:
 
 func _on_btn_restart_pressed() -> void:
 	get_tree().paused = false
-	get_tree().reload_current_scene()
+	# T9: reiniciar recargaba la ESCENA completa (nodos, chart, audio, HUD).
+	# Con el audio cacheado el audio es instantáneo, pero el resto de la
+	# reconstrucción seguía costando. Ahora reiniciamos el ESTADO del nivel
+	# sin reconstruir la escena: el jugador vuelve a jugar de inmediato.
+	# _restart_level() deja todo como _ready() lo dejó, pero con el chart y
+	# el audio ya en memoria.
+	_restart_level()
+
+## Reinicio en caliente: mismo estado inicial, sin reconstruir la escena.
+func _restart_level() -> void:
+	song_time = 0.0
+	health = 125.0 if easy_mode else 100.0
+	is_game_over = false
+	progress_pct = 0
+	_music_finished = false
+	_damage_flash = 0.0
+	_shake_time = 0.0
+	_hit_iframes = 0.0
+	_shield_active = 0.0
+	_shield_cooldown = 0.0
+	_impact = {}
+	_hitstop_until = 0.0
+	_waiting_for_control = false
+	_manual_control = false
+	player_pos = play_size() * Vector2(0.5, 0.78)
+	targets.clear()
+	if controller:
+		controller.reset_level()
+	music.stop()
+	music.play()
+	if results_overlay:
+		results_overlay.visible = false
+	if pause_overlay:
+		pause_overlay.visible = false
+	queue_redraw()
 
 func _on_btn_main_menu_pressed() -> void:
 	get_tree().paused = false
@@ -1362,7 +1611,7 @@ func _draw() -> void:
 		var sk: float = pow(_shake_time / SHAKE_TIME, 2.0) * SHAKE_AMP
 		world_offset += Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * sk
 	if not _impact.is_empty() and float(_impact.get("trauma", 0.0)) > 0.001:
-		world_offset += ImpactFeel.shake_offset(_impact, 26.0)
+		world_offset += _ImpactFeel.shake_offset(_impact, 26.0)
 	if world_offset != Vector2.ZERO:
 		draw_set_transform(world_offset, 0.0, Vector2.ONE)
 	# T8 FLASH BLANCO de impacto: cubre TODO, sin temblor (el blanco es la
@@ -1466,6 +1715,13 @@ func _draw() -> void:
 		# Aviso de fin: parpadea mas rapido cuanto menos vida le queda
 		if life < 0.35 and fposmod(tnow * (4.0 + 20.0 * (0.35 - life)), 1.0) < 0.5:
 			_neon_arc(player_pos, 30.0, Color(0.4, 0.9, 1.0, 0.4), 1.5)
+		# T9: destello de BLOQUEO — el escudo acaba de comerse un peligro.
+		# Sin esto el jugador atravesaba un abanico entero sin ninguna señal
+		# de que su escudo lo había salvado.
+		if _shield_block_flash > 0.0:
+			var b: float = _shield_block_flash / 0.12
+			_neon_arc(player_pos, 38.0 + 10.0 * (1.0 - b), Color(1.4, 1.4, 1.4, 0.9 * b), 3.5)
+			draw_circle(player_pos, 34.0 + 12.0 * (1.0 - b), Color(0.8, 1.0, 1.0, 0.10 * b))
 
 	# Cooldown del escudo: anillo de recarga alrededor de la nave
 	if _shield_cooldown > 0.0:
@@ -1484,10 +1740,19 @@ func _draw() -> void:
 	# se pinte encima del rojo. Los lasers van al final para no quedar tapados.
 	#   1) hazards comunes, 2) stripe_wall translúcido encima, 3) lasers arriba
 	#    (el telegraph debe ser imposible de ignorar, jamas tapado).
+	#
+	# T9: la pasada 1 se ORDENA por lethality (PatternLanguage.draw_sort):
+	# lo que más mata se dibuja ENCIMA. Antes el orden era el de aparición y
+	# un fan podía quedar tapado por un saw que pasó después — el jugador
+	# veía un peligro tapado por decoración y no sabía cuál esquivar.
+	var layer1: Array[Dictionary] = []
 	for t in targets:
 		var tt: String = t.get("type", "target")
 		if tt == "stripe_wall" or tt == "laser_telegraph" or tt == "laser_beam":
 			continue
+		layer1.append(t)
+	layer1.sort_custom(_PatternLanguage.draw_sort)
+	for t in layer1:
 		_draw_one_target(t)
 	for t in targets:
 		if t.get("type", "target") != "stripe_wall":

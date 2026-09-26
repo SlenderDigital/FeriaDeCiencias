@@ -26,12 +26,23 @@ func _initialize() -> void:
 		return
 	if str(fan.get("type", "")) != "spoke_fan":
 		fails.append("type: %s" % str(fan.get("type", "")))
-	if int(fan.get("spokes", 0)) < 6:
-		fails.append("spokes %d < 6 mínimo" % int(fan.get("spokes", 0)))
-	if int(fan.get("gap_spokes", 0)) < 2:
-		fails.append("fairness: gap_spokes %d < 2" % int(fan.get("gap_spokes", 0)))
-	if int(fan.get("telegraph_beats", 0)) != 2 or int(fan.get("active_beats", 0)) != 4:
-		fails.append("timing: telegraph=%s active=%s (esperaba 2/4)" % [str(fan.get("telegraph_beats")), str(fan.get("active_beats"))])
+	# T9 (space-bunny): el piso de justicia del abanico es el ÁNGULO del
+	# hueco, no la cantidad de radios. Con 6+ radios el hueco quedaba en
+	# cúñetas discretas y el ojo leía "cobertura 360° sin salida". Ahora el
+	# contrato es un sector libre continuo y ancho.
+	var n_sp: int = int(fan.get("spokes", 0))
+	var gap_sp: int = int(fan.get("gap_spokes", 0))
+	var gap_deg: float = rad_to_deg(TAU * float(gap_sp) / maxf(float(n_sp), 1.0))
+	if n_sp < 4:
+		fails.append("spokes %d < 4 mínimo" % n_sp)
+	if gap_deg < 75.0:
+		fails.append("fairness: hueco %.0f° < 75° (no se lee como un passage)" % gap_deg)
+	# y el hueco tiene que dejar RADIOS LETALES: si el hueco cubre todo,
+	# el abanico no es un peligro.
+	if gap_sp < 1 or gap_sp > n_sp - 2:
+		fails.append("fairness: hueco de %d radios sobre %d deja hazards" % [gap_sp, n_sp])
+	if int(fan.get("telegraph_beats", 0)) != 2 or int(fan.get("active_beats", 0)) != 9:
+		fails.append("timing: telegraph=%s active=%s (esperaba 2/9)" % [str(fan.get("telegraph_beats")), str(fan.get("active_beats"))])
 	if str(fan.get("state", "")) != "telegraph" or bool(fan.get("is_hazard", true)):
 		fails.append("nace en telegraph inofensivo: state=%s is_hazard=%s" % [str(fan.get("state")), str(fan.get("is_hazard"))])
 	var rev_beats: float = float(fan.get("beats_per_rev", 0.0))
@@ -77,8 +88,8 @@ func _initialize() -> void:
 	# telegraph dura 2 beats => active arranca ~2*bl (tolerancia 1 frame)
 	if absf(t_active - 2.0 * bl) > dt * 1.5:
 		fails.append("active arranca a %.3fs, esperaba %.3fs" % [t_active, 2.0 * bl])
-	if absf(t_fade - 6.0 * bl) > dt * 1.5:
-		fails.append("fade arranca a %.3fs, esperaba %.3fs" % [t_fade, 6.0 * bl])
+	if absf(t_fade - 11.0 * bl) > dt * 2.5:
+		fails.append("fade arranca a %.3fs, esperaba ~%.3fs" % [t_fade, 11.0 * bl])
 
 	# --- 2b) Colisión: el hueco es SEGURO aunque rote ---
 	# El jugador VIAJA CON EL HUECO (lo persigue, como un humano): 90 frames

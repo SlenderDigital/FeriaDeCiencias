@@ -137,7 +137,39 @@ func _level_section(name: String, s0: float, s1: float, energy: float) -> Dictio
 		"pattern_pool": ["stripe_wall", "saw", "drifter_swarm", "homing", "hazard_wall"], "density": 0.75}
 
 ## --- Síntesis: renderiza la canción a PCM 16-bit ---
+## T9: CACHÉ EN DISCO. Renderizar 105s de audio cuesta ~7.3s y bloquea el
+## arranque (el jugador espera con la pantalla en negro). El audio es
+## determinista (misma semilla => mismas muestras), así que se puede
+## guardar/recuperar como .res. La clave del archivo incluye seed, BPM y
+## versión del render, así que cambiar cualquier parámetro invalida la caché.
+static func audio_cache_path(seed_val: int, bpm_val: float) -> String:
+	return "user://audio_cache/song_%d_%d_v%d.res" % [seed_val, int(bpm_val), AUDIO_CACHE_VERSION]
+
+const AUDIO_CACHE_VERSION: int = 3
+
+## Devuelve el audio, de la caché si existe, o lo renderiza y lo guarda.
+func render_audio_cached(seed_val: int, bpm_val: float) -> AudioStreamWAV:
+	var path: String = audio_cache_path(seed_val, bpm_val)
+	if ResourceLoader.exists(path):
+		var cached: Resource = load(path)
+		if cached is AudioStreamWAV:
+			print("[ProceduralSong] Audio de caché (arranque instantáneo): ", path)
+			return cached as AudioStreamWAV
+	var fresh: AudioStreamWAV = _render_audio_uncached()
+	var dir: String = path.get_base_dir()
+	if not DirAccess.dir_exists_absolute(dir):
+		DirAccess.make_dir_recursive_absolute(dir)
+	var err: int = ResourceSaver.save(fresh, path)
+	if err != OK:
+		print("[ProceduralSong] No se pudo cachear el audio (err ", err, "): se seguirá renderizando")
+	else:
+		print("[ProceduralSong] Audio cacheado en ", path)
+	return fresh
+
 func render_audio() -> AudioStreamWAV:
+	return _render_audio_uncached()
+
+func _render_audio_uncached() -> AudioStreamWAV:
 	print("[ProceduralSong] Componiendo %.0fs @ %dHz (%d compases)..." % [duration, RATE, total_bars])
 	var total_samples: int = int(RATE * (duration + 0.8))
 	var buf_kick := _new_buf(total_samples)

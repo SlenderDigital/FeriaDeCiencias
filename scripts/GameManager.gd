@@ -85,14 +85,20 @@ func _ready() -> void:
 	print("[GameManager] Inicializado correctamente.")
 	# Fullscreen-on-start: el juego se juega con la mano frente a la pantalla,
 	# no hay mouse disponible; arrancar ya en fullscreen (main_scene boot).
-	fullscreen_enabled = true
-	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
-	await get_tree().process_frame
-	await get_tree().process_frame
-	var scr: Vector2i = DisplayServer.screen_get_size()
-	if scr.x > 0 and scr.y > 0 and DisplayServer.window_get_size() != scr:
-		DisplayServer.window_set_size(scr)
-	print("[GameManager] fullscreen aplicado, tamaño=", DisplayServer.window_get_size())
+	# GODOT_WINDOWED=1 lo desactiva (verificación, capturas y corridas
+	# automatizadas: el fullscreen puede no tener display disponible y el
+	# proceso muere al cambiar de modo).
+	fullscreen_enabled = OS.get_environment("GODOT_WINDOWED") != "1"
+	if fullscreen_enabled:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var scr: Vector2i = DisplayServer.screen_get_size()
+		if scr.x > 0 and scr.y > 0 and DisplayServer.window_get_size() != scr:
+			DisplayServer.window_set_size(scr)
+		print("[GameManager] fullscreen aplicado, tamaño=", DisplayServer.window_get_size())
+	else:
+		print("[GameManager] modo ventana (GODOT_WINDOWED=1), tamaño=", DisplayServer.window_get_size())
 
 func get_current_track() -> Dictionary:
 	if current_track_index >= 0 and current_track_index < TRACKS.size():

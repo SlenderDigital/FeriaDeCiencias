@@ -35,8 +35,8 @@ func _initialize() -> void:
 		fails.append("type: %s" % str(pr.get("type", "")))
 	if bool(pr.get("is_hazard", true)):
 		fails.append("nace inofensivo: is_hazard=true")
-	if int(pr.get("telegraph_beats", 0)) != 2 or int(pr.get("active_beats", 0)) != 4:
-		fails.append("timing: telegraph=%s active=%s (esperaba 2/4)" % [str(pr.get("telegraph_beats")), str(pr.get("active_beats"))])
+	if int(pr.get("telegraph_beats", 0)) != 2 or int(pr.get("active_beats", 0)) != 9:
+		fails.append("timing: telegraph=%s active=%s (esperaba 2/9)" % [str(pr.get("telegraph_beats")), str(pr.get("active_beats"))])
 	if int(pr.get("rings", 0)) < 2:
 		fails.append("rings %d < 2" % int(pr.get("rings", 0)))
 	# fairness del hueco: >= 50 grados de abertura
@@ -80,7 +80,7 @@ func _initialize() -> void:
 	var max_r: float = prev_r
 	# recorrer TODA la ventana active: el anillo 0 debe alcanzar su radio
 	# objetivo al final (y cruzarlo si el objetivo excede la fila).
-	for i in range(int(4.0 * bl / dt) + 6):
+	for i in range(int(9.0 * bl / dt) + 6):
 		p3 = logic.step(p3, dt, bl)
 		if str(p3["state"]) != "active":
 			break
@@ -121,7 +121,10 @@ func _initialize() -> void:
 	var swept_solid := false
 	var static_gap_died := false
 	var traveling_gap_died := false
-	for i in range(int(4.0 * bl / dt) + 6):
+	# El anillo CRUZA la fila del jugador a mitad de la ventana (crece 0..1
+	# en 9 beats). Sampleamos toda la ventana: si en algún instante la banda
+	# pasa por encima del jugador quieto, cuenta como barrido.
+	for i in range(int(9.0 * bl / dt) + 6):
 		p4 = logic.step(p4, dt, bl)
 		if str(p4["state"]) != "active":
 			break

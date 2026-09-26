@@ -289,6 +289,14 @@ func spawns_at_phrase(t: float, beat_idx: int, base_color: Color) -> Array[Dicti
 		return []
 	return []
 
+## T9: reinicio en caliente. El director guarda estado (el setpiece activo y
+## su ancla); sin limpiarlo, el nivel reiniciado arrancaría con un setpiece
+## a medias del intento anterior.
+func reset_level() -> void:
+	_active_setpiece = {}
+	wall_active = false
+	_rng.seed = _rng.seed   # misma semilla: el nivel es reproducible
+
 ## Director JSAB: agenda en phrase beats y emite las fases que vencen en el
 ## beat actual. TODO dentro de spawns_at para que el orden de Gameplay
 ## (spawns_at primero, spawns_at_phrase después) no pierda la fase 0.
@@ -297,12 +305,19 @@ func _director_pump(t: float, beat_idx: int, base_color: Color) -> Array[Diction
 	# 1) Emisión: fases del setpiece activo que vencen en ESTE beat.
 	if not _active_setpiece.is_empty():
 		out.append_array(_emit_setpiece_phases(t, beat_idx, base_color))
-	# 2) Agenda: phrase beat de sección con script propio, sin setpiece
-	#    activo, y SIN MURO en pantalla (entrada limpia: JSAB nunca abre su
-	#    ancla sobre un mulo que barre — el jugador lee el aviso, no pelea
-	#    dos cosas a la vez). El MAPA manda sobre la energía: el outro tiene
-	#    un script (los anillos del final) aunque sea la sección más calma.
-	if beat_idx % 16 == 0 and _active_setpiece.is_empty() and not wall_active:
+	# 2) Agenda: beats de ancla (cada 8 = 2 compases) de sección con script
+	#    propio, sin setpiece activo, y SIN MURO en pantalla. El MAPA manda
+	#    sobre la energía: el outro tiene un script aunque sea la sección más
+	#    calma.
+	#    T9 (space-bunny): agendar cada 16 beats dejaba ~7 beats de grilla
+	#    vacía entre anclas — la queja original ("nothing happens"). Con
+	#    ancla cada 8 y una ventana activa de 9 beats, siempre hay algo.
+	#    T9: `wall_active` BLOQUEA la ancla. Con muros tan frecuentes como
+	#    eran, algunas secciones (outro) nunca agendaron su setpiece: el
+	#    pulso final no aparecía. Un muro no cancela una ancla de sección;
+	#    lo que sí lo hace es solaparse con ella (ver spawns_at: el muro
+	#    se salta mientras hay setpiece).
+	if beat_idx % 8 == 0 and _active_setpiece.is_empty():
 		var sec := _current_section(t)
 		if not sec.is_empty() and not SETPIECE_BY_SECTION.get(str(sec.get("name", "")), "").is_empty():
 			var script_key: String = str(SETPIECE_BY_SECTION.get(str(sec.get("name", "")), ""))
@@ -615,6 +630,11 @@ func _laser_telegraph(x: float) -> Dictionary:
 ## active. Telegraph 2 beats (muestra el ARCO completo a recorrer), active 4
 ## beats, fade 2. Fairness: <= 90°/beat (test-asserted), ancho de haz ~12px.
 ## Parametrizado como el spoke_fan: hub, ángulos y sentido por seed de ancla.
+## T9: EXCEPCIÓN A LA VIDA DE SECCIÓN. El barrido cruza la pantalla ENTERA
+## cada pasada: con 9 beats active (la vida de las otras anclas) salían 4
+## barridos seguidos en el build y el jugador no podía esquivar NINGUNO
+## (4 golpes en 12s en la corrida instrumentada). Un barrido es UNA pasada
+## legible: 4 beats active, y la siguiente ancla llega a los 8.
 func _laser_sweep(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: int = -1) -> Dictionary:
 	const TELEGRAPH_BEATS: int = 2
 	const ACTIVE_BEATS: int = 4
@@ -650,34 +670,40 @@ func _laser_sweep(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: 
 
 ## JSAB T4 — Muro de ONDA que sube desde abajo (arquetipo 45s/1350s del
 ## video): una fila de columnas que crecen desde el borde inferior siguiendo
-## un perfil senoidal desfasado por columna. Telegraph 2 / active 4 / fade 2.
-## Fairness: la cresta queda ACOTADA (peak_line <= 62% del alto) dejando
+## un perfil senoidal desfasado por columna. Telegraph 2 / active (sección) /
+## fade 2. La cresta queda ACOTADA (peak_line <= 62% del alto) dejando
 ## margen de reacción sobre la fila del jugador; el trough más bajo siempre
 ## cae por debajo del área (nunca se cierra entero el paso).
-## Parametrizado por seed de ancla, como el resto de los setpieces.
+## T9 (space-bunny): "no parece una onda, parece una línea recta". La
+## diferencia entre trough y cresta era de apenas 1px porque el perfil se
+## multiplicaba por rise cuando rise era casi 0. Ahora la onda tiene
+## amplitud REAL y legible en todo momento, y cycles más alto para que se
+## lea como una onda y no como una rampa.
+## Parametrizado por seed de ancla.
 func _waveform_wall(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: int = -1) -> Dictionary:
 	const TELEGRAPH_BEATS: int = 2
-	const ACTIVE_BEATS: int = 4
+	const ACTIVE_BEATS: int = 9
 	const FADE_BEATS: int = 2
 	var vr := RandomNumberGenerator.new()
 	vr.seed = 613 ^ spawn_seed if spawn_seed >= 0 else 613 ^ beat_idx
-	var columns: int = vr.randi_range(8, 14)
+	var columns: int = vr.randi_range(12, 18)
 	if params.has("columns"):
-		columns = clampi(int(params["columns"]), 6, 20)
+		columns = clampi(int(params["columns"]), 6, 24)
 	# Cresta: 0.48..0.60 del alto (nunca más: el jugador al 78% tiene 18% de
 	# margen vertical para reaccionar desde el aviso).
 	var peak_frac: float = vr.randf_range(0.48, 0.60)
 	if params.has("peak_frac"):
 		peak_frac = clampf(float(params["peak_frac"]), 0.35, 0.62)
-	# Perfil: 1.5..3.5 ciclos a lo ancho + desfasamiento aleatorio.
-	var cycles: float = vr.randf_range(1.5, 3.5)
+	# Perfil: 2.5..4.5 ciclos a lo ancho (más ciclos = más claramente una
+	# onda) + desfasamiento aleatorio.
+	var cycles: float = vr.randf_range(2.5, 4.5)
 	var phase: float = vr.randf_range(0.0, TAU)
 	return {
 		"type": "waveform_wall", "pos": Vector2.ZERO, "vel": Vector2.ZERO,
 		"columns": columns, "col_w": play_size.x / float(columns),
 		"wave_cycles": cycles, "wave_phase": phase, "wave_amp": peak_frac * 0.5,
-		"base_line": play_size.y * (peak_frac + 0.18),   # trough bajo el área
-		"peak_line": play_size.y * peak_frac,              # techo de la onda
+		"base_line": play_size.y * (peak_frac + 0.30),   # trough bien abajo
+		"peak_line": play_size.y * (peak_frac - 0.10),   # techo de la onda
 		"peak_frac": peak_frac,
 		"rise_beats": ACTIVE_BEATS,                        # toda la ventana activa
 		"state": "telegraph", "state_time": 0.0,
@@ -693,7 +719,7 @@ func _waveform_wall(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed
 ## aprieta pero no mata). Parametrizado por seed de ancla.
 func _squeeze_corridor(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: int = -1) -> Dictionary:
 	const TELEGRAPH_BEATS: int = 2
-	const ACTIVE_BEATS: int = 4
+	const ACTIVE_BEATS: int = 9
 	const FADE_BEATS: int = 2
 	var vr := RandomNumberGenerator.new()
 	vr.seed = 419 ^ spawn_seed if spawn_seed >= 0 else 419 ^ beat_idx
@@ -731,7 +757,7 @@ func _squeeze_corridor(t: float, beat_idx: int, params: Dictionary = {}, spawn_s
 ## que el jugador debe viajar con él. Parametrizado por seed de ancla.
 func _pulse_rings(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: int = -1) -> Dictionary:
 	const TELEGRAPH_BEATS: int = 2
-	const ACTIVE_BEATS: int = 4
+	const ACTIVE_BEATS: int = 9
 	const FADE_BEATS: int = 2
 	var vr := RandomNumberGenerator.new()
 	vr.seed = 271 ^ spawn_seed if spawn_seed >= 0 else 271 ^ beat_idx
@@ -776,6 +802,10 @@ func _mini_jab(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: int
 	var kind: String = "mini_ring" if vr.randf() < 0.5 else "mini_fan"
 	if params.has("kind"):
 		kind = str(params["kind"])
+	# T9 (space-bunny review): la vida se define en el CALLER, no aquí. Un
+	# jab es 1 compás; un setpiece que abre una sección debe cubrir toda la
+	# ventana (8-10 beats) o el jugador se queda mirando una grilla vacía —
+	# que es exactamente la queja original. Ver _mini_jab_life().
 	var hub: Vector2 = Vector2(play_size.x * vr.randf_range(0.3, 0.7), play_size.y * vr.randf_range(0.35, 0.55))
 	if kind == "mini_ring":
 		# Anillo que se cierra rápido: 1 beat de aviso + 2 activo + 1 fade.
@@ -823,7 +853,7 @@ func _spoke_fan(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: in
 	# Pisos de fairness (R3: un solo lugar, test-asserted)
 	const MIN_GAP_SPOKES: int = 2
 	const TELEGRAPH_BEATS: int = 2
-	const ACTIVE_BEATS: int = 4
+	const ACTIVE_BEATS: int = 9
 	const FADE_BEATS: int = 2
 	const MIN_BEATS_PER_REV: float = 16.0
 	# RNG de la invocación (semilla por ancla: determinista, no global)
@@ -837,13 +867,24 @@ func _spoke_fan(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: in
 	if params.has("hub_v"):
 		hub_v = clampf(float(params["hub_v"]), 0.2, 0.7)
 	var hub: Vector2 = Vector2(play_size.x * hub_u, play_size.y * hub_v)
-	# Rayos: 6..10; hueco: 2..3 (piso 2)
-	var spokes: int = vr.randi_range(6, 10)
-	var gap_spokes: int = maxi(MIN_GAP_SPOKES, vr.randi_range(2, 3))
+	# T9 (space-bunny, 2ª pasada): con 6-10 radios y hueco de 2, el hueco
+	# quedaba 2/10 del círculo = 72° repartidos en DOS cuñas opuestas, y el
+	# ojo lo leía como "cobertura 360°, sin passage": un starburst sin
+	# salida. Ahora el abanico es un ARCO DE SECTORES con un hueco
+	# CONTINUO y ancho: 4-6 radios totales, hueco de 2 consecutivos
+	# (~90-120° reales), que es lo que se lee como "aquí adentro".
+	# El piso de justicia ya NO es "6 radios" (eso forzaba el starburst) sino
+	# el ÁNGULO del hueco: >= MIN_GAP_DEG grados de sector libre.
+	const MIN_GAP_DEG: float = 75.0
+	var spokes: int = vr.randi_range(4, 6)
+	var gap_spokes: int = 2
 	if params.has("spokes"):
-		spokes = clampi(int(params["spokes"]), 6, 12)
+		spokes = clampi(int(params["spokes"]), 4, 8)
 	if params.has("gap_spokes"):
-		gap_spokes = maxi(MIN_GAP_SPOKES, int(params["gap_spokes"]))
+		gap_spokes = clampi(int(params["gap_spokes"]), 1, maxi(1, spokes - 2))
+	# garantizamos el ángulo mínimo del hueco, que es el contrato real
+	while TAU * float(gap_spokes) / float(spokes) < deg_to_rad(MIN_GAP_DEG) and gap_spokes < spokes - 2:
+		gap_spokes += 1
 	# Radio y giro: el sentido alterna para que el jugador no automatice.
 	# Radio generoso (JSAB: el abanico DOMINA la pantalla) pero acotado al
 	# MIN(w,h) para que en pantallas anchas no salga de la arena.

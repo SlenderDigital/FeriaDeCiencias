@@ -37,8 +37,8 @@ func _initialize() -> void:
 		fails.append("type: %s" % str(wf.get("type", "")))
 	if bool(wf.get("is_hazard", true)):
 		fails.append("nace inofensivo: is_hazard=true")
-	if int(wf.get("telegraph_beats", 0)) != 2 or int(wf.get("active_beats", 0)) != 4:
-		fails.append("timing: telegraph=%s active=%s (esperaba 2/4)" % [str(wf.get("telegraph_beats")), str(wf.get("active_beats"))])
+	if int(wf.get("telegraph_beats", 0)) != 2 or int(wf.get("active_beats", 0)) != 9:
+		fails.append("timing: telegraph=%s active=%s (esperaba 2/9)" % [str(wf.get("telegraph_beats")), str(wf.get("active_beats"))])
 	if int(wf.get("columns", 0)) < 6:
 		fails.append("columns %d < 6" % int(wf.get("columns", 0)))
 	# la cresta no debe pasar del 62% del alto (fairness: margen de reacción)
@@ -90,17 +90,38 @@ func _initialize() -> void:
 		min_h = minf(min_h, logic.column_height(w3, c))
 	if min_h < peak_line - 1.0:
 		fails.append("una columna pasó la cresta: %.0f < %.0f" % [min_h, peak_line])
-	# 2c) el perfil VARÍA entre columnas (onda, no staircase)
-	var h0: float = logic.column_height(w3, 0)
-	var h_mid: int = int(w3["columns"]) / 2
-	var h1: float = logic.column_height(w3, h_mid)
-	if absf(h0 - h1) < 2.0:
-		fails.append("perfil plano: h(0)=%.1f h(mid)=%.1f (no hay onda)" % [h0, h1])
+	# 2c) el perfil VARÍA entre columnas (onda, no staircase). Se mide a
+	# mitad de la ventana activa, cuando la onda ya está desplegada: al
+	# principio rise es chico y TODO se ve igual (por diseño: la onda emerge).
+	var w6: Dictionary = controller._waveform_wall(0.0, 0, {}, 0)
+	for i in range(int(6.0 * bl / dt) + 4):
+		w6 = logic.step(w6, dt, bl)
+	var spread: float = 0.0
+	var w_min: float = 1e9
+	var w_max: float = -1e9
+	for c in range(int(w6["columns"])):
+		var hc: float = logic.column_height(w6, c)
+		w_min = minf(w_min, hc)
+		w_max = maxf(w_max, hc)
+		spread = maxf(spread, absf(hc - logic.column_height(w6, 0)))
+	# T9: la onda tiene que tener amplitud REAL y legible (space-bunny: la
+	# "onda" parecía una línea recta de 1px de diferencia).
+	if w_max - w_min < 60.0:
+		fails.append("amplitud de la onda insuficiente: %.0fpx entre crestas y valles (se leía como línea recta)" % (w_max - w_min))
+	if spread < 40.0:
+		fails.append("perfil plano: variación máx %.1fpx entre columnas" % spread)
+	# y en un instante temprano la forma ya se insinúa (no una rampa lisa)
+	var early: Dictionary = controller._waveform_wall(0.0, 0, {}, 0)
+	var e_spread: float = 0.0
+	for c2 in range(int(early["columns"])):
+		e_spread = maxf(e_spread, absf(logic.column_height(early, c2) - logic.column_height(early, 0)))
+	if e_spread < 20.0:
+		fails.append("telegraph: la onda no se insinúa (variación %.1fpx, se ve como una banda lisa)" % e_spread)
 	# 2d) colisión: jugador BAJO la columna (en la onda) => hit; jugador
 	# por encima de la cresta => NO hit; telegraph/fade inofensivos
 	var play_w: float = 1280.0
 	var cx: float = play_w * (0.5 / float(w3["columns"]))
-	var p_low: Vector2 = Vector2(cx, (h0 + peak_line) * 0.5 + 60.0)
+	var p_low: Vector2 = Vector2(cx, w_max + 30.0)
 	if not logic.hits_player(w3, p_low):
 		fails.append("jugador dentro de la columna no recibe daño")
 	var p_high: Vector2 = Vector2(cx, peak_line - 60.0)

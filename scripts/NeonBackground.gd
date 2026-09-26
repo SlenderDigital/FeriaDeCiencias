@@ -3,8 +3,12 @@ extends Control
 ## Draws an animated 2D perspective grid, rhythm pulse rings, and glowing floating particles.
 
 @export var bpm: float = 128.0
-@export var grid_color: Color = Color(0.0, 0.94, 1.0, 0.18)
-@export var accent_color: Color = Color(1.0, 0.0, 0.55, 0.25)
+## T9 (space-bunny review): la grilla es DECORADO, no peligro. Con alpha
+## 0.18 era la forma más brillante y grande del frame — más que los rojos
+## que matan. El ojo iba a la parte equivocada de la pantalla. Ahora la grilla se
+## siente pero no se lee, y el rojo/blanco queda reservado para lo letal.
+@export var grid_color: Color = Color(0.35, 0.72, 0.85, 0.055)
+@export var accent_color: Color = Color(1.0, 0.0, 0.55, 0.10)
 @export var pulse_speed: float = 1.0
 
 var time: float = 0.0
@@ -224,6 +228,11 @@ func _draw() -> void:
 	# 4. Floating particles
 	for p in particles:
 		var alpha: float = p["alpha"] * (0.6 + 0.4 * sin(p["phase"]))
-		var col: Color = grid_color if (int(p["phase"]) % 2 == 0) else accent_color
-		col.a = alpha
+		# T9 (space-bunny): el confeti usaba accent_color (magenta/rojo), lo
+		# que rompía la regla "ROJO = LETAL": había puntos rojos por toda la
+		# zona segura y el jugador ya no podía confiar en el color. Ahora la
+		# decoración es SIEMPRE de la familia fría (grid/azul); el rojo queda
+		# reservado a la geometría que mata.
+		var col: Color = grid_color if (int(p["phase"]) % 3 == 0) else Color(0.30, 0.62, 0.80)
+		col.a = alpha * 0.55
 		draw_circle(p["pos"], p["size"], col)

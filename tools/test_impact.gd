@@ -108,6 +108,20 @@ func _initialize() -> void:
 	if float(hs3["applied"]) > 0.0:
 		fails.append("hit-stop pedido sin iframes (durante un telegraph no debe congelar)")
 
+	# --- 5) REGRESIÓN DEL FREEZE INFINITO (bug real, cazado en T9) ---
+	# El hit-stop congela con delta=0. Si su propio contador se decrementara
+	# con ESE delta, nunca llegaría a cero y el juego quedaría congelado
+	# para siempre. Gameplay lo resuelve con un TIMESTAMP real
+	# (_hitstop_until); este test verifica que el patrón peligroso no volvió.
+	var src: String = FileAccess.get_file_as_string("res://scripts/Gameplay.gd")
+	if src.contains("_hitstop_remaining"):
+		fails.append("Gameplay volvió a _hitstop_remaining (contado con delta = freeze infinito)")
+	if not src.contains("_hitstop_until"):
+		fails.append("Gameplay no usa el timestamp real _hitstop_until")
+	var real_freeze: Dictionary = logic.request_hitstop(0.05, true, 0.0)
+	if float(real_freeze["applied"]) != float(logic.MAX_HITSTOP_SEC):
+		fails.append("la pausa aplicada no dura exactamente MAX_HITSTOP_SEC")
+
 	_finish(fails)
 
 func _finish(fails: Array[String]) -> void:

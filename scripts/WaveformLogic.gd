@@ -28,8 +28,11 @@ static func rise_factor(wf: Dictionary) -> float:
 	var st: String = str(wf.get("state", "telegraph"))
 	var bl: float = float(wf.get("beat_len", 0.46875))
 	if st == "telegraph":
-		# el aviso ya insinúa el perfil (subió un 12% para ser legible)
-		return 0.12 * clampf(float(wf.get("state_time", 0.0)) / maxf(float(wf.get("telegraph_beats", 2)) * bl, 0.001), 0.0, 1.0)
+		# El aviso ya insinúa el perfil COMPLETO (con amplitud legible) desde
+		# el frame 1: el jugador tiene que poder ver DÓNDE pasa la onda antes
+		# de que llegue. Antes arrancaba en 0.12 y crecía: a t=0 la forma era
+		# una banda lisa (space-bunny: "no parece una onda").
+		return lerpf(0.30, 0.42, clampf(float(wf.get("state_time", 0.0)) / maxf(float(wf.get("telegraph_beats", 2)) * bl, 0.001), 0.0, 1.0))
 	if st == "fade":
 		return 1.0 - clampf(float(wf.get("state_time", 0.0)) / maxf(float(wf.get("fade_beats", 2)) * bl, 0.001), 0.0, 1.0)
 	if st == "done":
@@ -50,8 +53,12 @@ static func column_height(wf: Dictionary, index: int) -> float:
 	# perfil: 0 en los troughs, 1 en las crestas
 	var wave: float = 0.5 + 0.5 * sin(u * TAU * cycles + phase)
 	var r: float = rise_factor(wf)
-	# interpolar base->perfil: en r=0 todas las columnas están en base_line.
-	return minf(base - (base - peak) * wave * r, base)
+	# T9: la amplitud de la onda es legible TODO el tiempo. Antes el perfil se
+	# escalaba por rise y, con rise chico, la diferencia trough-cresta era de
+	# 1px: el "muro de onda" parecía una línea recta (lo señaló space-bunny).
+	# Ahora la forma ya está completa y rise sólo la despliega desde abajo.
+	var shaped: float = lerpf(0.35, 1.0, wave)   # aun en telegraph hay forma
+	return minf(base - (base - peak) * shaped * r, base)
 
 ## Colisión: el jugador está dentro de la columna si su Y está por DEBAJO
 ## de la altura de la columna en su X, y sólo en active.

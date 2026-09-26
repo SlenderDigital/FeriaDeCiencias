@@ -34,8 +34,8 @@ func _initialize() -> void:
 		fails.append("type: %s" % str(sq.get("type", "")))
 	if bool(sq.get("is_hazard", true)):
 		fails.append("nace inofensivo: is_hazard=true")
-	if int(sq.get("telegraph_beats", 0)) != 2 or int(sq.get("active_beats", 0)) != 4:
-		fails.append("timing: telegraph=%s active=%s (esperaba 2/4)" % [str(sq.get("telegraph_beats")), str(sq.get("active_beats"))])
+	if int(sq.get("telegraph_beats", 0)) != 2 or int(sq.get("active_beats", 0)) != 9:
+		fails.append("timing: telegraph=%s active=%s (esperaba 2/9)" % [str(sq.get("telegraph_beats")), str(sq.get("active_beats"))])
 	if float(sq.get("min_gap", 0.0)) <= 0.0:
 		fails.append("min_gap 0: sin bolsillo garantizado (fairness)")
 	# el pasillo inicial no puede ser el mínimo (aprieta, no empieza cerrado)
@@ -76,8 +76,9 @@ func _initialize() -> void:
 	var monotonic := true
 	var respected := true
 	var play_w: float = 1280.0
-	# recorrer TODA la ventana active
-	for i in range(int(4.0 * bl / dt) + 4):
+	# recorrer TODA la ventana active (9 beats desde T9): el corredor tiene
+	# que llegar al bolsillo mínimo al final, no a la mitad.
+	for i in range(int(9.0 * bl / dt) + 6):
 		s3 = logic.step(s3, dt, bl)
 		if str(s3["state"]) != "active":
 			break

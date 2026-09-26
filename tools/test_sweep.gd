@@ -32,7 +32,7 @@ func _initialize() -> void:
 	if bool(sweep.get("is_hazard", true)):
 		fails.append("nace inofensivo: is_hazard=true")
 	if int(sweep.get("telegraph_beats", 0)) != 2 or int(sweep.get("active_beats", 0)) != 4:
-		fails.append("timing: telegraph=%s active=%s (esperaba 2/4)" % [str(sweep.get("telegraph_beats")), str(sweep.get("active_beats"))])
+		fails.append("timing: telegraph=%s active=%s (esperaba 2/9)" % [str(sweep.get("telegraph_beats")), str(sweep.get("active_beats"))])
 	var sweep_rate: float = absf(float(sweep.get("sweep_deg_per_beat", 999.0)))
 	if sweep_rate > 90.0:
 		fails.append("fairness: barrido %.0f°/beat > 90° (ilegible)" % sweep_rate)
