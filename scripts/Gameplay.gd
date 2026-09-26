@@ -591,13 +591,21 @@ func _draw_one_target(t: Dictionary) -> void:
 			var tip_d: Vector2 = hub_d + dir_d * rad_d
 			if st_d == "telegraph":
 				# granate tenue, pulsa al beat, finito y delgado: AVISO legible
-				var warn_col := Color(0.85, 0.20, 0.30, (0.46 + 0.22 * pulse_d) * alpha_d)
-				draw_line(hub_d + dir_d * 24.0, tip_d, warn_col, 2.5)
-				draw_line(tip_d - dir_d * 14.0, tip_d, Color(0.75, 0.2, 0.28, 0.5 * alpha_d), 5.0)
+				# T10: el ancho del rayo escala con el RADIO del rotor (no un
+				# fijo en px): un rotor grande no puede dibujar sus rayos como
+				# hairlines de 2px, porque entonces el hueco se lee como
+				# "aún no spamearon rayos" y no como "acá se puede estar".
+				var spoke_w: float = maxf(3.0, rad_d * 0.022)
+				var warn_col: Color = Color(0.85, 0.20, 0.30, (0.46 + 0.22 * pulse_d) * alpha_d)
+				draw_line(hub_d + dir_d * 24.0, tip_d, warn_col, spoke_w)
+				draw_line(tip_d - dir_d * 14.0, tip_d, Color(0.75, 0.2, 0.28, 0.5 * alpha_d), spoke_w * 1.8)
 			else:
 				# active/fade: rosa neón pleno (el peligro ES la geometría)
-				_neon_line(hub_d + dir_d * 20.0, tip_d, Color(1.0, 0.2, 0.3), 7.0 * (0.8 + 0.2 * pulse_d))
-				draw_line(hub_d + dir_d * 20.0, tip_d, Color(2.2, 0.5, 0.6, 0.9 * alpha_d), 2.5)
+				# T10: mismo piso de grosor, para que el peligro tenga la misma
+				# masa visual en cualquier tamaño de rotor.
+				var spoke_w2: float = maxf(6.0, rad_d * 0.042)
+				_neon_line(hub_d + dir_d * 20.0, tip_d, Color(1.0, 0.2, 0.3), spoke_w2 * (0.8 + 0.2 * pulse_d))
+				draw_line(hub_d + dir_d * 20.0, tip_d, Color(2.2, 0.5, 0.6, 0.9 * alpha_d), spoke_w2 * 0.36)
 		# Hub: aro del tamaño del "ojo" seguro + núcleo
 		if st_d == "telegraph":
 			draw_arc(hub_d, 24.0, 0, TAU, 24, Color(0.7, 0.25, 0.3, 0.4 * alpha_d), 2.5)
@@ -1401,11 +1409,14 @@ func _pilot_desired(frame_dt: float) -> Vector2:
 		# ¿estamos en peligro AHORA con este? -> máxima prioridad, y el punto
 		# tiene que seguir libre al llegar (predicción).
 		if _pilot_hits(t, player_pos):
-			return _PilotLogic.safe_point_eta(t, player_pos, _PILOT_SPEED, frame_dt)
+			return _pilot_safe_in_field(t, player_pos, frame_dt)
 		# si no hay peligro inmediato, un punto seguro de este setpiece sirve
-		# como destino (lejos de donde está el hazard).
+		# como destino — PERO un setpiece no es el único peligro: la sierra
+		# que cayó dentro de su hueco igual mata (el panel 06_fan_d.png de la
+		# revisión visual). Buscamos el punto que sea seguro para el setpiece
+		# Y para todo lo demás que esté vivo.
 		if str(t.get("state", "")) in ["telegraph", "active"]:
-			return _PilotLogic.safe_point_eta(t, player_pos, _PILOT_SPEED, frame_dt)
+			return _pilot_safe_in_field(t, player_pos, frame_dt)
 	# 2) Sólo proyectiles sueltos: elegir el punto LIBRE más cercano (el piloto
 	#    barre la pantalla como un humano, no huye de un saw y se mete en otro).
 	return _best_free_spot(frame_dt)
@@ -1427,6 +1438,41 @@ func _pilot_hits(t: Dictionary, p: Vector2) -> bool:
 		"saw", "homing", "drifter", "saw_pair", "saw_weave", "drifter_swarm":
 			if t.has("pos"):
 				return player_pos.distance_to(t["pos"]) < 90.0
+	return false
+
+## El punto de refugio del setpiece, VERIFICADO contra TODA la geometría viva.
+## La revisión visual (space-bunny, 06_fan_d.png) encontró una sierra parada
+## DENTRO del hueco del abanico: el jugador leía bien el hueco y moría igual,
+## porque "el hueco es seguro" era una promesa falsa. Ahora el destino tiene
+## que estar libre para el setpiece Y para todo lo demás que esté en pantalla,
+## y seguir libre al llegar.
+func _pilot_safe_in_field(anchor: Dictionary, from: Vector2, frame_dt: float) -> Vector2:
+	var base: Vector2 = _PilotLogic.safe_point_eta(anchor, from, _PILOT_SPEED, frame_dt)
+	if not _field_blocks(base):
+		return base
+	# el punto del setpiece está tapado por otra cosa: buscamos alrededor
+	var hub: Vector2 = anchor.get("pos", Vector2(640, 400))
+	for r_i in range(7):
+		for a_i in range(20):
+			var rr: float = lerpf(110.0, 430.0, float(r_i) / 6.0)
+			var aa: float = TAU * float(a_i) / 20.0
+			var c: Vector2 = Vector2(clampf(hub.x + cos(aa) * rr, 90.0, 1190.0),
+				clampf(hub.y + sin(aa) * rr, 200.0, 630.0))
+			if not _field_blocks(c) and not _pilot_hits(anchor, c):
+				return c
+	for gx in [160.0, 380.0, 640.0, 900.0, 1120.0]:
+		for gy in [220.0, 400.0, 560.0]:
+			var g: Vector2 = Vector2(gx, gy)
+			if not _field_blocks(g) and not _pilot_hits(anchor, g):
+				return g
+	# todo tapado: nos alejamos del hub, que es lo menos malo
+	return Vector2(clampf(from.x, 120.0, 1160.0), clampf(from.y - 200.0, 200.0, 600.0))
+
+## ¿Algún peligro (de cualquier tipo) ocupa este punto?
+func _field_blocks(p: Vector2) -> bool:
+	for t in targets:
+		if _pilot_hits(t, p):
+			return true
 	return false
 
 ## El punto LIBRE más cercano. El piloto anterior huía de UN saw y se

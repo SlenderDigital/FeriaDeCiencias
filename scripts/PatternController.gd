@@ -38,6 +38,18 @@ const SETPIECE_SCRIPTS: Dictionary = {
 	"sweep_build_v1": [
 		{"at": 0, "emit": "laser_sweep", "params": {}},
 	],
+	## T10: el build es la ENTRADA del tutorial. Cuatro barridos de pantalla
+	## completa antes del drop consumian 4 de los 9 golpes que da la vida,
+	## sin que el jugador hubiera aprendido nada todavia. Ahora el build
+	## tiene UN solo barrido (el de entrada, que ensena a esquivar) y el
+	## resto del build lo llenan los mini-jabs: latidos, no pantallas
+	## devastated. Se aprende la gramatica sin exigir un pilot perfecto.
+	"build_intro_v1": [
+		{"at": 0, "emit": "laser_sweep", "params": {}},
+	],
+	"build_pulse_v1": [
+		{"at": 0, "emit": "mini_jab", "params": {}},
+	],
 	## T4: el breakdown abre con el muro de ONDA (la "arena invertida" del
 	## video): el espacio se cierra desde abajo y el juego se lee al revés.
 	"wave_breakdown_v1": [
@@ -66,13 +78,17 @@ const SETPIECE_SCRIPTS: Dictionary = {
 }
 ## Qué script toca por sección (la energía manda; intro/outro no agendan).
 const SETPIECE_BY_SECTION: Dictionary = {
-	"build": "sweep_build_v1",
+	"build": "build_intro_v1",
 	"drop": "drop_opener_v1",
 	"drop2": "climax_squeeze_v1",
 	"breakdown": "wave_breakdown_v1",
 	"outro": "outro_rings_v1",
 }
 var _active_setpiece: Dictionary = {}   # {script_key, anchor_beat}
+# T10: cuándo se agendó la última ancla, para dejar aire entre ellas.
+var _last_anchor_beat: int = -99
+# T10: la primera ancla de la seccion ya se emitio (build: sweep de entrada)
+var _first_anchor_done: bool = false
 # Rojo de peligro: TODO lo que daña es rojo, sin excepciones. El color del
 # track queda para la nave/HUD/ambiente; rojo = no lo toques.
 const DANGER_RED: Color = Color(1.0, 0.2, 0.3, 1.0)
@@ -263,6 +279,8 @@ func spawns_at_bar(t: float, beat_idx: int, base_color: Color) -> Array[Dictiona
 	# exactamente el "nothing happens" que reportó el usuario: el tutorial
 	# era la sección más muda del juego.
 	var setpiece_live: bool = not _active_setpiece.is_empty()
+	# T10: los mini-jabs son el latido del nivel. En cualquier seccion con
+	# energia >= 0.7 rellenan los huecos entre anclas (pulsar, no callar).
 	if not setpiece_live and energy >= 0.7:
 		return _build_pattern("mini_jab", t, base_color, beat_idx, {}, beat_idx * 31)
 	if easy_mode:
@@ -294,6 +312,8 @@ func spawns_at_phrase(t: float, beat_idx: int, base_color: Color) -> Array[Dicti
 ## a medias del intento anterior.
 func reset_level() -> void:
 	_active_setpiece = {}
+	_last_anchor_beat = -99
+	_first_anchor_done = false
 	wall_active = false
 	_rng.seed = _rng.seed   # misma semilla: el nivel es reproducible
 
@@ -309,22 +329,35 @@ func _director_pump(t: float, beat_idx: int, base_color: Color) -> Array[Diction
 	#    propio, sin setpiece activo, y SIN MURO en pantalla. El MAPA manda
 	#    sobre la energía: el outro tiene un script aunque sea la sección más
 	#    calma.
-	#    T9 (space-bunny): agendar cada 16 beats dejaba ~7 beats de grilla
-	#    vacía entre anclas — la queja original ("nothing happens"). Con
-	#    ancla cada 8 y una ventana activa de 9 beats, siempre hay algo.
+	#    T9: agendar cada 16 beats dejaba ~7 beats de grilla vacía entre
+	#    anclas — la queja original ("nothing happens"). Con ancla cada 8
+	#    y una ventana activa de 6-9 beats, siempre hay algo.
 	#    T9: `wall_active` BLOQUEA la ancla. Con muros tan frecuentes como
 	#    eran, algunas secciones (outro) nunca agendaron su setpiece: el
-	#    pulso final no aparecía. Un muro no cancela una ancla de sección;
-	#    lo que sí lo hace es solaparse con ella (ver spawns_at: el muro
-	#    se salta mientras hay setpiece).
-	if beat_idx % 8 == 0 and _active_setpiece.is_empty():
+	#    pulso final no aparecía. Un muro no cancela una ancla de sección.
+	#    T10: ANCHOR_GAP_BEATS de aire entre anclas. Encadenar anclas sin
+	#    pausa convertía al build en 4 barridos de pantalla completa en 12s
+	#    (4 golpes en la corrida instrumentada). El jugador necesita
+	#    respirar entre un momento y el siguiente — así funciona en JSAB:
+	#    el patrón más fuerte se SOSTIENE, no se encadena.
+	if beat_idx % 8 == 0 and _active_setpiece.is_empty() and (beat_idx - _last_anchor_beat) >= ANCHOR_GAP_BEATS:
 		var sec := _current_section(t)
 		if not sec.is_empty() and not SETPIECE_BY_SECTION.get(str(sec.get("name", "")), "").is_empty():
-			var script_key: String = str(SETPIECE_BY_SECTION.get(str(sec.get("name", "")), ""))
+			var sec_name: String = str(sec.get("name", ""))
+			var script_key: String = str(SETPIECE_BY_SECTION.get(sec_name, ""))
+			# T10: en el BUILD (la entrada del tutorial) la PRIMERA ancla es
+			# el barrido que ensena a esquivar; las siguientes son latidos.
+			# Cuatro barridos de pantalla completa antes del drop gastaban 4 de
+			# los 9 golpes del tutorial sin que el jugador hubiera aprendido
+			# nada todavia. El sweep grande se reserva para el drop.
+			if sec_name == "build" and _first_anchor_done:
+				script_key = "build_pulse_v1"
 			if not easy_mode:
 				script_key = "laser_sweep_v1" if _rng.randf() < 0.5 else "closing_perimeter_v1"
 			if not script_key.is_empty():
 				_active_setpiece = {"script_key": script_key, "anchor_beat": beat_idx}
+				_last_anchor_beat = beat_idx
+				_first_anchor_done = true
 				# La fase 0 vence ahora mismo: emitirla ya.
 				out.append_array(_emit_setpiece_phases(t, beat_idx, base_color))
 	return out
@@ -631,10 +664,15 @@ func _laser_telegraph(x: float) -> Dictionary:
 ## beats, fade 2. Fairness: <= 90°/beat (test-asserted), ancho de haz ~12px.
 ## Parametrizado como el spoke_fan: hub, ángulos y sentido por seed de ancla.
 ## T9: EXCEPCIÓN A LA VIDA DE SECCIÓN. El barrido cruza la pantalla ENTERA
-## cada pasada: con 9 beats active (la vida de las otras anclas) salían 4
-## barridos seguidos en el build y el jugador no podía esquivar NINGUNO
-## (4 golpes en 12s en la corrida instrumentada). Un barrido es UNA pasada
-## legible: 4 beats active, y la siguiente ancla llega a los 8.
+## cada pasada: con la vida de las otras anclas salían 3-4 barridos seguidos
+## en el build y el jugador no podía esquivar NINGUNO (4 golpes en 12s en la
+## corrida instrumentada). Un barrido es UNA pasada legible: 4 beats active.
+##
+## T10: además, el barrido es el patrón MÁS hostil del set para un jugador
+## (ocupa la pantalla entera y su borde se mueve más rápido que la nave), así
+## que el build ya no lo encadena: el director deja 4 beats de aire entre
+## anclas del build para que el jugador se reponga. Ver ANCHOR_GAP_BEATS.
+const ANCHOR_GAP_BEATS: int = 4
 func _laser_sweep(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: int = -1) -> Dictionary:
 	const TELEGRAPH_BEATS: int = 2
 	const ACTIVE_BEATS: int = 4
