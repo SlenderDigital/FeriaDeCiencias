@@ -578,6 +578,37 @@ func _draw_one_target(t: Dictionary) -> void:
 		if st_d == "fade":
 			alpha_d = clampf(1.0 - float(t.get("state_time", 0.0)) / maxf(float(t.get("fade_beats", 2)) * beat_interval, 0.001), 0.0, 1.0)
 		var pulse_d: float = maxf(0.0, 1.0 - fposmod(float(t.get("state_time", 0.0)) / maxf(beat_interval, 0.001), 1.0))
+		# T10 — CUERPO DEL ROTOR. space-bunny, 4a pasada: "the gap is a hole
+		# in the render, not a shape the player can see". Un hueco que sólo se
+		# define como AUSENCIA de rojo es indistinguible de "aún no
+		# aparecieron rayos". Ahora el rotor tiene cuerpo: un anillo
+		# translúcido que marca el TERRITORIO letal, con el SECTOR SEGURO
+		# recortado y teñido en el único color frío de la gramática (cian) y
+		# sus dos radios de borde como marcadores duros. El pasillo se ve
+		# porque está DIBUJADO, no porque falta algo.
+		var sector_from: float = rot_d + TAU * float(gap_first_d) / float(n_sp)
+		var sector_to: float = sector_from + TAU * float(gap_sp) / float(n_sp)
+		var body_col := Color(0.45, 0.05, 0.12, 0.20 if st_d != "telegraph" else 0.10)
+		var safe_col := Color(0.30, 0.92, 1.0, 0.13 if st_d != "telegraph" else 0.09)
+		# territories: dos polígonos anulares (sector lethal + sector seguro)
+		var lethal_pts := PackedVector2Array()
+		var safe_pts := PackedVector2Array()
+		var seg: int = 26
+		for a_i in range(seg + 1):
+			var aa: float = sector_from + (sector_to - sector_from) * float(a_i) / float(seg)
+			safe_pts.append(hub_d + Vector2.from_angle(aa) * rad_d)
+			var ab: float = sector_to + (sector_from + TAU - sector_to) * float(a_i) / float(seg)
+			lethal_pts.append(hub_d + Vector2.from_angle(ab) * rad_d)
+		lethal_pts.append(hub_d)
+		safe_pts.append(hub_d)
+		draw_colored_polygon(lethal_pts, body_col)
+		draw_colored_polygon(safe_pts, safe_col)
+		# los dos radios del sector SEGURO como marcadores duros
+		for b_i in range(2):
+			var b_ang: float = sector_from if b_i == 0 else sector_to
+			var b_dir := Vector2.from_angle(b_ang)
+			draw_line(hub_d + b_dir * 26.0, hub_d + b_dir * rad_d,
+				Color(0.45, 0.95, 1.0, 0.45 * alpha_d), 3.0)
 		for k in range(n_sp):
 			var in_gap_d: bool = false
 			for g in range(gap_sp):
@@ -957,6 +988,13 @@ func _draw_one_target(t: Dictionary) -> void:
 				var saw_r: float = t["radius"]
 				var saw_lethal: bool = _PatternLanguage.lethality_of(ttype_d) >= 0.75
 				var saw_spin: float = Time.get_ticks_msec() * 0.004
+				# T10 (space-bunny 4a): la sierra comparte forma con el haz del
+				# abanico y la onda, así que no se sabía si mataba. Ahora
+				# tiene un halo tenue que la marca como PROYECTIL (se mueve
+				# solo) y no como geometría del nivel (que tiene borde duro
+				# y sector). El halo es la diferencia de vocabulario.
+				draw_circle(saw_c, saw_r * 1.75, Color(1.0, 0.10, 0.20, 0.07))
+				draw_circle(saw_c, saw_r * 1.35, Color(1.0, 0.10, 0.20, 0.05))
 				draw_circle(saw_c, saw_r, Color(0.45, 0.03, 0.08, 1.0))
 				for si in range(8):
 					var sang: float = saw_spin + TAU * float(si) / 8.0
