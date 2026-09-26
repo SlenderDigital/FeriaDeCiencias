@@ -21,7 +21,6 @@ __pycache__/
 *.pyc
 
 # Hermes agent internal (no del projecto)
-.hermes/
 
 # Godot-specific ignores
 .import/
@@ -44,3 +43,6 @@ mono_crash.*.json
 
 # El ledger de SDD SÍ se versiona; este patrón sólo cubre el scratch runtime.
 .superpowers/*/scratch/
+
+# .hermes/ SÍ se versiona (planes de trabajo). Antes ignorado: los planes
+# se perdían con un reset de disco.

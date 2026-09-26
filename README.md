@@ -7,14 +7,16 @@ El jugador controla una nave o personaje luminoso con ambas manos mediante **Med
 
 ## Características principales
 
-- **Control por manos con MediaPipe**: una mano define el desplazamiento, la otra la orientación de la nave.
-- **Gameplay rítmico**: los patrones, proyectiles y obstáculos se sincronizan con la canción.
-- **Esquiva pura**: todo lo que aparece es peligro (sierras, enjambres, proyectiles teledirigidos, muros y láseres). No hay disparos ni puntos que recolectar.
+- **Control por manos con MediaPipe**: una mano define el desplazamiento, la otra la orientación de la nave. También se juega con teclado (flechas / WASD) sin ningún requisito de cámara.
+- **Gameplay rítmico**: la coreografía se construye desde la estructura de la canción. El reloj del nivel está anclado al **audio real** (`get_playback_position()`), no a un contador.
+- **Esquiva pura**: todo lo que aparece es peligro. No hay disparos ni puntos que recolectar.
+- **Setpieces por sección**: cada sección de la canción tiene un momento propio — barrido láser, abanico rotante, muro de onda, corredor que se cierra, anillos expansivos. Ver [`docs/first_light_diseno.md`](docs/first_light_diseno.md).
 - **Progreso como métrica**: el HUD muestra el % de la canción sobrevivida; el récord personal es el mejor progreso alcanzado.
-- **Escudo de emergencia**: invulnerabilidad temporal con recarga, para atravesar muros y láseres.
+- **Escudo de emergencia**: invulnerabilidad temporal con recarga, para atravesar muros y láseres. Cuando bloquea un peligro, **avisa visualmente**.
 - **Barra de vida con estados**: verde, ámbar y rojo pulsante según lo crítica que esté la partida.
+- **Impacto con feedback**: trauma de cámara, flash blanco y hit-stop al activarse cada setpiece, escalados por la energía de la sección.
 - **Estética neón minimalista**: visuales abstractos con brillos, estelas y animaciones de impacto.
-- **Dificultad progresiva**: la intensidad escala con la energía de la canción (intro → build → drop → clímax).
+- **Dificultad progresiva**: la intensidad escala con la energía de la canción (intro → build → drop → breakdown → clímax → outro).
 
 ## Condiciones de partida
 
@@ -36,9 +38,48 @@ Movimiento por manos con MediaPipe:
 
 - Una mano define el desplazamiento de la nave.
 - La otra define la orientación.
+- **El teclado siempre funciona** (flechas / WASD), con o sin cámara. Si tocás una tecla, el teclado manda; la mano recupera el control cuando vuelve a dar landmarks frescos. El juego **nunca** queda bloqueado esperando una mano.
 - Esquivar todos los obstáculos al ritmo de la canción: todo spawn es peligro.
-- **Escudo de emergencia**: invulnerabilidad breve (~1.2s) que atraviesa cualquier peligro, con recarga de ~3s.
+- **Escudo de emergencia**: invulnerabilidad breve (~1.2s) que atraviesa cualquier peligro, con recarga de ~3s. Bloquea un peligro por vez y te **avisa** con un destello.
 - **Progreso**: % de la canción sobrevivida; al morir se guarda como mejor progreso si supera el récord.
+
+### Daño
+
+| Rol         | Daño | Ejemplos                              |
+| ----------- | ---- | ------------------------------------- |
+| Mini-jab    | 8    | latido de un compás                   |
+| Proyectil   | 10   | sierra, mina, misil, enjambre         |
+| Setpiece    | 12   | abanico, barrido, onda, corredor, muro |
+
+En `easy_mode` la vida es 125, así que el tutorial perdona **más de 10 golpes**.
+El i-frame protege sólo al jugador: el peligro sigue vivo y vuelve a poder
+dañar si lo tocás de nuevo.
+
+---
+
+## Verificación
+
+El nivel tiene **22 contratos headless** que se corren sin abrir el juego:
+
+```bash
+for t in tools/test_*.gd; do
+  printf "%-28s " "$t"
+  godot --headless --script "$t" 2>&1 | grep -E "PASS|FAIL" | head -1
+done
+```
+
+Los controles de clave:
+
+| Test                         | Qué garantiza                                    |
+| ---------------------------- | ------------------------------------------------ |
+| `test_beatability`           | el nivel se puede terminar                        |
+| `test_damage_coherence`      | el daño es el que declara cada enemigo            |
+| `test_anchor_lifetime`       | ningún barrido encadena golpes imposibles          |
+| `test_pattern_language`      | la jerarquía visual está conectada, no es código muerto |
+| `test_mini_jabs`             | la pantalla nunca queda muda                      |
+
+Ver [`docs/first_light_diseno.md`](docs/first_light_diseno.md) para el detalle de
+las reglas de justicia y cómo verificar el nivel en el motor real.
 
 ## Requisitos para la feria
 
