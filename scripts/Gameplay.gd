@@ -1416,14 +1416,24 @@ func _on_hazard_hit(source_bonus: float = -1.0, source_type: String = "") -> voi
 	var applied: float = float(hs["applied"])
 	if applied > 0.0:
 		_hitstop_until = Time.get_ticks_msec() / 1000.0 + applied
-	# Daño por golpe: el tutorial (easy_mode) tiene 125 HP, así que a 18 por
-	# golpe morías al SEXTO impacto — demasiado para un nivel tutorial. La
-	# media del gameplay de JSAB perdona más: 12 en easy, 18 en normal.
-	# Cada peligro trae su propio hit_health_bonus (un mini-jab pica menos que
-	# un setpiece); si no lo trae, se usa la escala del modo.
-	var dmg: float = 12.0 if easy_mode else 18.0
-	if source_bonus < 0.0:
-		dmg *= absf(source_bonus) / 18.0
+	# Daño por golpe.
+	#
+	# BUG (T10, reportado por el usuario: "toco algo y la vida no baja" y
+	# "algunos enemigos hacen menos daño que otros"). El código anterior
+	# trataba hit_health_bonus como MULTIPLICADOR:
+	#     dmg = 12 (easy) * abs(bonus) / 18
+	# o sea que el número del enemigo se dividía y el resultado siempre
+	# terminaba cerca de 12: un setpiece que pedía 18 clavaba 12, y una
+	# sierra que pedía 15 clavaba 10. El daño no venía del enemigo, venía
+	# de una división accidental — de ahí que algunos "enemigos" pegaran
+	# menos y otros parecieran no pegar.
+	#
+	# La semántica correcta es la obvious: hit_health_bonus ES el daño.
+	# Negativo = daño, positivo = curación (ningún enemigo la usa hoy).
+	var dmg: float = source_bonus if source_bonus != 0.0 else (12.0 if easy_mode else 18.0)
+	# Los mini-jabs (puntuales) no pegan igual que un setpiece (un momento):
+	# mantienen su -8 explícito. Un setpiece en easy sigue siendo el tope
+	# cómodo del tutorial.
 	health -= dmg
 	# T9: diagnóstico de por qué murió el piloto (qué peligro lo tomó y a qué
 	# hora de la canción). Sólo con el flag, para no ensuciar la corrida real.

@@ -577,7 +577,7 @@ func _build_pattern(pattern: String, t: float, base: Color, beat_idx: int = 0, p
 # --- Helpers para nuevos patrones ---
 func _hazard(x: float) -> Dictionary:
 	return {"pos": Vector2(x, -30.0), "vel": Vector2(0, 200.0 * (0.85 if easy_mode else 1.0)),
-		"radius": _rng.randf_range(24, 32), "color": Color(1.0, 0.2, 0.3, 1.0), "is_hazard": true, "hit_health_bonus": -15.0 if easy_mode else -25.0, "type": "hazard"}
+		"radius": _rng.randf_range(24, 32), "color": Color(1.0, 0.2, 0.3, 1.0), "is_hazard": true, "hit_health_bonus": -10.0 if easy_mode else -25.0, "type": "hazard"}
 
 func _stripe_band(n: Vector2, t_dir: Vector2, tmin: float, tmax: float, s0: float, s1: float, gap_center: float, c: Color, bar_idx: int = 0, gap_i: int = 0) -> Dictionary:
 	# Banda de muro orientada: cubre s ∈ [s0, s1] en el eje n (avance) y el
@@ -588,7 +588,7 @@ func _stripe_band(n: Vector2, t_dir: Vector2, tmin: float, tmax: float, s0: floa
 	var center := t_dir * t_mid + n * s_mid
 	return {
 		"pos": center, "type": "stripe_wall", "is_hazard": true,
-		"hit_health_bonus": -20.0, "color": c,
+		"hit_health_bonus": -12.0, "color": c,
 		"wall_n": n, "wall_t": t_dir,
 		"s0": s0, "s1": s1,
 		"size": Vector2(tmax - tmin, s1 - s0),
@@ -634,13 +634,13 @@ func _lane_saw(u: float, y: float, vx: float, t: float = -1.0) -> Dictionary:
 func _saw(x: float, c: Color, t: float = -1.0) -> Dictionary:
 	var vy: float = _quantized_vy_from(t, -50.0) if t >= 0.0 else 120.0 * (0.85 if easy_mode else 1.0)
 	return {"pos": Vector2(x, -50.0), "vel": Vector2(_rng.randf_range(-50, 50), vy),
-		"radius": 30, "color": c, "is_hazard": true, "hit_health_bonus": -20.0 if easy_mode else -30.0, "type": "saw"}
+		"radius": 30, "color": c, "is_hazard": true, "hit_health_bonus": -10.0 if easy_mode else -30.0, "type": "saw"}
 
 func _drifter(x: float, c: Color, t: float = -1.0) -> Dictionary:
 	# Anillo con púas que deriva y rota
 	var vy: float = _quantized_vy_from(t, -30.0) if t >= 0.0 else 80.0 * (0.85 if easy_mode else 1.0)
 	return {"pos": Vector2(x, -30.0), "vel": Vector2(_rng.randf_range(-40, 40), vy),
-		"radius": 28, "color": c, "is_hazard": true, "hit_health_bonus": -18.0 if easy_mode else -25.0, "type": "drifter"}
+		"radius": 28, "color": c, "is_hazard": true, "hit_health_bonus": -10.0 if easy_mode else -25.0, "type": "drifter"}
 
 func _laser_telegraph(x: float) -> Dictionary:
 	# Telegraph de 3 BEATS -> dispara un beam en DIRECCIÓN ALEATORIA.
@@ -702,7 +702,7 @@ func _laser_sweep(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: 
 		"sweep_deg_per_beat": sweep_deg / float(ACTIVE_BEATS),
 		"state": "telegraph", "state_time": 0.0,
 		"telegraph_beats": TELEGRAPH_BEATS, "active_beats": ACTIVE_BEATS, "fade_beats": FADE_BEATS,
-		"is_hazard": false, "hit_health_bonus": -20.0,
+		"is_hazard": false, "hit_health_bonus": -12.0,
 		"color": DANGER_RED, "setpiece_phase": true, "just_activated": true, "beat_len": beat_len,
 	}
 
@@ -746,7 +746,7 @@ func _waveform_wall(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed
 		"rise_beats": ACTIVE_BEATS,                        # toda la ventana activa
 		"state": "telegraph", "state_time": 0.0,
 		"telegraph_beats": TELEGRAPH_BEATS, "active_beats": ACTIVE_BEATS, "fade_beats": FADE_BEATS,
-		"is_hazard": false, "hit_health_bonus": -18.0,
+		"is_hazard": false, "hit_health_bonus": -12.0,
 		"color": DANGER_RED, "setpiece_phase": true, "just_activated": true, "beat_len": beat_len,
 	}
 
@@ -783,7 +783,7 @@ func _squeeze_corridor(t: float, beat_idx: int, params: Dictionary = {}, spawn_s
 		"close_beats": ACTIVE_BEATS,
 		"state": "telegraph", "state_time": 0.0,
 		"telegraph_beats": TELEGRAPH_BEATS, "active_beats": ACTIVE_BEATS, "fade_beats": FADE_BEATS,
-		"is_hazard": false, "hit_health_bonus": -18.0,
+		"is_hazard": false, "hit_health_bonus": -12.0,
 		"color": DANGER_RED, "setpiece_phase": true, "just_activated": true, "beat_len": beat_len,
 	}
 
@@ -825,7 +825,7 @@ func _pulse_rings(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: 
 		"grow_beats": ACTIVE_BEATS,     # el anillo 0 cruza la fila en active_beats
 		"state": "telegraph", "state_time": 0.0,
 		"telegraph_beats": TELEGRAPH_BEATS, "active_beats": ACTIVE_BEATS, "fade_beats": FADE_BEATS,
-		"is_hazard": false, "hit_health_bonus": -18.0,
+		"is_hazard": false, "hit_health_bonus": -12.0,
 		"color": DANGER_RED, "setpiece_phase": true, "just_activated": true, "beat_len": beat_len,
 	}
 
@@ -875,7 +875,7 @@ func _mini_jab(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: int
 func _homing(x: float, c: Color) -> Dictionary:
 	# Proyectil teledirigido: persigue al jugador (Gameplay maneja el chase).
 	return {"pos": Vector2(x, -30.0), "vel": Vector2(0, 250.0 * (0.85 if easy_mode else 1.0)),
-		"radius": 20, "color": c, "is_hazard": true, "hit_health_bonus": -15.0 if easy_mode else -20.0, "type": "homing"}
+		"radius": 20, "color": c, "is_hazard": true, "hit_health_bonus": -10.0 if easy_mode else -20.0, "type": "homing"}
 
 ## JSAB T2 — Abanico de rayos rotando (arquetipo 30s/540s del video): hub
 ## central + N rayos, hueco de >= 2 rayos (siempre legible), ciclo
@@ -941,7 +941,7 @@ func _spoke_fan(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: in
 		"beats_per_rev": beats_per_rev,
 		"state": "telegraph", "state_time": 0.0,
 		"telegraph_beats": TELEGRAPH_BEATS, "active_beats": ACTIVE_BEATS, "fade_beats": FADE_BEATS,
-		"is_hazard": false, "hit_health_bonus": -20.0,
+		"is_hazard": false, "hit_health_bonus": -12.0,
 		"color": DANGER_RED, "setpiece_phase": true, "just_activated": true,
 		"gap_first": gap_first, "beat_len": beat_len,
 	}
@@ -949,4 +949,4 @@ func _spoke_fan(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: in
 func _perimeter_ball(cx: float, cy: float, angle: float) -> Dictionary:
 	var dir = Vector2(cos(angle), sin(angle))
 	return {"pos": Vector2(cx, cy) + dir * 500, "vel": -dir * 100.0,
-		"radius": 40, "color": Color(1, 0.2, 0.3, 1), "is_hazard": true, "hit_health_bonus": -40.0, "type": "perimeter"}
+		"radius": 40, "color": Color(1, 0.2, 0.3, 1), "is_hazard": true, "hit_health_bonus": -10.0 if easy_mode else -40.0, "type": "perimeter"}
