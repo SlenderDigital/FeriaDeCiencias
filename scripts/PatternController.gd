@@ -682,7 +682,7 @@ func _laser_sweep(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: 
 ## Parametrizado por seed de ancla.
 func _waveform_wall(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: int = -1) -> Dictionary:
 	const TELEGRAPH_BEATS: int = 2
-	const ACTIVE_BEATS: int = 9
+	const ACTIVE_BEATS: int = 6
 	const FADE_BEATS: int = 2
 	var vr := RandomNumberGenerator.new()
 	vr.seed = 613 ^ spawn_seed if spawn_seed >= 0 else 613 ^ beat_idx
@@ -719,7 +719,7 @@ func _waveform_wall(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed
 ## aprieta pero no mata). Parametrizado por seed de ancla.
 func _squeeze_corridor(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: int = -1) -> Dictionary:
 	const TELEGRAPH_BEATS: int = 2
-	const ACTIVE_BEATS: int = 9
+	const ACTIVE_BEATS: int = 6
 	const FADE_BEATS: int = 2
 	var vr := RandomNumberGenerator.new()
 	vr.seed = 419 ^ spawn_seed if spawn_seed >= 0 else 419 ^ beat_idx
@@ -757,7 +757,7 @@ func _squeeze_corridor(t: float, beat_idx: int, params: Dictionary = {}, spawn_s
 ## que el jugador debe viajar con él. Parametrizado por seed de ancla.
 func _pulse_rings(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: int = -1) -> Dictionary:
 	const TELEGRAPH_BEATS: int = 2
-	const ACTIVE_BEATS: int = 9
+	const ACTIVE_BEATS: int = 6
 	const FADE_BEATS: int = 2
 	var vr := RandomNumberGenerator.new()
 	vr.seed = 271 ^ spawn_seed if spawn_seed >= 0 else 271 ^ beat_idx
@@ -853,7 +853,7 @@ func _spoke_fan(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: in
 	# Pisos de fairness (R3: un solo lugar, test-asserted)
 	const MIN_GAP_SPOKES: int = 2
 	const TELEGRAPH_BEATS: int = 2
-	const ACTIVE_BEATS: int = 9
+	const ACTIVE_BEATS: int = 5
 	const FADE_BEATS: int = 2
 	const MIN_BEATS_PER_REV: float = 16.0
 	# RNG de la invocación (semilla por ancla: determinista, no global)

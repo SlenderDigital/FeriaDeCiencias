@@ -41,7 +41,7 @@ func _initialize() -> void:
 	# el abanico no es un peligro.
 	if gap_sp < 1 or gap_sp > n_sp - 2:
 		fails.append("fairness: hueco de %d radios sobre %d deja hazards" % [gap_sp, n_sp])
-	if int(fan.get("telegraph_beats", 0)) != 2 or int(fan.get("active_beats", 0)) != 9:
+	if int(fan.get("telegraph_beats", 0)) != 2 or int(fan.get("active_beats", 0)) != 5:
 		fails.append("timing: telegraph=%s active=%s (esperaba 2/9)" % [str(fan.get("telegraph_beats")), str(fan.get("active_beats"))])
 	if str(fan.get("state", "")) != "telegraph" or bool(fan.get("is_hazard", true)):
 		fails.append("nace en telegraph inofensivo: state=%s is_hazard=%s" % [str(fan.get("state")), str(fan.get("is_hazard"))])
@@ -88,8 +88,8 @@ func _initialize() -> void:
 	# telegraph dura 2 beats => active arranca ~2*bl (tolerancia 1 frame)
 	if absf(t_active - 2.0 * bl) > dt * 1.5:
 		fails.append("active arranca a %.3fs, esperaba %.3fs" % [t_active, 2.0 * bl])
-	if absf(t_fade - 11.0 * bl) > dt * 2.5:
-		fails.append("fade arranca a %.3fs, esperaba ~%.3fs" % [t_fade, 11.0 * bl])
+	if absf(t_fade - 7.0 * bl) > dt * 2.5:
+		fails.append("fade arranca a %.3fs, esperaba ~%.3fs" % [t_fade, 7.0 * bl])
 
 	# --- 2b) Colisión: el hueco es SEGURO aunque rote ---
 	# El jugador VIAJA CON EL HUECO (lo persigue, como un humano): 90 frames

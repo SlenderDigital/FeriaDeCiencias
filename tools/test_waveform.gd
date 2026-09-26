@@ -37,8 +37,8 @@ func _initialize() -> void:
 		fails.append("type: %s" % str(wf.get("type", "")))
 	if bool(wf.get("is_hazard", true)):
 		fails.append("nace inofensivo: is_hazard=true")
-	if int(wf.get("telegraph_beats", 0)) != 2 or int(wf.get("active_beats", 0)) != 9:
-		fails.append("timing: telegraph=%s active=%s (esperaba 2/9)" % [str(wf.get("telegraph_beats")), str(wf.get("active_beats"))])
+	if int(wf.get("telegraph_beats", 0)) != 2 or int(wf.get("active_beats", 0)) != 6:
+		fails.append("timing: telegraph=%s active=%s (esperaba 2/6)" % [str(wf.get("telegraph_beats")), str(wf.get("active_beats"))])
 	if int(wf.get("columns", 0)) < 6:
 		fails.append("columns %d < 6" % int(wf.get("columns", 0)))
 	# la cresta no debe pasar del 62% del alto (fairness: margen de reacción)
@@ -121,7 +121,7 @@ func _initialize() -> void:
 	# por encima de la cresta => NO hit; telegraph/fade inofensivos
 	var play_w: float = 1280.0
 	var cx: float = play_w * (0.5 / float(w3["columns"]))
-	var p_low: Vector2 = Vector2(cx, w_max + 30.0)
+	var p_low: Vector2 = Vector2(cx, logic.column_height(w3, 0) + 30.0)
 	if not logic.hits_player(w3, p_low):
 		fails.append("jugador dentro de la columna no recibe daño")
 	var p_high: Vector2 = Vector2(cx, peak_line - 60.0)
