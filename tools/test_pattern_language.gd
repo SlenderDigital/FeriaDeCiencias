@@ -62,14 +62,17 @@ func _initialize() -> void:
 			first_type, float(logic.lethality_of(first_type)),
 			last_type, float(logic.lethality_of(last_type))])
 
-	# 4) ESTÁ CONECTADO de verdad: Gameplay lo preloadea y lo USA.
+	# 4) ESTÁ CONECTADO de verdad: Gameplay ordena por lethalidad (draw_sort)
+	# y SetpieceRenderer la consulta al dibujar (lethality_of). El dibujo
+	# vive en el renderer desde la Fase A3; la jerarquía sigue llegando.
 	var src: String = FileAccess.get_file_as_string("res://scripts/Gameplay.gd")
 	if not src.contains("preload(\"res://scripts/PatternLanguage.gd\")"):
 		fails.append("Gameplay no preloadea PatternLanguage (código muerto)")
 	if not src.contains("_PatternLanguage.draw_sort"):
 		fails.append("Gameplay no USA draw_sort: el orden de lethalidad no está conectado")
-	if not src.contains("_PatternLanguage.lethality_of"):
-		fails.append("Gameplay no USA lethality_of: la jerarquía no llega al dibujo")
+	var rsrc: String = FileAccess.get_file_as_string("res://scripts/SetpieceRenderer.gd")
+	if not rsrc.contains("_PatternLanguage.lethality_of"):
+		fails.append("SetpieceRenderer no USA lethality_of: la jerarquía no llega al dibujo")
 
 	# 5) Y la regla de color: la decoración NO puede usar rojo (rompería
 	#    "rojo = mata"). Verificamos el fondo.

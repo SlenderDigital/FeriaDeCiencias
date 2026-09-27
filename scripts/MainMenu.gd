@@ -13,11 +13,13 @@ extends Control
 
 @onready var song_select_panel: Control = $Layout/Content/Panels/SongSelectPanel
 @onready var settings_panel: Control = $Layout/Content/Panels/SettingsPanel
+@onready var credits_panel: Control = $Layout/Content/Panels/CreditsPanel
 
 @onready var track_title_label: Label = $Layout/Content/Panels/SongSelectPanel/VBox/Details/TrackTitle
 @onready var track_info_label: Label = $Layout/Content/Panels/SongSelectPanel/VBox/Details/TrackInfo
 @onready var track_desc_label: Label = $Layout/Content/Panels/SongSelectPanel/VBox/Details/TrackDesc
 @onready var track_highscore_label: Label = $Layout/Content/Panels/SongSelectPanel/VBox/Details/HighScoreLabel
+@onready var play_button: Button = $Layout/Content/Panels/SongSelectPanel/VBox/Details/BtnPlayLevel
 
 @onready var slider_master: HSlider = $Layout/Content/Panels/SettingsPanel/VBox/Grid/SliderMaster
 @onready var slider_music: HSlider = $Layout/Content/Panels/SettingsPanel/VBox/Grid/SliderMusic
@@ -141,6 +143,15 @@ func _process(delta: float) -> void:
 			base = GameManager.get_current_track()["color"]
 		title_label.add_theme_color_override("font_color", Color(base.r * glow, base.g * glow, base.b * glow, 1.0))
 
+	# Animación del botón Jugar (requisito: la escena inicial anima el botón):
+	# pulso de escala + brillo al ritmo del título. El pivot se centra al
+	# primer frame con tamaño real (en _ready el layout aún no midió).
+	if play_button and play_button.size.x > 0.0:
+		if play_button.pivot_offset == Vector2.ZERO:
+			play_button.pivot_offset = play_button.size * 0.5
+		var beat: float = 1.0 + 0.035 * sin(title_time * 0.66)
+		play_button.scale = Vector2(beat, beat)
+
 	if HandTrackingClient and HandTrackingClient.has_hand:
 		var palm := HandTrackingClient.get_palm_center()      # Vector2 normalizado (0..1), X espejada
 		if palm.x >= 0.0 and palm.x <= 1.0 and palm.y >= 0.0 and palm.y <= 1.0:
@@ -262,6 +273,8 @@ func ClickButton(btn: Control) -> void:
 		_on_btn_nav_play_pressed()
 	elif btn == $Layout/Content/SideNav/BtnNavSettings:
 		_on_btn_nav_settings_pressed()
+	elif btn == $Layout/Content/SideNav/BtnNavCredits:
+		_on_btn_nav_credits_pressed()
 	elif btn == $Layout/Content/SideNav/BtnNavExit:
 		_on_btn_nav_exit_pressed()
 	elif btn == $Layout/Content/Panels/SongSelectPanel/VBox/Details/BtnPlayLevel:
@@ -339,10 +352,14 @@ func NavigateFocus(dir: int) -> void:
 
 
 func NavigatePanel(dir: int) -> void:
-	if dir == -1:
-		_on_btn_nav_play_pressed()
+	# Cicla entre los 3 paneles: Nivel -> Configuración -> Créditos.
+	var order: Array = [song_select_panel, settings_panel, credits_panel]
+	var idx: int = order.find(active_panel)
+	if idx < 0:
+		idx = 0
 	else:
-		_on_btn_nav_settings_pressed()
+		idx = (idx + dir) % order.size()
+	_show_panel(order[idx])
 
 
 func _on_btn_nav_play_pressed() -> void:
@@ -351,6 +368,10 @@ func _on_btn_nav_play_pressed() -> void:
 
 func _on_btn_nav_settings_pressed() -> void:
 	_show_panel(settings_panel)
+
+
+func _on_btn_nav_credits_pressed() -> void:
+	_show_panel(credits_panel)
 
 
 func _on_btn_nav_exit_pressed() -> void:
@@ -387,22 +408,26 @@ func _on_btn_play_level_pressed() -> void:
 func _on_slider_master_value_changed(value: float) -> void:
 	if GameManager:
 		GameManager.master_volume = value
+		GameManager.save_data()
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(value))
 
 
 func _on_slider_music_value_changed(value: float) -> void:
 	if GameManager:
 		GameManager.music_volume = value
+		GameManager.save_data()
 
 
 func _on_slider_sfx_value_changed(value: float) -> void:
 	if GameManager:
 		GameManager.sfx_volume = value
+		GameManager.save_data()
 
 
 func _on_check_fullscreen_toggled(toggled_on: bool) -> void:
 	if GameManager:
 		GameManager.fullscreen_enabled = toggled_on
+		GameManager.save_data()
 	if toggled_on:
 		print("[MainMenu] CheckFullscreen toggled ON")
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
@@ -441,6 +466,7 @@ func _connect_audio_recursive(n: Node) -> void:
 func _show_panel(panel: Control) -> void:
 	song_select_panel.visible = (panel == song_select_panel)
 	settings_panel.visible = (panel == settings_panel)
+	credits_panel.visible = (panel == credits_panel)
 	active_panel = panel
 	_hand_btn = null
 	_dwell_acc = 0.0

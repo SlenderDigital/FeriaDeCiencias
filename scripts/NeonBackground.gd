@@ -124,9 +124,10 @@ func _current_grid_color() -> Color:
 			# Azul profundo y frío, más tenue: el respiro del nivel.
 			c = Color(0.16, 0.34, 0.62, 0.12)
 		else:
-			# Brillo escala con la energía: 0.3 -> 0.55x, 0.9 -> 1.25x.
-			var gain: float = 0.4 + 0.9 * _section_energy
-			c = Color(grid_color.r * gain, grid_color.g * gain, grid_color.b * gain, 0.18)
+			# Brillo escala con la energía, con techo bajo: la grilla es
+			# ambiente, nunca compite con los rayos/rieles de los enemigos.
+			var gain: float = 0.3 + 0.55 * _section_energy
+			c = Color(grid_color.r * gain, grid_color.g * gain, grid_color.b * gain, 0.11)
 	return c
 
 func _emit_pulse_ring() -> void:

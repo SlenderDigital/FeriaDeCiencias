@@ -13,7 +13,7 @@ El jugador controla una nave o personaje luminoso con ambas manos mediante **Med
 - **Setpieces por sección**: cada sección de la canción tiene un momento propio — barrido láser, abanico rotante, muro de onda, corredor que se cierra, anillos expansivos. Ver [`docs/first_light_diseno.md`](docs/first_light_diseno.md).
 - **Progreso como métrica**: el HUD muestra el % de la canción sobrevivida; el récord personal es el mejor progreso alcanzado.
 - **Escudo de emergencia**: invulnerabilidad temporal con recarga, para atravesar muros y láseres. Cuando bloquea un peligro, **avisa visualmente**.
-- **Barra de vida con estados**: verde, ámbar y rojo pulsante según lo crítica que esté la partida.
+- **Barra de vida con estados**: anillo alrededor de la nave (verde, ámbar y rojo pulsante). Solo aparece 3 segundos tras cada golpe —lo perdido se muestra en rojo—; el resto del tiempo la vida se lee en el relleno de la flecha (más llena = más vida).
 - **Impacto con feedback**: trauma de cámara, flash blanco y hit-stop al activarse cada setpiece, escalados por la energía de la sección.
 - **Estética neón minimalista**: visuales abstractos con brillos, estelas y animaciones de impacto.
 - **Dificultad progresiva**: la intensidad escala con la energía de la canción (intro → build → drop → breakdown → clímax → outro).
@@ -52,34 +52,11 @@ Movimiento por manos con MediaPipe:
 | Setpiece    | 12   | abanico, barrido, onda, corredor, muro |
 
 En `easy_mode` la vida es 125, así que el tutorial perdona **más de 10 golpes**.
-El i-frame protege sólo al jugador: el peligro sigue vivo y vuelve a poder
-dañar si lo tocás de nuevo.
+Cada contacto con peligro activo daña (se puede morir encadenando golpes); el
+i-frame corto (0.5s, 0.7s en tutorial) solo evita el multi-hit del mismo frame.
+El i-frame protege sólo al jugador: el peligro sigue vivo.
 
 ---
-
-## Verificación
-
-El nivel tiene **22 contratos headless** que se corren sin abrir el juego:
-
-```bash
-for t in tools/test_*.gd; do
-  printf "%-28s " "$t"
-  godot --headless --script "$t" 2>&1 | grep -E "PASS|FAIL" | head -1
-done
-```
-
-Los controles de clave:
-
-| Test                         | Qué garantiza                                    |
-| ---------------------------- | ------------------------------------------------ |
-| `test_beatability`           | el nivel se puede terminar                        |
-| `test_damage_coherence`      | el daño es el que declara cada enemigo            |
-| `test_anchor_lifetime`       | ningún barrido encadena golpes imposibles          |
-| `test_pattern_language`      | la jerarquía visual está conectada, no es código muerto |
-| `test_mini_jabs`             | la pantalla nunca queda muda                      |
-
-Ver [`docs/first_light_diseno.md`](docs/first_light_diseno.md) para el detalle de
-las reglas de justicia y cómo verificar el nivel en el motor real.
 
 ## Requisitos para la feria
 
@@ -102,9 +79,9 @@ https://drive.google.com/drive/folders/1jKupoyUeg05_fikUqCsfOjz1TXjJIltl?usp=dri
    git clone https://github.com/SlenderDigital/FeriaDeCiencias.git
    ```
 
-2. Abrir el proyecto con **Godot 4.x** (Godot Engine ≥ 4.0).
+2. Abrir el proyecto con **Godot 4.x** (Godot Engine ≥ 4.0). Al abrir, el editor reimporta solo (`icon.svg`, `first_light.ogg`); no hay addons obligatorios.
 
-3. Ejecutar la escena principal desde el editor o exportar el proyecto según la plataforma destino.
+3. Ejecutar la escena principal (`MainMenu.tscn`) desde el editor o exportar según la plataforma destino. Sin cámara ni tracker también se juega: cae a teclado (flechas / WASD).
 
 > El proyecto usa Godot 4; los archivos `.godot/` e `.import/` están ignorados por git.
 

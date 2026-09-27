@@ -10,20 +10,20 @@ Respuestas al formulario de la Feria de Ciencias.
 
 ## 1. Definir de qué trata el juego o app
 
-Es un juego rítmico de acción con estética minimalista, abstracto y neón. El jugador controla una nave o personaje luminoso con ambas manos mediante MediaPipe, esquivando obstáculos, apuntando y disparando al ritmo de la música. Cada canción define la dificultad, la velocidad de los ataques y la intensidad visual del nivel.
+Es un juego rítmico de acción con estética minimalista, abstracto y neón. El jugador controla una nave o personaje luminoso con ambas manos mediante MediaPipe, esquivando obstáculos al ritmo de la música. No hay disparos: todo lo que aparece es peligro (esquiva pura) y la única defensa es el escudo de emergencia. Cada canción define la dificultad, la velocidad de los ataques y la intensidad visual del nivel.
 
 ## 2. Definir las condiciones de victoria / derrota o finalización
 
 - **Victoria**: el jugador sobrevive hasta que termina la canción.
 - **Derrota**: la barra de vida llega a 0.
 - El progreso del nivel depende de aguantar toda la canción sin perder toda la vida.
-- **Finalización**: completa todos los niveles (si no se generan de forma procedural).
+- **Finalización**: el MVP tiene un solo nivel completo (First Light, procedural de 1:45); el progreso se mide en % de canción sobrevivida con récord personal.
 
 ## 3. Definir el loop general (cómo inicia, qué hace cuando termina)
 
-El juego inicia con la selección de una canción o nivel. Cuando empieza la música, el jugador entra al escenario y debe moverse siguiendo un punto fijo de referencia con sus manos. Si una mano se desvía, el personaje se desplaza hacia esa posición. Con la otra mano, o con la misma, se define la rotación para apuntar y disparar.
+El juego inicia con la selección de una canción o nivel. Cuando empieza la música, el jugador entra al escenario y debe moverse siguiendo un punto fijo de referencia con sus manos. Si una mano se desvía, el personaje se desplaza hacia esa posición. Con la otra mano, o con la misma, se define la rotación de la nave.
 
-Durante la canción aparecen patrones, proyectiles y obstáculos cada vez más complejos. Al finalizar la canción, el nivel termina, se muestra el resultado y se pasa al siguiente desafío.
+Durante la canción aparecen patrones, proyectiles y obstáculos cada vez más complejos. Al finalizar la canción, el nivel termina y se muestra el progreso alcanzado con el récord.
 
 ## 4. Definir el "Upgrade" (qué mejora o castiga cuando finaliza)
 
@@ -31,19 +31,18 @@ Las distintas mejoras existentes serán principalmente visuales, por ejemplo:
 
 - cambios de color o brillo del personaje,
 - estelas neón,
-- disparos más vistosos,
 - escudo visual temporal,
 - animaciones de impacto,
 - transformaciones estéticas según el rendimiento.
 
 ## 5. Definir la mecánica principal
 
-La mecánica central es movimiento y apuntado por manos con MediaPipe:
+La mecánica central es movimiento por manos con MediaPipe:
 
 - una mano define el desplazamiento,
-- la otra define la orientación y disparo,
+- la otra define la orientación de la nave,
 - el jugador debe esquivar obstáculos al ritmo de la canción,
-- también puede disparar para interactuar con ciertos elementos del nivel.
+- el escudo de emergencia (espacio/click/puño) da invulnerabilidad breve para atravesar peligros.
 
 ## 6. Definir qué recursos físicos son necesarios para la feria
 

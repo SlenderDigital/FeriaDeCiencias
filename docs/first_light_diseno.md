@@ -116,25 +116,38 @@ hacían menos daño" y otros parecían no pegar.
 
 *Test*: `tools/test_damage_coherence.gd`
 
-### 4.6 El tutorial perdona
+### 4.6 El tutorial perdona (pero cada golpe duele)
 
 Ningún enemigo cuesta más de 1/8 de la vida del tutorial, así que el jugador
-aguanta **10+ golpes**. El i-frame protege **sólo al jugador**: el peligro sigue
-vivo (antes se consumía en silencio durante la invulnerabilidad, que era otro
-"golpea y no daña").
+aguanta **10+ golpes**. Cada contacto con peligro activo DAÑA —se puede morir
+encadenando golpes—; el i-frame corto (0.5s, 0.7s en tutorial) es solo
+anti-multihit del mismo frame, no perdón. El i-frame protege **sólo al
+jugador**: el peligro sigue vivo.
+
+`hit_health_bonus` **es** el daño y se suma tal cual (negativo = daño).
+Hubo dos bugs acá: se lo usó como multiplicador (`12 * abs(bonus) / 18`), y
+después se lo restó (`health -= dmg` con dmg negativo = curar). Ambos hacían
+que golpear no bajara la vida.
 
 ---
 
 ## 5. Cómo se lee un setpiece en pantalla
 
-Cada ancla teaches lo mismo con distinta silueta:
+Regla de oro: **lo que se dibuja es lo que mata**. Se eliminaron los
+rellenos de territorio (el disco rojo y el sector cian no mataban a nadie y
+confundían): solo la geometría letal pinta en rojo, y la salida se marca con
+formas cian positivas.
 
-1. **Cuerpo** — el rotor tiene un anillo translúcido con aro definido: el
-   territorio letal es una *máquina*, no una viñeta.
-2. **Sector seguro** — el pasillo está **dibujado en cian**, con sus dos radios
-   de borde terminados en marcadores. No es la ausencia de rojo: es una forma.
-3. **Telegrafía** — el aviso muestra el mismo cuerpo, más tenue, desde el
-   frame 1. El slot que se va a llenar ya está a la vista.
+1. **Rayos** — neón por capas (halo + cuerpo + núcleo casi blanco) de ~26px:
+   el ancho letal real. Nacen en el ojo (r=90, seguro siempre y dibujado
+   tenue) y mueren en el aro, que es la frontera letal exacta.
+2. **Salida** — dos rieles cian cortos en los bordes del hueco (tramo
+   exterior) con punta de flecha en el aro + chevron a mitad del pasillo.
+   Es lo único cian del setpiece.
+3. **Telegrafía** — el aviso muestra la misma forma, tenue y sin núcleo
+   caliente, desde el frame 1. Las sierras sueltas avisan con un anillo que
+   colapsa + marca en el borde superior de su carril, y el abanico expulsa
+   las sierras viejas de su disco al anclar (con anillo de aviso).
 4. **Impacto** — al activarse: trauma de cámara, flash blanco y hit-stop de
    50 ms, escalados por la energía de la sección.
 
@@ -180,11 +193,13 @@ sola, ese archivo está.
 | `scripts/PatternController.gd`     | director, builders, agendamiento              |
 | `scripts/Gameplay.gd`              | runtime: estados, colisión, dibujo, HUD       |
 | `scripts/PatternLanguage.gd`       | jerarquía visual (rol, lethality, silueta)    |
+| `scripts/SetpieceRenderer.gd`      | dibujo de peligros (funciones puras)          |
+| `scripts/DevTools.gd`              | solo desarrollo: piloto autoplay, F6, capturas |
 | `scripts/PilotLogic.gd`            | piloto automático (verificación)              |
 | `scripts/ImpactFeel.gd`            | trauma, flash, hit-stop                       |
 | `scripts/*Logic.gd`                | motores puros de cada setpiece                |
 | `scripts/ProceduralSong.gd`        | audio + chart procedural (con caché)          |
-| `tools/test_*.gd`                  | 22 contratos headless                        |
+| `tools/test_*.gd`                  | 25 contratos headless                        |
 
 Los motores puros existen para que el test y el juego usen **la misma física**.
 No hay dos implementaciones que puedan divergir.

@@ -28,6 +28,8 @@ func _initialize() -> void:
 		"res://scripts/SpokeFanLogic.gd",
 		"res://scripts/SweepLogic.gd",
 		"res://scripts/WaveformLogic.gd",
+		"res://scripts/DevTools.gd",
+		"res://scripts/SetpieceRenderer.gd",
 	]:
 		if load(path) == null:
 			fails.append("no carga: %s (parse error o ruta)" % path)
@@ -44,7 +46,7 @@ func _initialize() -> void:
 				fails.append("instancia sin script: %s" % scene_path)
 			inst.free()
 	if fails.is_empty():
-		print("[PARSE] PASS — 12 scripts cargan + 2 escenas instancian (Gameplay y MainMenu)")
+		print("[PARSE] PASS — 14 scripts cargan + 2 escenas instancian (Gameplay y MainMenu)")
 		quit(0)
 	else:
 		for f in fails:

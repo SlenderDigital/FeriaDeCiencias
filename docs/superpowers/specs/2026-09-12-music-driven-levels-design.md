@@ -1,7 +1,15 @@
 # Music-Driven Levels Design Spec
 
+> **ESTADO (2026-09-27): SUPERSEDED.** El plan de 3 niveles con audio real no se
+> ejecutó: el MVP converge en **un solo nivel, First Light** —canción y chart
+> **compuestos por el motor** (`ProceduralSong` → `ChartData` → `PatternController`,
+> reloj en `get_playback_position()`, esquiva pura sin shooting/combo).
+> `GameManager.TRACKS` tiene 1 entrada (`procedural:true`); los
+> `assets/music/first_light.*` quedaron huérfanos sin cablear. Se conserva el
+> documento como historia. Ver `docs/first_light_diseno.md` (vigente).
+
 **Fecha:** 2026-09-12
-**Estado:** Draft aprobado (Sunrise Horizon / Mechanical Wall / Grid Lockdown)
+**Estado original:** Draft aprobado (Sunrise Horizon / Mechanical Wall / Grid Lockdown)
 **Proyecto:** Abstract Pulse (FeriaDeCiencias, Godot 4)
 
 ## Goal

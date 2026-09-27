@@ -1,5 +1,10 @@
 # Music-Driven Levels Implementation Plan
 
+> **ESTADO (2026-09-27): SUPERSEDED.** No ejecutar: el proyecto converge en un
+> solo nivel procedural compuesto por el motor (First Light). Lo único que
+> sobrevivió de este plan es el reloj anclado al audio real
+> (`get_playback_position()`). Ver `docs/first_light_diseno.md` (vigente).
+
 > **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task.
 
 **Goal:** Replace the fake `progress 0→1` procedural level with 3 chart-driven, music-synchronized levels (Sunrise Horizon / Mechanical Wall / Grid Lockdown) for Abstract Pulse (Godot 4).

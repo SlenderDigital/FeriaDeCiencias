@@ -315,6 +315,10 @@ func reset_level() -> void:
 	_last_anchor_beat = -99
 	_first_anchor_done = false
 	wall_active = false
+	_last_wall_dir = Vector2.ZERO
+	_last_wall_t = -100.0
+	_last_wall_end = -100.0
+	_last_gap_u = 1.0
 	_rng.seed = _rng.seed   # misma semilla: el nivel es reproducible
 
 ## Director JSAB: agenda en phrase beats y emite las fases que vencen en el
@@ -737,7 +741,9 @@ func _waveform_wall(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed
 	var cycles: float = vr.randf_range(2.5, 4.5)
 	var phase: float = vr.randf_range(0.0, TAU)
 	return {
-		"type": "waveform_wall", "pos": Vector2.ZERO, "vel": Vector2.ZERO,
+		"type": "waveform_wall",
+		"pos": Vector2(play_size.x * 0.5, play_size.y * peak_frac),
+		"vel": Vector2.ZERO,
 		"columns": columns, "col_w": play_size.x / float(columns),
 		"wave_cycles": cycles, "wave_phase": phase, "wave_amp": peak_frac * 0.5,
 		"base_line": play_size.y * (peak_frac + 0.30),   # trough bien abajo
@@ -773,7 +779,9 @@ func _squeeze_corridor(t: float, beat_idx: int, params: Dictionary = {}, spawn_s
 	# jugador tiene que elegir dónde quedarse.
 	var drift: float = vr.randf_range(-0.12, 0.12)
 	return {
-		"type": "squeeze_corridor", "pos": Vector2.ZERO, "vel": Vector2.ZERO,
+		"type": "squeeze_corridor",
+		"pos": Vector2(play_size.x * (0.5 + drift), play_size.y * 0.5),
+		"vel": Vector2.ZERO,
 		"play_w": play_size.x,
 		"start_gap": play_size.x * start_frac,
 		"min_gap": play_size.x * min_frac,
@@ -924,9 +932,10 @@ func _spoke_fan(t: float, beat_idx: int, params: Dictionary = {}, spawn_seed: in
 	while TAU * float(gap_spokes) / float(spokes) < deg_to_rad(MIN_GAP_DEG) and gap_spokes < spokes - 2:
 		gap_spokes += 1
 	# Radio y giro: el sentido alterna para que el jugador no automatice.
-	# Radio generoso (JSAB: el abanico DOMINA la pantalla) pero acotado al
-	# MIN(w,h) para que en pantallas anchas no salga de la arena.
-	var radius_frac: float = vr.randf_range(0.55, 0.75)
+	# Rotor CONTENIDO (no fullscreen): el abanico es una máquina en la arena,
+	# no un tinte de pantalla. Con r <= 0.55*min(w,h) el aro se lee como borde
+	# y los rayos como geometría, y queda espacio libre fuera del rotor.
+	var radius_frac: float = vr.randf_range(0.40, 0.55)
 	var spin_sign: float = 1.0 if vr.randf() < 0.5 else -1.0
 	var beats_per_rev: float = vr.randf_range(MIN_BEATS_PER_REV, 24.0)
 	if params.has("spin_sign"):
