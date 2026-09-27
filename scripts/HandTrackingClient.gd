@@ -58,6 +58,13 @@ var _spawn_state := "spawned"
 var _tracker_pid := 0          # PID del launcher que lanzó el juego (solo Linux)
 var _tracker_started_here := false   # true si el juego lo levantó (y debe cerrarlo)
 var _last_boot_poll := 0.0    # throttle del sondeo de instalación (1s)
+# Timeout de arranque: si 30s después de lanzar (o de enganchar uno vivo) no
+# llegó ningún datagrama ni hay status "ready" fresco, el tracker murió en
+# silencio (crash al abrir cámara, .bat roto, permiso denegado) y hay que
+# decirlo en vez de "Iniciando…" para siempre.
+const BOOT_TIMEOUT := 30.0
+var _boot_start := -1.0       # Time ticks cuando entramos a spawned/running
+var _boot_fail_hint := ""     # detalle para el banner cuando falla el arranque
 
 # --- UI de estado ---
 var _panel: PanelContainer
@@ -137,6 +144,8 @@ func _try_boot() -> void:
 	if _tracker_live():
 		_spawn_state = "running"
 		_tracker_started_here = false
+		_boot_start = Time.get_ticks_msec() / 1000.0
+		_boot_fail_hint = ""
 		print("[HandTracking] Tracker ya corriendo. Solo me conecto por UDP ", UDP_PORT, ".")
 		return
 
@@ -153,6 +162,8 @@ func _try_boot() -> void:
 	if launched:
 		_spawn_state = "spawned"
 		_tracker_started_here = true
+		_boot_start = Time.get_ticks_msec() / 1000.0
+		_boot_fail_hint = ""
 		print("[HandTracking] Tracker lanzado. Esperando landmarks por UDP %d." % UDP_PORT)
 	else:
 		_spawn_state = "failed"
@@ -235,7 +246,39 @@ func _process(_delta: float) -> void:
 		if now_s - _last_boot_poll >= 1.0:
 			_last_boot_poll = now_s
 			_poll_install()
+	# Arranque colgado: tracker lanzado/enganchado que nunca habla.
+	elif _spawn_state == "spawned" or _spawn_state == "running":
+		_check_boot_timeout()
 	_update_status_ui()
+
+## Si 30s después del arranque no hay ni un datagrama ni status "ready"
+## fresco, el tracker murió en silencio: fallar con pista del log en vez de
+## "Iniciando…" eterno. No castiga arranques lentos legítimos (modelo+cámara
+## tardan 5–15s): 30s es el doble con margen.
+func _check_boot_timeout(now_s := -1.0) -> void:
+	if _boot_start < 0.0:
+		return
+	if now_s < 0.0:
+		now_s = Time.get_ticks_msec() / 1000.0
+	if now_s - _boot_start < BOOT_TIMEOUT:
+		return
+	if _last_packet_time >= _boot_start:
+		return   # habló después del arranque: vivo
+	if _tracker_status() == "ready" and _status_fresh():
+		return   # heartbeat fresco: vivo aunque UDP falle
+	_spawn_state = "failed"
+	_boot_start = -1.0
+	_boot_fail_hint = "sin respuesta 30s — revisá tracker_server/.tracker.log"
+	push_warning("[HandTracking] Tracker sin respuesta 30s tras arrancar. Teclado.")
+
+## ¿El .tracker.status tiene heartbeat fresco (≤5s)?
+func _status_fresh() -> bool:
+	if _status_path == "" or not FileAccess.file_exists(_status_path):
+		return false
+	var mtime: int = FileAccess.get_modified_time(_status_path)
+	if mtime <= 0:
+		return false
+	return int(Time.get_unix_time_from_system()) - mtime <= int(TRACKER_HEARTBEAT_MAX)
 
 ## ¿Los landmarks son FRESCOS? has_hand es binario y sobrevive hasta
 ## NO_HAND_TIMEOUT; esto distingue "la mano está guiando ahora" de "el último
@@ -250,6 +293,14 @@ func _parse(data: PackedByteArray) -> void:
 	if data.size() < 4:
 		return
 	_got_datagram = true   # llegó algo del tracker -> está arriba
+	_last_packet_time = Time.get_ticks_msec() / 1000.0   # cualquier paquete válido, incluso count==0 (sin mano a la vista)
+	# Auto-recuperación: si habíamos fallado (timeout) y el tracker empieza a
+	# hablar (el usuario arregló la cámara), volver a enganchar solo.
+	if _spawn_state == "failed":
+		_spawn_state = "running"
+		_boot_start = _last_packet_time
+		_boot_fail_hint = ""
+		print("[HandTracking] Tracker recuperado: llegaron datagramas.")
 	var count: int = data.decode_s32(0)   # little-endian (struct.pack "<i...f")
 	_got_count = count
 	# count==0: tracker vivo pero sin mano visible. count==21: mano trackeada.
@@ -271,7 +322,6 @@ func _parse(data: PackedByteArray) -> void:
 			data.decode_float(o + 8)
 		))
 	has_hand = true
-	_last_packet_time = Time.get_ticks_msec() / 1000.0
 	hand_updated.emit()
 
 func get_landmark(idx: int) -> Vector3:
@@ -446,7 +496,12 @@ func _update_status_ui(_force := false) -> void:
 		_bar.value = fmod(now * 38.0, 100.0)
 	elif _spawn_state == "failed" or st.begins_with("error"):
 		_set_ui_visible(true)
-		_lbl.text = "No se pudo iniciar el tracker — se usa el teclado"
+		if _boot_fail_hint != "":
+			_lbl.text = "Tracker falló (%s) — se usa el teclado" % _boot_fail_hint
+		elif st.begins_with("error"):
+			_lbl.text = "Tracker falló (%s) — se usa el teclado" % st
+		else:
+			_lbl.text = "No se pudo iniciar el tracker — se usa el teclado"
 		_lbl.add_theme_color_override("font_color", Color(1, 0.5, 0.5, 1))
 		_set_bar_fill(Color(1, 0.3, 0.3, 1))
 		_bar.value = 0.0

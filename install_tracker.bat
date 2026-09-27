@@ -38,10 +38,17 @@ if errorlevel 1 (
   echo error:sync> "%FLAG%"
   exit /b 1
 )
-if exist ".venv\Scripts\python.exe" (
-  echo done> "%FLAG%"
-  exit /b 0
-) else (
+if not exist ".venv\Scripts\python.exe" (
   echo error:no-venv> "%FLAG%"
   exit /b 1
 )
+REM Smoke test: el sync puede "pasar" dejando un entorno que no importa
+REM (pasó en Linux con Python 3.14). Sin esto el juego quedaba "cargando"
+REM para siempre; con esto falla ya con error:broken-env.
+".venv\Scripts\python.exe" -c "import mediapipe, cv2" >> "%LOG%" 2>&1
+if errorlevel 1 (
+  echo error:broken-env> "%FLAG%"
+  exit /b 1
+)
+echo done> "%FLAG%"
+exit /b 0

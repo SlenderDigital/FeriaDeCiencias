@@ -24,5 +24,12 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
+echo [setup] Verificando que mediapipe importe...
+".venv\Scripts\python.exe" -c "import mediapipe, cv2; print('mediapipe ok')"
+if errorlevel 1 (
+  echo [setup] ERROR: el entorno se creo pero mediapipe no importa. Probas: borra la carpeta .venv y corre esto de nuevo.
+  pause
+  exit /b 1
+)
 echo [setup] Listo: juga con AbstractPulse.exe (necesitas webcam).
 pause

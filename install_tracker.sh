@@ -55,8 +55,17 @@ echo "run" > "$FLAG"
   fi
 
   if [ -x "$TS/.venv/bin/python" ]; then
-    echo "done" > "$FLAG"
-    echo "[install] OK"
+    # Smoke test: el sync puede terminar con un entorno que no importa
+    # (ej. Python 3.14 sin wheels de mediapipe). Sin esto el juego quedaba
+    # "cargando" para siempre; con esto falla ya con error:broken-env.
+    if "$TS/.venv/bin/python" -c "import mediapipe, cv2" >>"$LOG" 2>&1; then
+      echo "done" > "$FLAG"
+      echo "[install] OK"
+    else
+      echo "error:broken-env" > "$FLAG"
+      echo "[install] ERROR: mediapipe no importa en el .venv creado"
+      exit 1
+    fi
   else
     echo "error:no-venv" > "$FLAG"
     echo "[install] ERROR: sync terminó sin .venv"

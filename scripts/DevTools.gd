@@ -19,6 +19,19 @@ const _PilotLogic: GDScript = preload("res://scripts/PilotLogic.gd")
 # permite. ÚNICO lugar donde vive este número (Gameplay lo referencia).
 const PILOT_SPEED: float = 520.0
 
+# ------------------------------------------------------------------ auto-juego
+## Verificación de builds: con el flag de autoplay, el menú entra solo al
+## nivel tras 2s (un exportado arranca en el menú y no hay cómo clickear
+## headless). Solo con flag: en juego real nunca se dispara.
+static func maybe_autostart(menu: Control) -> void:
+	var auto: bool = OS.get_environment("MCP_AUTOPLAY") == "1" \
+		or FileAccess.file_exists("/tmp/jsab_autoplay.flag")
+	if not auto:
+		return
+	await menu.get_tree().create_timer(2.0).timeout
+	if is_instance_valid(menu) and menu.has_method("_on_btn_play_level_pressed"):
+		menu._on_btn_play_level_pressed()
+
 # ------------------------------------------------------------------ F6
 static func toggle_debug(g) -> void:
 	g._debug_visible = not g._debug_visible

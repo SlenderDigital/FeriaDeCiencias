@@ -1,5 +1,7 @@
 extends Control
 ## MainMenu — Menú principal simplificado de Abstract Pulse.
+
+const _DevTools: GDScript = preload("res://scripts/DevTools.gd")
 ## Navegación por mouse/teclado (nativo Godot) con soporte de control manual
 ## vía MediaPipe (HandTrackingClient autoload).
 ##
@@ -49,6 +51,7 @@ func _ready() -> void:
 	_setup_button_audio()
 	_select_track_ui(0)  # unico nivel: First Light, siempre seleccionado
 	_show_panel(song_select_panel)
+	_DevTools.maybe_autostart(self)
 	# Sync del toggle con el estado real (arrancamos en fullscreen desde GameManager).
 	# set_pressed_no_signal: evita re-disparar _on_check_fullscreen_toggled,
 	# que ya corrió desde GameManager._ready.

@@ -31,9 +31,20 @@ if not exist ".venv\Scripts\python.exe" (
   exit /b 1
 )
 
+REM --- Smoke test: mediapipe tiene que importar (venv roto = error ya, no
+REM cargando eterno). Sin cámara igual importa: solo valida el entorno.
+".venv\Scripts\python.exe" -c "import mediapipe, cv2; print('mediapipe ok')" >nul 2>&1
+if errorlevel 1 (
+  echo [tracker] ERROR: el .venv existe pero mediapipe no importa. Borra la carpeta .venv y corre setup_tracker.bat de nuevo.
+  echo error:broken-env> ".tracker.status"
+  pause
+  exit /b 1
+)
+
 echo [tracker] MediaPipe hand tracker -^> UDP 127.0.0.1:5005
 echo [tracker] Watching game PID %GAMEPID%. Close this window to stop tracking.
-start "AbstractPulseTracker" /MIN .venv\Scripts\python.exe -m mediapipe_py.main
+REM Ruta absoluta entre comillas: los usuarios con espacios fallaban acá.
+start "AbstractPulseTracker" /MIN "%CD%\.venv\Scripts\python.exe" -m mediapipe_py.main
 
 REM --- Watchdog: mientras el juego viva, quedarse. Sin PID = modo manual ---
 if "%GAMEPID%"=="" (
