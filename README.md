@@ -71,7 +71,17 @@ https://drive.google.com/drive/folders/1jKupoyUeg05_fikUqCsfOjz1TXjJIltl?usp=dri
 | Electricidad                  | Zapatilla para conectar todo                          |
 
 
-## Configuración del proyecto
+## Jugar sin compilar (builds)
+
+Carpeta en Drive con los ejecutables: *(link pendiente — se sube el 28/09)*
+
+**Linux** (`build-linux/`): `./game`. La primera vez instala solo el control por mano (una vez con internet, ~900MB). Sin cámara se juega con flechas/WASD.
+
+**Windows** (`build-win/`, probado el export, falta prueba en máquina real): `AbstractPulse.exe`. Igual: primera vez se autoinstala con internet. Sin cámara: flechas/WASD.
+
+En ambos, el juego levanta solo el tracker y al salir libera la cámara.
+
+## Configuración del proyecto (desarrollo)
 
 1. Clonar el repositorio:
 

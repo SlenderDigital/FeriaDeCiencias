@@ -17,6 +17,16 @@ con MediaPipe + OpenCV y los envía por **UDP a `127.0.0.1:5005`**.
 cd tracker_server && uv sync   # descarga mediapipe y opencv (Python ≥ 3.12, uv)
 ```
 
+En Windows: doble clic en `setup_tracker.bat` (hace lo mismo + instala `uv` si falta).
+
+## Cómo sabe el juego si estoy vivo
+
+`main.py` reescribe `.tracker.status` cada 2 segundos (heartbeat). El juego
+(`HandTrackingClient`) lo considera vivo si el archivo tiene menos de 5
+segundos — multiplataforma, sin depender de PIDs. Los launchers
+(`run_tracker.sh` / `run_tracker.bat`) además evitan duplicados y cierran el
+tracker cuando muere el juego (watchdog por PID + bandera `.tracker.game_exit`).
+
 ## Correr a mano
 
 ```bash

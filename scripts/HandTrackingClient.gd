@@ -5,9 +5,11 @@ extends Node
 ##
 ## Al abrir el juego:
 ##  - Si el tracker (tracker_server/) no está corriendo y ya está instalado
-##    (.venv existe), lo levanta solo (run_tracker.sh), sin reinstalar.
+##    (.venv existe), lo levanta solo (run_tracker.sh en Linux, .bat en
+##    Windows), sin reinstalar. En un exportado vive al lado del ejecutable.
 ##  - Si no está instalado, avisa cómo hacerlo (instalación única, a mano).
-##  - Si ya estaba corriendo, no duplica: solo se conecta.
+##  - Si ya estaba corriendo (heartbeat fresco en .tracker.status), no
+##    duplica: solo se conecta.
 ## Muestra una barra de estado arriba para que sepas cuándo el control por mano
 ## está listo. Si el tracker no anda, queda el control por teclado.
 
@@ -16,8 +18,15 @@ signal hand_updated
 const UDP_PORT := 5005
 const LANDMARK_COUNT := 21
 const NO_HAND_TIMEOUT := 0.5   # segundos sin datagrama -> se corta el tracking
-const TRACKER_SCRIPT := "res://run_tracker.sh"
-const TRACKER_DIR := "res://tracker_server/"
+# El tracker vive FUERA del .pck: al lado del proyecto en editor, al lado del
+# ejecutable en un build (Opción A). En Windows es .bat, en Linux/macOS .sh.
+const TRACKER_SUBDIR := "tracker_server/"
+const TRACKER_SCRIPT_LINUX := "run_tracker.sh"
+const TRACKER_SCRIPT_WIN := "run_tracker.bat"
+# El tracker reescribe .tracker.status cada 2s (heartbeat en main.py): si el
+# archivo es más viejo que esto, no hay tracker vivo. Multiplataforma (el
+# PID+kill de antes no existe en Windows).
+const TRACKER_HEARTBEAT_MAX := 5.0
 
 # --- Mapeo de coordenadas cámara -> viewport ---
 # camera_aspect_ratio: aspect ratio de la cámara (ej. 4/3 = 1.333, 16/9 = 1.777)
@@ -44,10 +53,11 @@ var _smoothed_palm := Vector2.ZERO
 var _has_smoothed := false
 var _smoothed_angle := 0.0
 
-# Estado del arranque: "spawned" | "running" | "failed" | "needs_install"
+# Estado del arranque: "spawned" | "running" | "installing" | "failed" | "needs_install"
 var _spawn_state := "spawned"
-var _tracker_pid := 0          # PID del run_tracker.sh que lanzó el juego
+var _tracker_pid := 0          # PID del launcher que lanzó el juego (solo Linux)
 var _tracker_started_here := false   # true si el juego lo levantó (y debe cerrarlo)
+var _last_boot_poll := 0.0    # throttle del sondeo de instalación (1s)
 
 # --- UI de estado ---
 var _panel: PanelContainer
@@ -69,66 +79,149 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	# Al cerrar el juego, escribir la bandera que le dice al tracker que
-	# se cierre. El script (run_tracker.sh) tiene un WATCHDOG que monitorea
-	# al padre del juego; si el juego muere (botón, Alt+F4, Win+W, crash) el
-	# tracker se cierra solo. Este flag es respaldo por si el proceso bash se
-	# muere antes de que el loop chequeé el PID (p.ej. a veces Win+W).
+	# se cierre. El launcher (run_tracker.sh/.bat) tiene un WATCHDOG que
+	# monitorea al juego; si el juego muere (botón, Alt+F4, Win+W, crash) el
+	# tracker se cierra solo. Este flag es respaldo.
 	if _status_path != "":
-		var flag := ProjectSettings.globalize_path(TRACKER_DIR) + ".tracker.game_exit"
+		var flag := _tracker_dir() + ".tracker.game_exit"
 		var f := FileAccess.open(flag, FileAccess.WRITE)
 		if f:
 			f.store_string("1")
 			f.close()
 		print("[HandTracking] Bandera de salida escrita para el tracker.")
 
-func _auto_start_tracker() -> void:
-	_status_path = ProjectSettings.globalize_path(TRACKER_DIR) + ".tracker.status"
-	var script_path := ProjectSettings.globalize_path(TRACKER_SCRIPT)
+## Dónde vive el tracker en disco REAL (nunca dentro del .pck): en editor es
+## la raíz del proyecto; en un exportado, la carpeta del ejecutable. Se
+## shippea tracker_server/ + el launcher al lado del binario (sin .venv: la
+## primera vez se instala con uv sync).
+func _game_dir() -> String:
+	if OS.has_feature("editor"):
+		return ProjectSettings.globalize_path("res://")
+	return OS.get_executable_path().get_base_dir() + "/"
 
-	# 1) Si ya había un tracker (instancia anterior / manual), no duplicar.
-	if _lock_live():
+func _tracker_dir() -> String:
+	return _game_dir() + TRACKER_SUBDIR
+
+func _tracker_script() -> String:
+	if OS.get_name() == "Windows":
+		return _game_dir() + TRACKER_SCRIPT_WIN
+	return _game_dir() + TRACKER_SCRIPT_LINUX
+
+func _tracker_python() -> String:
+	if OS.get_name() == "Windows":
+		return _tracker_dir() + ".venv/Scripts/python.exe"
+	return _tracker_dir() + ".venv/bin/python"
+
+func _install_hint() -> String:
+	if OS.get_name() == "Windows":
+		return "Tracker no instalado — se está instalando solo (primera vez)"
+	return "Tracker no instalado — se está instalando solo (primera vez)"
+
+## Instalador de primera vez (build completo: el juego lo corre solo).
+func _installer_script() -> String:
+	if OS.get_name() == "Windows":
+		return _game_dir() + "install_tracker.bat"
+	return _game_dir() + "install_tracker.sh"
+
+func _install_flag() -> String:
+	return _tracker_dir() + ".tracker.install"
+
+func _auto_start_tracker() -> void:
+	_status_path = _tracker_dir() + ".tracker.status"
+	_try_boot()
+
+## Intento de arranque (reintentable): tracker vivo → conectar; venv listo →
+## lanzar; si no, instalar solo y seguir jugando con teclado mientras tanto.
+func _try_boot() -> void:
+	# 1) Si ya había un tracker vivo (heartbeat fresco), no duplicar.
+	if _tracker_live():
 		_spawn_state = "running"
 		_tracker_started_here = false
 		print("[HandTracking] Tracker ya corriendo. Solo me conecto por UDP ", UDP_PORT, ".")
 		return
 
-	# 2) Si no está instalado el .venv, no instalamos desde el juego: instalación única.
-	if not FileAccess.file_exists(ProjectSettings.globalize_path(TRACKER_DIR) + ".venv/bin/python"):
-		_spawn_state = "needs_install"
+	# 2) Sin .venv: build completo = instalar solo (primera vez, con internet).
+	if not FileAccess.file_exists(_tracker_python()):
+		_spawn_state = "installing"
 		_tracker_started_here = false
-		print("[HandTracking] Tracker no instalado. Corré una vez: ./run_tracker.sh")
+		_ensure_installer()
+		print("[HandTracking] Instalando tracker solo (primera vez). Teclado mientras tanto.")
 		return
 
 	# 3) Levantar el tracker como HIJO de este juego (se cierra solo al salir).
-	var pid := OS.create_process(script_path, [])
-	if pid > 0:
+	var launched := _launch_tracker(_tracker_script())
+	if launched:
 		_spawn_state = "spawned"
-		_tracker_pid = pid
 		_tracker_started_here = true
-		print("[HandTracking] Tracker lanzado (PID=%d). Esperando landmarks por UDP %d." % [pid, UDP_PORT])
+		print("[HandTracking] Tracker lanzado. Esperando landmarks por UDP %d." % UDP_PORT)
 	else:
 		_spawn_state = "failed"
 		_tracker_started_here = false
-		push_warning("[HandTracking] No se pudo lanzar el tracker (código=%d). Teclado." % pid)
+		push_warning("[HandTracking] No se pudo lanzar el tracker. Teclado.")
 
-func _lock_pid() -> int:
-	# Lee tracker_server/.tracker.pid y devuelve el PID del tracker (0 si no hay).
-	var lock := ProjectSettings.globalize_path(TRACKER_DIR) + ".tracker.pid"
-	if not FileAccess.file_exists(lock):
-		return 0
-	var f := FileAccess.open(lock, FileAccess.READ)
-	if not f:
-		return 0
-	var pid_str := f.get_as_text().strip_edges()
-	f.close()
-	if pid_str.is_empty() or not pid_str.is_valid_int():
-		return 0
-	return int(pid_str)
+## Lanza el instalador una sola vez (el flag .tracker.install evita duplicados;
+## si quedó "run" hace +30min, se asume muerto y se relanza).
+func _ensure_installer() -> void:
+	var flag := _install_flag()
+	var content := ""
+	if FileAccess.file_exists(flag):
+		var f := FileAccess.open(flag, FileAccess.READ)
+		if f:
+			content = f.get_as_text().strip_edges()
+			f.close()
+	if content == "run":
+		var mtime: int = FileAccess.get_modified_time(flag)
+		if mtime > 0 and int(Time.get_unix_time_from_system()) - mtime < 1800:
+			return
+	var script := _installer_script()
+	if not FileAccess.file_exists(script):
+		_spawn_state = "needs_install"
+		push_warning("[HandTracking] Falta instalador: %s" % script)
+		return
+	if OS.get_name() == "Windows":
+		OS.create_process("cmd.exe", ["/c", "start", "", "/MIN", script])
+	else:
+		OS.create_process(script, [])
 
-func _lock_live() -> bool:
-	# ¿Hay un proceso tracker vivo (el del lock)? kill -0 no mata, solo chequea.
-	var p := _lock_pid()
-	return p > 0 and OS.execute("kill", ["-0", str(p)]) == 0
+## Lee el flag del instalador: "done" → arrancar tracker; "error:*" → teclado.
+func _poll_install() -> void:
+	var flag := _install_flag()
+	if not FileAccess.file_exists(flag):
+		return
+	var content := ""
+	var f := FileAccess.open(flag, FileAccess.READ)
+	if f:
+		content = f.get_as_text().strip_edges()
+		f.close()
+	if content == "done":
+		_try_boot()
+	elif content.begins_with("error"):
+		_spawn_state = "failed"
+		push_warning("[HandTracking] Instalación falló (%s). Teclado." % content)
+
+## Lanza el script del tracker según la plataforma. En Windows va por
+## cmd.exe (los .bat no corren directo) con el PID del juego para el watchdog.
+## Siempre headless: el juego es fullscreen y la ventana OpenCV taparía todo
+## (a mano se corre el launcher sin flags y se ve la ventana).
+func _launch_tracker(script_path: String) -> bool:
+	if OS.get_name() == "Windows":
+		var pid := OS.create_process("cmd.exe", ["/c", "start", "", "/MIN", script_path, str(OS.get_process_id()), "--headless"])
+		return pid > 0
+	var pid := OS.create_process(script_path, ["--headless"])
+	if pid > 0:
+		_tracker_pid = pid
+	return pid > 0
+
+## ¿Hay un tracker vivo? Heartbeat fresco en .tracker.status (≤5s).
+## Reemplaza al viejo chequeo por PID+kill (inexistente en Windows).
+func _tracker_live() -> bool:
+	if _status_path == "" or not FileAccess.file_exists(_status_path):
+		return false
+	var mtime: int = FileAccess.get_modified_time(_status_path)
+	if mtime <= 0:
+		return false
+	var now: int = int(Time.get_unix_time_from_system())
+	return now - mtime <= int(TRACKER_HEARTBEAT_MAX)
 
 func _process(_delta: float) -> void:
 	# Timeout: si no llega datagrama, caer a teclado.
@@ -136,6 +229,12 @@ func _process(_delta: float) -> void:
 		has_hand = false
 	while _udp.get_available_packet_count() > 0:
 		_parse(_udp.get_packet())
+	# Instalación en curso: sondear cada 1s si ya terminó (o falló).
+	if _spawn_state == "installing":
+		var now_s := Time.get_ticks_msec() / 1000.0
+		if now_s - _last_boot_poll >= 1.0:
+			_last_boot_poll = now_s
+			_poll_install()
 	_update_status_ui()
 
 ## ¿Los landmarks son FRESCOS? has_hand es binario y sobrevive hasta
@@ -333,10 +432,18 @@ func _update_status_ui(_force := false) -> void:
 	var st := _tracker_status()
 	if _spawn_state == "needs_install":
 		_set_ui_visible(true)
-		_lbl.text = "Tracker no instalado — corré ./run_tracker.sh una vez"
+		_lbl.text = _install_hint()
 		_lbl.add_theme_color_override("font_color", Color(1, 0.78, 0.25, 1))
 		_set_bar_fill(Color(1, 0.6, 0.2, 1))
 		_bar.value = 0.0
+	elif _spawn_state == "installing":
+		# Instalación automática en curso (primera vez): barra indeterminada,
+		# el juego sigue jugable con teclado mientras tanto.
+		_set_ui_visible(true)
+		_lbl.text = "Instalando control por mano (primera vez, puede tardar)…"
+		_lbl.add_theme_color_override("font_color", Color(0, 0.9, 1, 1))
+		_set_bar_fill(Color(0, 0.9, 1, 1))
+		_bar.value = fmod(now * 38.0, 100.0)
 	elif _spawn_state == "failed" or st.begins_with("error"):
 		_set_ui_visible(true)
 		_lbl.text = "No se pudo iniciar el tracker — se usa el teclado"

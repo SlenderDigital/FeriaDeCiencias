@@ -46,10 +46,23 @@ STATUS=".tracker.status"
 LOG=".tracker.log"
 GAME_EXIT_FLAG=".tracker.game_exit"
 
+# Flags (combinables):
 # --detach: relaunch detached (PPID becomes init, so watchdog won't kill it:
-#          it runs until you close with q/ESC).
-if [ "${1:-}" = "--detach" ]; then
-    nohup setsid "$SCRIPT" >/dev/null 2>&1 </dev/null &
+#           it runs until you close with q/ESC).
+# --headless: sin ventana OpenCV (lo usa el juego fullscreen; a mano se corre
+#           con ventana para verse).
+_DETACH=""
+for _a in "$@"; do
+    [ "$_a" = "--headless" ] && export TRACKER_HEADLESS=1
+    [ "$_a" = "--detach" ] && _DETACH=1
+done
+unset _a
+if [ "$_DETACH" = "1" ]; then
+    if [ "${TRACKER_HEADLESS:-0}" = "1" ]; then
+        nohup setsid "$SCRIPT" --headless >/dev/null 2>&1 </dev/null &
+    else
+        nohup setsid "$SCRIPT" >/dev/null 2>&1 </dev/null &
+    fi
     exit 0
 fi
 
