@@ -13,7 +13,9 @@ const MODE_KEYBOARD: String = "KeyboardMouse"
 const MODE_ARROWS: String = "KeyboardMouse"
 const MODE_HANDS: String = "MediaPipe"
 
-# Tracks Data
+# Tracks Data — MVP de un solo nivel: First Light (procedural).
+# Los niveles 2-3 (Mechanical Wall, Relentless Drive) se eliminaron para
+# concentrar el polish en una sola experiencia jugable.
 const TRACKS: Array[Dictionary] = [
 	{
 		"id": "level_first_light",
@@ -28,36 +30,6 @@ const TRACKS: Array[Dictionary] = [
 		"description": "Tema compuesto por el motor: la canción y el nivel nacen de los mismos datos.",
 		"procedural": true
 	},
-	{
-		"id": "level_mechanical_wall",
-		"name": "Mechanical Wall",
-		"artist": "Abstract Pulse",
-		"bpm": 115,
-		"difficulty": "Intermedio",
-		"difficulty_stars": 2,
-		"duration": "1:50",
-		"color": Color(0.75, 0.75, 0.8, 1),
-		"secondary_color": Color(0.6, 0.0, 1.0, 1.0),
-		"description": "Muro mecánico opresivo e industrial: crescendo sostenido de proyectiles y obstáculos cruzados.",
-		"audio": "res://assets/music/mechanical_wall.ogg",
-		"analysis": "res://assets/music/mechanical_wall.analysis.json",
-		"level": "res://assets/music/mechanical_wall.level.json"
-	},
-	{
-		"id": "level_relentless_drive",
-		"name": "Relentless Drive",
-		"artist": "Abstract Pulse",
-		"bpm": 176,
-		"difficulty": "Avanzado",
-		"difficulty_stars": 3,
-		"duration": "3:20",
-		"color": Color(1, 0, 0.55, 1),
-		"secondary_color": Color(1.0, 0.2, 0.0, 1.0),
-		"description": "Desafío extremo de reflejos y movimiento continuo al ritmo máximo.",
-		"audio": "res://assets/music/relentless_drive.ogg",
-		"analysis": "res://assets/music/relentless_drive.analysis.json",
-		"level": "res://assets/music/relentless_drive.level.json"
-	}
 ]
 
 # Color Palettes for Ship / Visual Upgrades
@@ -103,26 +75,36 @@ var sfx_volume: float = 0.9
 var fullscreen_enabled: bool = false
 var bloom_enabled: bool = true
 
-# High Scores per Track ID
+# Persistencia (equivalente Godot del "ScriptableObject" pedido: datos del
+# juego guardados en disco). Récord, volúmenes y fullscreen sobreviven al
+# cierre en user://abstract_pulse.cfg.
+const SAVE_PATH: String = "user://abstract_pulse.cfg"
+
+# High Scores per Track ID (progreso 0-100; 0 = sin récord todavía)
 var high_scores: Dictionary = {
-	"level_first_light": 12500,
-	"level_mechanical_wall": 8400,
-	"level_relentless_drive": 0
+	"level_first_light": 0,
 }
 
 func _ready() -> void:
 	process_mode = PROCESS_MODE_ALWAYS
+	load_data()
 	print("[GameManager] Inicializado correctamente.")
 	# Fullscreen-on-start: el juego se juega con la mano frente a la pantalla,
 	# no hay mouse disponible; arrancar ya en fullscreen (main_scene boot).
-	fullscreen_enabled = true
-	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
-	await get_tree().process_frame
-	await get_tree().process_frame
-	var scr: Vector2i = DisplayServer.screen_get_size()
-	if scr.x > 0 and scr.y > 0 and DisplayServer.window_get_size() != scr:
-		DisplayServer.window_set_size(scr)
-	print("[GameManager] fullscreen aplicado, tamaño=", DisplayServer.window_get_size())
+	# GODOT_WINDOWED=1 lo desactiva (verificación, capturas y corridas
+	# automatizadas: el fullscreen puede no tener display disponible y el
+	# proceso muere al cambiar de modo).
+	fullscreen_enabled = OS.get_environment("GODOT_WINDOWED") != "1"
+	if fullscreen_enabled:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var scr: Vector2i = DisplayServer.screen_get_size()
+		if scr.x > 0 and scr.y > 0 and DisplayServer.window_get_size() != scr:
+			DisplayServer.window_set_size(scr)
+		print("[GameManager] fullscreen aplicado, tamaño=", DisplayServer.window_get_size())
+	else:
+		print("[GameManager] modo ventana (GODOT_WINDOWED=1), tamaño=", DisplayServer.window_get_size())
 
 func get_current_track() -> Dictionary:
 	if current_track_index >= 0 and current_track_index < TRACKS.size():
@@ -152,8 +134,51 @@ func save_score(track_id: String, score: int) -> bool:
 	var current_best: int = get_high_score(track_id)
 	if score > current_best:
 		high_scores[track_id] = score
+		save_data()
 		return true
 	return false
+
+## Guarda récord, volúmenes y flags en disco. Se llama al cerrar un récord,
+## al cambiar settings y al salir al menú (barato: un archivo INI chico).
+func save_data() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("records", "high_scores", high_scores)
+	cfg.set_value("audio", "master", master_volume)
+	cfg.set_value("audio", "music", music_volume)
+	cfg.set_value("audio", "sfx", sfx_volume)
+	cfg.set_value("video", "fullscreen", fullscreen_enabled)
+	cfg.set_value("video", "bloom", bloom_enabled)
+	var err: Error = cfg.save(SAVE_PATH)
+	if err != OK:
+		push_warning("[GameManager] no se pudo guardar %s (err %d)" % [SAVE_PATH, err])
+
+## Carga lo guardado; si no hay archivo (primera vez), quedan los defaults.
+func load_data() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(SAVE_PATH) != OK:
+		return
+	high_scores = dict_int(cfg.get_value("records", "high_scores", high_scores))
+	master_volume = float(cfg.get_value("audio", "master", master_volume))
+	music_volume = float(cfg.get_value("audio", "music", music_volume))
+	sfx_volume = float(cfg.get_value("audio", "sfx", sfx_volume))
+	fullscreen_enabled = bool(cfg.get_value("video", "fullscreen", fullscreen_enabled))
+	bloom_enabled = bool(cfg.get_value("video", "bloom", bloom_enabled))
+	_apply_volumes()
+
+## Las claves de un ConfigFile vuelven como String: normaliza a {String: int}.
+static func dict_int(d: Dictionary) -> Dictionary:
+	var out: Dictionary = {}
+	for k in d.keys():
+		out[str(k)] = int(d[k])
+	return out
+
+## Empuja los volúmenes cargados al AudioServer (buses Master/Music/SFX).
+func _apply_volumes() -> void:
+	var buses: Dictionary = {"Master": master_volume, "Music": music_volume, "SFX": sfx_volume}
+	for bus in buses.keys():
+		var idx: int = AudioServer.get_bus_index(str(bus))
+		if idx >= 0:
+			AudioServer.set_bus_volume_db(idx, linear_to_db(clampf(float(buses[bus]), 0.01, 1.0)))
 
 func change_scene(scene_path: String) -> void:
 	get_tree().change_scene_to_file(scene_path)

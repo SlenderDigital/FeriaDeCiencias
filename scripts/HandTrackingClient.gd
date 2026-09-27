@@ -138,6 +138,15 @@ func _process(_delta: float) -> void:
 		_parse(_udp.get_packet())
 	_update_status_ui()
 
+## ¿Los landmarks son FRESCOS? has_hand es binario y sobrevive hasta
+## NO_HAND_TIMEOUT; esto distingue "la mano está guiando ahora" de "el último
+## paquete llegó hace rato" — que es lo que el arbitraje de control necesita
+## para devolverle el control al teclado sin sacar la mano de la cámara.
+func is_fresh(max_age_sec: float) -> bool:
+	if not has_hand:
+		return false
+	return Time.get_ticks_msec() / 1000.0 - _last_packet_time <= max_age_sec
+
 func _parse(data: PackedByteArray) -> void:
 	if data.size() < 4:
 		return

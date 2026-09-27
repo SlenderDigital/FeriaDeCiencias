@@ -21,7 +21,6 @@ __pycache__/
 *.pyc
 
 # Hermes agent internal (no del projecto)
-.hermes/
 
 # Godot-specific ignores
 .import/
@@ -36,3 +35,14 @@ export_credentials.cfg
 .mono/
 data_*/
 mono_crash.*.json
+
+# T9/T10: capturas de revisión visual y artefactos de captura (no son código).
+# Escriben en /tmp/shot_*.png y en .jsab_ref/ — regenerables con tools/record_run.sh
+.jsab_ref/
+*.log
+
+# El ledger de SDD SÍ se versiona; este patrón sólo cubre el scratch runtime.
+.superpowers/*/scratch/
+
+# .hermes/ SÍ se versiona (planes de trabajo). Antes ignorado: los planes
+# se perdían con un reset de disco.

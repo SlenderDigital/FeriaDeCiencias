@@ -32,6 +32,13 @@ var total_beats: int = 0
 var duration: float = 0.0
 var sections: Array[Dictionary] = []   # {name,start_bar,bars,energy}
 var _noise_state: int = 0
+# --- Sidechain (T6): el bombo bombea la mezcla ---
+# Profundidad del duck (1-sc_depth = ganancia justo en el golpe) y tau de
+# recuperación (en segundos: 0.35 beats => vuelve ~pleno antes del siguiente).
+var sc_depth: float = 0.60
+var sc_tau: float = 0.16
+# Último pico de la mezcla (lo lee el test headless; 0 = sin render aún).
+var last_peak: int = 0
 
 func _noise_next() -> float:
 	## LCG determinista propio (independiente del RNG global del juego)
@@ -130,7 +137,39 @@ func _level_section(name: String, s0: float, s1: float, energy: float) -> Dictio
 		"pattern_pool": ["stripe_wall", "saw", "drifter_swarm", "homing", "hazard_wall"], "density": 0.75}
 
 ## --- Síntesis: renderiza la canción a PCM 16-bit ---
+## T9: CACHÉ EN DISCO. Renderizar 105s de audio cuesta ~7.3s y bloquea el
+## arranque (el jugador espera con la pantalla en negro). El audio es
+## determinista (misma semilla => mismas muestras), así que se puede
+## guardar/recuperar como .res. La clave del archivo incluye seed, BPM y
+## versión del render, así que cambiar cualquier parámetro invalida la caché.
+static func audio_cache_path(seed_val: int, bpm_val: float) -> String:
+	return "user://audio_cache/song_%d_%d_v%d.res" % [seed_val, int(bpm_val), AUDIO_CACHE_VERSION]
+
+const AUDIO_CACHE_VERSION: int = 3
+
+## Devuelve el audio, de la caché si existe, o lo renderiza y lo guarda.
+func render_audio_cached(seed_val: int, bpm_val: float) -> AudioStreamWAV:
+	var path: String = audio_cache_path(seed_val, bpm_val)
+	if ResourceLoader.exists(path):
+		var cached: Resource = load(path)
+		if cached is AudioStreamWAV:
+			print("[ProceduralSong] Audio de caché (arranque instantáneo): ", path)
+			return cached as AudioStreamWAV
+	var fresh: AudioStreamWAV = _render_audio_uncached()
+	var dir: String = path.get_base_dir()
+	if not DirAccess.dir_exists_absolute(dir):
+		DirAccess.make_dir_recursive_absolute(dir)
+	var err: int = ResourceSaver.save(fresh, path)
+	if err != OK:
+		print("[ProceduralSong] No se pudo cachear el audio (err ", err, "): se seguirá renderizando")
+	else:
+		print("[ProceduralSong] Audio cacheado en ", path)
+	return fresh
+
 func render_audio() -> AudioStreamWAV:
+	return _render_audio_uncached()
+
+func _render_audio_uncached() -> AudioStreamWAV:
 	print("[ProceduralSong] Componiendo %.0fs @ %dHz (%d compases)..." % [duration, RATE, total_bars])
 	var total_samples: int = int(RATE * (duration + 0.8))
 	var buf_kick := _new_buf(total_samples)
@@ -138,6 +177,9 @@ func render_audio() -> AudioStreamWAV:
 	var buf_bass := _new_buf(total_samples)
 	var buf_lead := _new_buf(total_samples)
 	var buf_pad := _new_buf(total_samples)
+	# Schedule de TODOS los golpes de bombo (T6): la mezcla final aplica
+	# sidechain sobre él — todo el tema menos el bombo "late" en cada golpe.
+	var kick_times: PackedFloat32Array = PackedFloat32Array()
 
 	for b in range(total_bars):
 		var sec := _section_of_bar(b)
@@ -149,13 +191,16 @@ func render_audio() -> AudioStreamWAV:
 		var third_f: float = A2 * pow(2.0, float(chord[1]) / 12.0)
 		var fifth_f: float = A2 * pow(2.0, float(chord[2]) / 12.0)
 
-		# KICK: 4-piso en drops; intro/outro/breakdown solo en 1 y 3
+		# KICK: 4-piso en drops; intro/outro/breakdown solo en 1 y 3.
 		if energy >= 0.6:
 			for k in range(4):
 				_render_kick(buf_kick, bar_t + float(k) * beat_interval)
+				kick_times.append(bar_t + float(k) * beat_interval)
 		else:
 			_render_kick(buf_kick, bar_t)
 			_render_kick(buf_kick, bar_t + 2.0 * beat_interval)
+			kick_times.append(bar_t)
+			kick_times.append(bar_t + 2.0 * beat_interval)
 
 		# SNARE en 2 y 4 (el breakdown respira sin caja)
 		if energy >= 0.5 and sname != "breakdown":
@@ -197,6 +242,16 @@ func render_audio() -> AudioStreamWAV:
 		var pad_gain: float = 1.0 - energy * 0.4
 		_render_pad3(buf_pad, bar_t, bar_len, [root_f, third_f * 2.0, fifth_f * 2.0], pad_gain)
 
+		# REDOBLE PRE-DROP (T6): semicorcheas de caja creciendo en el último
+		# compás antes de cada drop — junto al riser, vende la entrada. Gain
+		# alto (el redoble debe LEERSE sobre hats/lead del compás normal).
+		if b + 1 < total_bars:
+			var nxt_fill := _section_of_bar(b + 1)
+			if String(nxt_fill.get("name", "")) in ["drop", "drop2"] and int(nxt_fill.get("start_bar", -1)) == b + 1:
+				for k in range(16):
+					var fill_gain: float = 0.55 + 0.65 * (float(k) / 16.0)
+					_render_snare(buf_drum, bar_t + float(k) * beat_interval * 0.25, fill_gain)
+
 		# RISER: ultimo compas antes de cada drop (tension -> impacto)
 		if b + 1 < total_bars:
 			var nxt := _section_of_bar(b + 1)
@@ -216,25 +271,74 @@ func render_audio() -> AudioStreamWAV:
 		elif sname == "drop" or sname == "drop2":
 			_render_lead2(buf_lead, b, bar_t, bar_len, chord)
 
+		# ARP DE INTRO (T6): los compases 3-4 de la intro ya muestran el tema
+		# — corcheas suaves sobre la tríada, un adelanto del hook que entra
+		# en el build. La intro deja de ser pad+bombo a secas.
+		if sname == "intro" and b in [2, 3]:
+			var arp_deg: Array = [0, 1, 2, 1, 0, 2, 1, 2]
+			for k in range(8):
+				var f_arp: float = A2 * 2.0 * pow(2.0, float(chord[arp_deg[k]]) / 12.0)
+				_render_lead(buf_lead, bar_t + float(k) * beat_interval * 0.5, f_arp, 0.5)
+
 	# --- Mezcla final con headroom y fade global ---
+	# SIDECHAIN (T6): en cada golpe del schedule de bombo, TODO lo demás
+	# (drums/bass/lead/pad) cae a (1-sc_depth) y se recupera exponencialmente
+	# con tau=sc_tau. El bombo queda fuera del duck: es el que "bombea".
+	# PRESUPUESTO (T7): la curva se PRECOMPUTA en una tabla por muestra del
+	# window (4 beats) — lookup en el loop, sin exp() por muestra. La mezcla
+	# inlines _s16/_w16: 1.27M muestras no toleran llamadas por muestra.
 	var master: float = 0.66
 	var buf_out := _new_buf(total_samples)
 	var peak: int = 0
+	var win_samples: int = int(4.0 * beat_interval * RATE)
+	var duck_tab := PackedFloat32Array()
+	duck_tab.resize(win_samples)
+	for s in range(win_samples):
+		duck_tab[s] = (1.0 - sc_depth) + sc_depth * (1.0 - exp(-(float(s) / float(RATE)) / sc_tau))
+	# Índice del próximo golpe de kick >= t (kick_times es creciente).
+	var k_idx: int = 0
+	var last_kick_t: float = -1e9
+	var fade_in_end: int = int(0.5 * RATE)
+	var tail_start: int = total_samples - int(1.0 * RATE)
 	for i in range(total_samples):
+		var t_mix: float = float(i) / float(RATE)
+		# Avanzar el puntero de kicks mientras el golpe ya pasó.
+		while k_idx < kick_times.size() and kick_times[k_idx] <= t_mix:
+			last_kick_t = kick_times[k_idx]
+			k_idx += 1
+		var since_samples: int = int((t_mix - last_kick_t) * RATE)
+		var duck: float = duck_tab[since_samples] if since_samples >= 0 and since_samples < win_samples else 1.0
 		var idx: int = i * 2
-		var v: int = _s16(buf_kick, idx) + _s16(buf_drum, idx) + _s16(buf_bass, idx)
-		v += _s16(buf_lead, idx) + _s16(buf_pad, idx)
-		var t: float = float(i) / float(RATE)
+		# Lectura inline con sign-fixup INDIVIDUAL por buffer (el fixup tras la
+		# suma era incorrecto: un solo negativo entre cuatro basta para romper
+		# el rango y clipear la mezcla).
+		var s_kick: int = buf_kick[idx] | (buf_kick[idx + 1] << 8)
+		if s_kick >= 32768:
+			s_kick -= 65536
+		var s_drum: int = buf_drum[idx] | (buf_drum[idx + 1] << 8)
+		if s_drum >= 32768:
+			s_drum -= 65536
+		var s_bass: int = buf_bass[idx] | (buf_bass[idx + 1] << 8)
+		if s_bass >= 32768:
+			s_bass -= 65536
+		var s_lead: int = buf_lead[idx] | (buf_lead[idx + 1] << 8)
+		if s_lead >= 32768:
+			s_lead -= 65536
+		var s_pad: int = buf_pad[idx] | (buf_pad[idx + 1] << 8)
+		if s_pad >= 32768:
+			s_pad -= 65536
+		var v: int = s_kick + int(float(s_drum + s_bass + s_lead + s_pad) * duck)
 		var fade: float = 1.0
-		if t < 0.5:
-			fade = t / 0.5
-		var rem: float = duration + 0.8 - t
-		if rem < 1.0:
-			fade = minf(fade, rem / 1.0)
+		if i < fade_in_end:
+			fade = t_mix / 0.5
+		if i > tail_start:
+			fade = minf(fade, float(total_samples - i) / float(RATE))
 		var sv: float = float(v) * master * fade
 		var out_v: int = int(clampf(sv, -32767.0, 32767.0))
 		peak = maxi(peak, absi(out_v))
-		_w16(buf_out, idx, out_v)
+		buf_out[idx] = out_v & 0xFF
+		buf_out[idx + 1] = (out_v >> 8) & 0xFF
+	last_peak = peak
 
 	var stream := AudioStreamWAV.new()
 	stream.format = AudioStreamWAV.FORMAT_16_BITS
@@ -243,6 +347,16 @@ func render_audio() -> AudioStreamWAV:
 	stream.data = buf_out
 	print("[ProceduralSong] Lista: %d muestras, %.1fs, peak=%d/32767." % [total_samples, duration, peak])
 	return stream
+
+## Ganancia de sidechain a t_mix desde el último golpe last_kick_t (T6).
+## La mezcla llama por muestra; el test headless la aserta directamente:
+## 1-depth justo en el golpe, recuperación exponencial tau, 1.0 pasado el
+## compás del golpe (4 beats) o sin golpe previo.
+func _duck_gain_at(t_mix: float, last_kick_t: float) -> float:
+	var since_kick: float = t_mix - last_kick_t
+	if since_kick < 0.0 or since_kick >= 4.0 * beat_interval:
+		return 1.0
+	return (1.0 - sc_depth) + sc_depth * (1.0 - exp(-since_kick / sc_tau))
 
 func _new_buf(total_samples: int) -> PackedByteArray:
 	var b: PackedByteArray = PackedByteArray()
@@ -283,11 +397,11 @@ func _render_kick(buf: PackedByteArray, t0: float) -> void:
 		var cur: int = _s16(buf, idx) + int(sv)
 		_w16(buf, idx, clampi(cur, -32767, 32767))
 
-func _render_snare(buf: PackedByteArray, t0: float) -> void:
+func _render_snare(buf: PackedByteArray, t0: float, gain: float = 1.0) -> void:
 	var dur_s: float = 0.12
 	var n: int = int(RATE * dur_s)
 	var start_idx: int = int(t0 * float(RATE)) * 2
-	var amp: float = 11000.0
+	var amp: float = 11000.0 * gain
 	for i in range(n):
 		var tt: float = float(i) / float(RATE)
 		var env: float = exp(-14.0 * tt)

@@ -7,14 +7,16 @@ El jugador controla una nave o personaje luminoso con ambas manos mediante **Med
 
 ## Características principales
 
-- **Control por manos con MediaPipe**: una mano define el desplazamiento, la otra la orientación de la nave.
-- **Gameplay rítmico**: los patrones, proyectiles y obstáculos se sincronizan con la canción.
-- **Esquiva pura**: todo lo que aparece es peligro (sierras, enjambres, proyectiles teledirigidos, muros y láseres). No hay disparos ni puntos que recolectar.
+- **Control por manos con MediaPipe**: una mano define el desplazamiento, la otra la orientación de la nave. También se juega con teclado (flechas / WASD) sin ningún requisito de cámara.
+- **Gameplay rítmico**: la coreografía se construye desde la estructura de la canción. El reloj del nivel está anclado al **audio real** (`get_playback_position()`), no a un contador.
+- **Esquiva pura**: todo lo que aparece es peligro. No hay disparos ni puntos que recolectar.
+- **Setpieces por sección**: cada sección de la canción tiene un momento propio — barrido láser, abanico rotante, muro de onda, corredor que se cierra, anillos expansivos. Ver [`docs/first_light_diseno.md`](docs/first_light_diseno.md).
 - **Progreso como métrica**: el HUD muestra el % de la canción sobrevivida; el récord personal es el mejor progreso alcanzado.
-- **Escudo de emergencia**: invulnerabilidad temporal con recarga, para atravesar muros y láseres.
-- **Barra de vida con estados**: verde, ámbar y rojo pulsante según lo crítica que esté la partida.
+- **Escudo de emergencia**: invulnerabilidad temporal con recarga, para atravesar muros y láseres. Cuando bloquea un peligro, **avisa visualmente**.
+- **Barra de vida con estados**: anillo alrededor de la nave (verde, ámbar y rojo pulsante). Solo aparece 3 segundos tras cada golpe —lo perdido se muestra en rojo—; el resto del tiempo la vida se lee en el relleno de la flecha (más llena = más vida).
+- **Impacto con feedback**: trauma de cámara, flash blanco y hit-stop al activarse cada setpiece, escalados por la energía de la sección.
 - **Estética neón minimalista**: visuales abstractos con brillos, estelas y animaciones de impacto.
-- **Dificultad progresiva**: la intensidad escala con la energía de la canción (intro → build → drop → clímax).
+- **Dificultad progresiva**: la intensidad escala con la energía de la canción (intro → build → drop → breakdown → clímax → outro).
 
 ## Condiciones de partida
 
@@ -36,9 +38,25 @@ Movimiento por manos con MediaPipe:
 
 - Una mano define el desplazamiento de la nave.
 - La otra define la orientación.
+- **El teclado siempre funciona** (flechas / WASD), con o sin cámara. Si tocás una tecla, el teclado manda; la mano recupera el control cuando vuelve a dar landmarks frescos. El juego **nunca** queda bloqueado esperando una mano.
 - Esquivar todos los obstáculos al ritmo de la canción: todo spawn es peligro.
-- **Escudo de emergencia**: invulnerabilidad breve (~1.2s) que atraviesa cualquier peligro, con recarga de ~3s.
+- **Escudo de emergencia**: invulnerabilidad breve (~1.2s) que atraviesa cualquier peligro, con recarga de ~3s. Bloquea un peligro por vez y te **avisa** con un destello.
 - **Progreso**: % de la canción sobrevivida; al morir se guarda como mejor progreso si supera el récord.
+
+### Daño
+
+| Rol         | Daño | Ejemplos                              |
+| ----------- | ---- | ------------------------------------- |
+| Mini-jab    | 8    | latido de un compás                   |
+| Proyectil   | 10   | sierra, mina, misil, enjambre         |
+| Setpiece    | 12   | abanico, barrido, onda, corredor, muro |
+
+En `easy_mode` la vida es 125, así que el tutorial perdona **más de 10 golpes**.
+Cada contacto con peligro activo daña (se puede morir encadenando golpes); el
+i-frame corto (0.5s, 0.7s en tutorial) solo evita el multi-hit del mismo frame.
+El i-frame protege sólo al jugador: el peligro sigue vivo.
+
+---
 
 ## Requisitos para la feria
 
@@ -61,9 +79,9 @@ https://drive.google.com/drive/folders/1jKupoyUeg05_fikUqCsfOjz1TXjJIltl?usp=dri
    git clone https://github.com/SlenderDigital/FeriaDeCiencias.git
    ```
 
-2. Abrir el proyecto con **Godot 4.x** (Godot Engine ≥ 4.0).
+2. Abrir el proyecto con **Godot 4.x** (Godot Engine ≥ 4.0). Al abrir, el editor reimporta solo (`icon.svg`, `first_light.ogg`); no hay addons obligatorios.
 
-3. Ejecutar la escena principal desde el editor o exportar el proyecto según la plataforma destino.
+3. Ejecutar la escena principal (`MainMenu.tscn`) desde el editor o exportar según la plataforma destino. Sin cámara ni tracker también se juega: cae a teclado (flechas / WASD).
 
 > El proyecto usa Godot 4; los archivos `.godot/` e `.import/` están ignorados por git.
 
@@ -76,7 +94,7 @@ El control por manos **no depende de ningún proyecto externo**: su lógica vive
 
 ### Que pasa si el juego no detecta la mano
 
-`HandTrackingClient` cae automáticamente al control por **teclado (flechas / WASD)** cuando no recibe datos del tracker — así el juego siempre es jugable, con mano o sin ella.
+`HandTrackingClient` cae automáticamente al control por **teclado (flechas / WASD)** cuando no recibe datos del tracker — así el juego siempre es jugable, con mano o sin ella. El nivel espera de forma segura a que aparezca la mano o se use el teclado, para que ningún peligro pueda golpear a la nave quieta durante la espera.
 
 ### Requisitos para el tracking por mano
 

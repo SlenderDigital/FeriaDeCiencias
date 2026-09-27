@@ -5,6 +5,7 @@
 [ext_resource type="Script" path="res://scripts/NeonBackground.gd" id="3_bg_script"]
 
 [node name="Gameplay" type="Node2D"]
+process_mode = 3
 script = ExtResource("2_game_script")
 
 [node name="MusicPlayer" type="AudioStreamPlayer" parent="."]
@@ -47,12 +48,12 @@ theme = ExtResource("1_theme")
 theme_override_font_sizes/font_size = 20
 text = "CANCIÓN: CYBER GENESIS | BPM: 128"
 
-[node name="ScoreLabel" type="Label" parent="HUDLayer/HUD/TopBar"]
+[node name="ProgressLabel" type="Label" parent="HUDLayer/HUD/TopBar"]
 layout_mode = 2
 theme = ExtResource("1_theme")
 theme_override_colors/font_color = Color(1, 0.85, 0, 1)
 theme_override_font_sizes/font_size = 20
-text = "PUNTAJE: 0  |  COMBO: x0"
+text = "PROGRESO: 0%"
 
 [node name="BottomBar" type="VBoxContainer" parent="HUDLayer/HUD"]
 layout_mode = 2
@@ -65,6 +66,7 @@ show_percentage = false
 
 [node name="PauseOverlay" type="Control" parent="HUDLayer"]
 visible = false
+process_mode = 3
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -123,6 +125,7 @@ text = "MENÚ PRINCIPAL"
 
 [node name="ResultsOverlay" type="Control" parent="HUDLayer"]
 visible = false
+process_mode = 3
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -167,10 +170,10 @@ theme_override_font_sizes/font_size = 28
 text = "¡CANCIÓN COMPLETADA!"
 horizontal_alignment = 1
 
-[node name="ScoreDetails" type="Label" parent="HUDLayer/ResultsOverlay/Panel/VBox"]
+[node name="ResultsDetails" type="Label" parent="HUDLayer/ResultsOverlay/Panel/VBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 18
-text = "Puntaje Final: 0"
+text = "Progreso Final: 0%"
 horizontal_alignment = 1
 
 [node name="BtnRestartRes" type="Button" parent="HUDLayer/ResultsOverlay/Panel/VBox"]
