@@ -18,7 +18,7 @@ if errorlevel 1 (
 )
 
 echo [setup] Sincronizando dependencias (MediaPipe + OpenCV, primera vez tarda)...
-uv sync
+uv sync --python 3.12
 if errorlevel 1 (
   echo [setup] ERROR en uv sync. Revisa tu conexion.
   pause

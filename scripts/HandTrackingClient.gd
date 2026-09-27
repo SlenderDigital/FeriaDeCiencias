@@ -53,10 +53,11 @@ var _smoothed_palm := Vector2.ZERO
 var _has_smoothed := false
 var _smoothed_angle := 0.0
 
-# Estado del arranque: "spawned" | "running" | "failed" | "needs_install"
+# Estado del arranque: "spawned" | "running" | "installing" | "failed" | "needs_install"
 var _spawn_state := "spawned"
-var _tracker_pid := 0          # PID del run_tracker.sh que lanzó el juego
+var _tracker_pid := 0          # PID del launcher que lanzó el juego (solo Linux)
 var _tracker_started_here := false   # true si el juego lo levantó (y debe cerrarlo)
+var _last_boot_poll := 0.0    # throttle del sondeo de instalación (1s)
 
 # --- UI de estado ---
 var _panel: PanelContainer
@@ -113,13 +114,25 @@ func _tracker_python() -> String:
 
 func _install_hint() -> String:
 	if OS.get_name() == "Windows":
-		return "Tracker no instalado — corré setup_tracker.bat una vez"
-	return "Tracker no instalado — corré ./run_tracker.sh una vez"
+		return "Tracker no instalado — se está instalando solo (primera vez)"
+	return "Tracker no instalado — se está instalando solo (primera vez)"
+
+## Instalador de primera vez (build completo: el juego lo corre solo).
+func _installer_script() -> String:
+	if OS.get_name() == "Windows":
+		return _game_dir() + "install_tracker.bat"
+	return _game_dir() + "install_tracker.sh"
+
+func _install_flag() -> String:
+	return _tracker_dir() + ".tracker.install"
 
 func _auto_start_tracker() -> void:
 	_status_path = _tracker_dir() + ".tracker.status"
-	var script_path := _tracker_script()
+	_try_boot()
 
+## Intento de arranque (reintentable): tracker vivo → conectar; venv listo →
+## lanzar; si no, instalar solo y seguir jugando con teclado mientras tanto.
+func _try_boot() -> void:
 	# 1) Si ya había un tracker vivo (heartbeat fresco), no duplicar.
 	if _tracker_live():
 		_spawn_state = "running"
@@ -127,15 +140,16 @@ func _auto_start_tracker() -> void:
 		print("[HandTracking] Tracker ya corriendo. Solo me conecto por UDP ", UDP_PORT, ".")
 		return
 
-	# 2) Si no está instalado el .venv, no instalamos desde el juego: instalación única.
+	# 2) Sin .venv: build completo = instalar solo (primera vez, con internet).
 	if not FileAccess.file_exists(_tracker_python()):
-		_spawn_state = "needs_install"
+		_spawn_state = "installing"
 		_tracker_started_here = false
-		print("[HandTracking] Tracker no instalado. ", _install_hint())
+		_ensure_installer()
+		print("[HandTracking] Instalando tracker solo (primera vez). Teclado mientras tanto.")
 		return
 
 	# 3) Levantar el tracker como HIJO de este juego (se cierra solo al salir).
-	var launched := _launch_tracker(script_path)
+	var launched := _launch_tracker(_tracker_script())
 	if launched:
 		_spawn_state = "spawned"
 		_tracker_started_here = true
@@ -144,6 +158,46 @@ func _auto_start_tracker() -> void:
 		_spawn_state = "failed"
 		_tracker_started_here = false
 		push_warning("[HandTracking] No se pudo lanzar el tracker. Teclado.")
+
+## Lanza el instalador una sola vez (el flag .tracker.install evita duplicados;
+## si quedó "run" hace +30min, se asume muerto y se relanza).
+func _ensure_installer() -> void:
+	var flag := _install_flag()
+	var content := ""
+	if FileAccess.file_exists(flag):
+		var f := FileAccess.open(flag, FileAccess.READ)
+		if f:
+			content = f.get_as_text().strip_edges()
+			f.close()
+	if content == "run":
+		var mtime: int = FileAccess.get_modified_time(flag)
+		if mtime > 0 and int(Time.get_unix_time_from_system()) - mtime < 1800:
+			return
+	var script := _installer_script()
+	if not FileAccess.file_exists(script):
+		_spawn_state = "needs_install"
+		push_warning("[HandTracking] Falta instalador: %s" % script)
+		return
+	if OS.get_name() == "Windows":
+		OS.create_process("cmd.exe", ["/c", "start", "", "/MIN", script])
+	else:
+		OS.create_process(script, [])
+
+## Lee el flag del instalador: "done" → arrancar tracker; "error:*" → teclado.
+func _poll_install() -> void:
+	var flag := _install_flag()
+	if not FileAccess.file_exists(flag):
+		return
+	var content := ""
+	var f := FileAccess.open(flag, FileAccess.READ)
+	if f:
+		content = f.get_as_text().strip_edges()
+		f.close()
+	if content == "done":
+		_try_boot()
+	elif content.begins_with("error"):
+		_spawn_state = "failed"
+		push_warning("[HandTracking] Instalación falló (%s). Teclado." % content)
 
 ## Lanza el script del tracker según la plataforma. En Windows va por
 ## cmd.exe (los .bat no corren directo) con el PID del juego para el watchdog.
@@ -173,6 +227,12 @@ func _process(_delta: float) -> void:
 		has_hand = false
 	while _udp.get_available_packet_count() > 0:
 		_parse(_udp.get_packet())
+	# Instalación en curso: sondear cada 1s si ya terminó (o falló).
+	if _spawn_state == "installing":
+		var now_s := Time.get_ticks_msec() / 1000.0
+		if now_s - _last_boot_poll >= 1.0:
+			_last_boot_poll = now_s
+			_poll_install()
 	_update_status_ui()
 
 ## ¿Los landmarks son FRESCOS? has_hand es binario y sobrevive hasta
@@ -374,6 +434,14 @@ func _update_status_ui(_force := false) -> void:
 		_lbl.add_theme_color_override("font_color", Color(1, 0.78, 0.25, 1))
 		_set_bar_fill(Color(1, 0.6, 0.2, 1))
 		_bar.value = 0.0
+	elif _spawn_state == "installing":
+		# Instalación automática en curso (primera vez): barra indeterminada,
+		# el juego sigue jugable con teclado mientras tanto.
+		_set_ui_visible(true)
+		_lbl.text = "Instalando control por mano (primera vez, puede tardar)…"
+		_lbl.add_theme_color_override("font_color", Color(0, 0.9, 1, 1))
+		_set_bar_fill(Color(0, 0.9, 1, 1))
+		_bar.value = fmod(now * 38.0, 100.0)
 	elif _spawn_state == "failed" or st.begins_with("error"):
 		_set_ui_visible(true)
 		_lbl.text = "No se pudo iniciar el tracker — se usa el teclado"
