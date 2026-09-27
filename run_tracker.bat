@@ -12,6 +12,8 @@ if not defined APT_MIN (
 )
 title AbstractPulseTracker
 set GAMEPID=%~1
+REM --headless como %2: sin ventana OpenCV (el juego es fullscreen).
+if "%~2"=="--headless" set TRACKER_HEADLESS=1
 cd /d "%~dp0tracker_server"
 
 REM --- Idempotencia: si ya hay un tracker vivo (heartbeat fresco), no duplicar ---

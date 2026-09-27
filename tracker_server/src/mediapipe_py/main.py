@@ -8,6 +8,7 @@ import threading
 from mediapipe_py.landmarker import Landmarker
 
 import os
+import sys
 
 # Qt: forzar X11/XWayland (la ventana del tracker se usa para cerrar con q/ESC).
 os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
@@ -16,6 +17,9 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 os.environ.setdefault("GLOG_minloglevel", "2")
 
 STATUS_FILE = ".tracker.status"   # mismo archivo de fase que lee el juego
+# Sin ventana: el juego (fullscreen) lo lanza headless; a mano se corre con
+# ventana para verse. El launcher pasa --headless o pone TRACKER_HEADLESS=1.
+HEADLESS = os.environ.get("TRACKER_HEADLESS", "0") == "1" or "--headless" in sys.argv
 
 UDP_IP = "127.0.0.1"
 UDP_PORT = 5005
@@ -162,13 +166,14 @@ def main() -> None:
             )
             sock.sendto(payload, (UDP_IP, UDP_PORT))
 
-        # Display window
-        cv2.imshow("Landmark Tracking", cv2.flip(image, 1))
-
-        # Press 'q' or ESC to exit
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord('q') or key == 27:
-            break
+        # Ventana de debug (solo manual: el juego lo lanza headless porque
+        # es fullscreen y la ventana OpenCV taparía todo).
+        if not HEADLESS:
+            cv2.imshow("Landmark Tracking", cv2.flip(image, 1))
+            # Press 'q' or ESC to exit
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q') or key == 27:
+                break
 
     landmarker.shutdown()
     cap.release()

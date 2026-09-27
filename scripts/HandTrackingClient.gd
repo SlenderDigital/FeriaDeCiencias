@@ -201,11 +201,13 @@ func _poll_install() -> void:
 
 ## Lanza el script del tracker según la plataforma. En Windows va por
 ## cmd.exe (los .bat no corren directo) con el PID del juego para el watchdog.
+## Siempre headless: el juego es fullscreen y la ventana OpenCV taparía todo
+## (a mano se corre el launcher sin flags y se ve la ventana).
 func _launch_tracker(script_path: String) -> bool:
 	if OS.get_name() == "Windows":
-		var pid := OS.create_process("cmd.exe", ["/c", "start", "", "/MIN", script_path, str(OS.get_process_id())])
+		var pid := OS.create_process("cmd.exe", ["/c", "start", "", "/MIN", script_path, str(OS.get_process_id()), "--headless"])
 		return pid > 0
-	var pid := OS.create_process(script_path, [])
+	var pid := OS.create_process(script_path, ["--headless"])
 	if pid > 0:
 		_tracker_pid = pid
 	return pid > 0
