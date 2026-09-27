@@ -28,6 +28,10 @@ export.cfg
 export_credentials.cfg
 *.tmp
 
+# Paquetes exportados (van a Drive, no a git)
+build-linux/
+build-win/
+
 # Imported translations (automatically generated from CSV files)
 *.translation
 

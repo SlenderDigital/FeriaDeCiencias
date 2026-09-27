@@ -116,12 +116,18 @@ def main() -> None:
         return
 
     _write_status("ready")
+    # Heartbeat: reescribe el status cada 2s para que el juego sepa que el
+    # tracker sigue vivo (usa la frescura del archivo, multiplataforma).
+    last_hb = time.time()
 
     last_seq = 0
     while latest["ok"] and cap.isOpened():
         if latest["seq"] == last_seq:
             time.sleep(0.002)   # sin frame nuevo: no quemar CPU
             continue
+        if time.time() - last_hb > 2.0:
+            _write_status("ready")
+            last_hb = time.time()
         last_seq = latest["seq"]
         image = latest["frame"]
 
