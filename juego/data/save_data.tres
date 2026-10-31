@@ -4,5 +4,14 @@
 
 [resource]
 script = ExtResource("1_cqg7s")
-player_name = "PLAYER"
-records = {}
+player_name = "Facundo & Ba"
+records = {
+1: {
+"completed": false,
+"time": 41.666666666665584
+},
+2: {
+"completed": true,
+"time": 45.0
+}
+}
