@@ -1094,6 +1094,185 @@ func test_new_threats_spawn_and_difficulty_scaling() -> void:
 	assert_eq(level_hard.get_node("BeamContainer").get_child_count() >= 4, true, "Turret projectiles must be parented to BeamContainer")
 
 
+func test_pulsar_orbiter_lunge_and_threat_signals_and_audio() -> void:
+	var target: Node2D = track(Node2D.new()) as Node2D
+	target.global_position = Vector2(576.0, 324.0)
+
+	# 1. Test PULSAR (type 3) triple-layer monochrome visual, movement, and 3-shot lance burst
+	var pulsar: Area2D = track(ENEMY_SCENE.instantiate()) as Area2D
+	pulsar._ready()
+	var pulsar_shots: Array[Vector2] = []
+	pulsar.fire_projectile.connect(func(_origin: Vector2, direction: Vector2, _speed: float, _radius: float) -> void:
+		pulsar_shots.append(direction)
+	)
+	pulsar.configure_enemy(3, Vector2(900.0, 324.0), target, 1.0, 0.35, 6.0)
+	_assert_subtree_monochrome_and_primitive(pulsar)
+	assert_true(pulsar.get_node_or_null("VoidPolygon") != null, "Enemy must include VoidPolygon cutout layer")
+	pulsar.simulate_physics(0.4)
+	assert_eq(pulsar.current_phase, 1, "Pulsar must enter ACTIVE phase after spawn warning")
+	for _i: int in range(28):
+		pulsar.simulate_physics(0.05)
+	assert_eq(pulsar.projectiles_fired, 3, "Pulsar must fire a 3-shot high-velocity lance burst")
+	assert_eq(pulsar_shots.size(), 3, "Pulsar must emit 3 fire_projectile signals")
+
+	# 2. Test ORBITER (type 2) active inward projectile firing
+	var orbiter: Area2D = track(ENEMY_SCENE.instantiate()) as Area2D
+	orbiter._ready()
+	var orbiter_shots: Array[Vector2] = []
+	orbiter.fire_projectile.connect(func(_origin: Vector2, direction: Vector2, _speed: float, _radius: float) -> void:
+		orbiter_shots.append(direction)
+	)
+	orbiter.configure_enemy(2, Vector2(820.0, 324.0), target, 1.0, 0.35, 6.0)
+	_assert_subtree_monochrome_and_primitive(orbiter)
+	orbiter.simulate_physics(0.4)
+	for _i: int in range(40):
+		orbiter.simulate_physics(0.05)
+	assert_gt(orbiter.projectiles_fired, 0, "Orbiter must periodically fire inward pulse projectiles")
+	assert_eq(orbiter_shots.size(), orbiter.projectiles_fired, "Orbiter fire_projectile signal count must match projectiles_fired")
+
+	# 3. Test CHASER (type 0) windup -> lunge state machine & enemy_lunged signal
+	var chaser: Area2D = track(ENEMY_SCENE.instantiate()) as Area2D
+	chaser._ready()
+	var lunged_signals: Array[Vector2] = []
+	chaser.enemy_lunged.connect(func(_pos: Vector2, dir: Vector2) -> void:
+		lunged_signals.append(dir)
+	)
+	chaser.configure_enemy(0, Vector2(820.0, 324.0), target, 1.0, 0.35, 6.0)
+	_assert_subtree_monochrome_and_primitive(chaser)
+	chaser.simulate_physics(0.4)
+	for _i: int in range(36):
+		chaser.simulate_physics(0.05)
+	assert_gt(chaser.lunge_count, 0, "Chaser must perform at least one high-speed lunge")
+	assert_eq(lunged_signals.size(), chaser.lunge_count, "Chaser must emit enemy_lunged on each lunge")
+
+	# 4. Test Saw bounced signal & ClosingWall wall_slammed signal
+	var saw: Area2D = track(SAW_SCENE.instantiate()) as Area2D
+	saw._ready()
+	var saw_bounces_emitted: Array[Vector2] = []
+	saw.bounced.connect(func(_pos: Vector2, normal: Vector2) -> void:
+		saw_bounces_emitted.append(normal)
+	)
+	saw.configure(0, Vector2(80.0, 324.0), Vector2.LEFT, 320.0, 30.0, 0.3, 4.0)
+	_assert_subtree_monochrome_and_primitive(saw)
+	for _i: int in range(15):
+		saw.simulate_physics(0.05)
+	assert_gt(saw_bounces_emitted.size(), 0, "Saw must emit bounced signal when rebounding off arena wall")
+
+	var wall: Node2D = track(CLOSING_WALL_SCENE.instantiate()) as Node2D
+	wall._ready()
+	var wall_slams_emitted: Array[Vector2] = []
+	wall.wall_slammed.connect(func(center: Vector2, _axis: int) -> void:
+		wall_slams_emitted.append(center)
+	)
+	wall.configure(0, 324.0, 140.0, 46.0, 0.4, 0.3, 0.3, 0.2)
+	_assert_subtree_monochrome_and_primitive(wall)
+	wall.simulate_physics(0.45)
+	wall.simulate_physics(0.35)
+	assert_eq(wall.slam_count, 1, "ClosingWall must increment slam_count upon reaching HOLD")
+	assert_eq(wall_slams_emitted.size(), 1, "ClosingWall must emit wall_slammed upon reaching HOLD")
+
+	# 5. Test new procedural AudioLibrary threat streams
+	for stream_variant: AudioStreamWAV in [
+		AUDIO_LIBRARY.enemy_fire(),
+		AUDIO_LIBRARY.enemy_lunge(),
+		AUDIO_LIBRARY.wall_slam(),
+		AUDIO_LIBRARY.saw_bounce(),
+		AUDIO_LIBRARY.victory(),
+		AUDIO_LIBRARY.game_over(),
+	]:
+		assert_true(stream_variant != null, "Procedural threat audio stream must be non-null")
+		assert_eq(stream_variant.resource_path, "", "Procedural threat audio stream must be in-memory")
+		assert_gt(stream_variant.data.size(), 500, "Procedural threat audio stream must contain PCM samples")
+
+
+func test_multi_section_level_soundtrack_and_beat_reactivity() -> void:
+	var music_stream: AudioStreamWAV = AUDIO_LIBRARY.music()
+	assert_true(music_stream != null, "Music stream must exist")
+	assert_eq(music_stream.resource_path, "", "Music stream must be procedural in-memory")
+	assert_eq(music_stream.loop_mode, AudioStreamWAV.LOOP_FORWARD, "Music stream must loop forward")
+	var total_samples: int = music_stream.data.size() / 2
+	var duration_sec: float = float(total_samples) / float(AUDIO_LIBRARY.MIX_RATE)
+	assert_true(absf(duration_sec - 45.0) < 0.05, "Music composition must span the full 45-second level arc (24 bars at 128 BPM)")
+
+	# Verify section mapping across the 45-second arc
+	assert_eq(AUDIO_LIBRARY.get_music_section(1.0), 0, "1.0s must be INTRO (0)")
+	assert_eq(AUDIO_LIBRARY.get_music_section(9.0), 1, "9.0s must be VERSE (1)")
+	assert_eq(AUDIO_LIBRARY.get_music_section(17.0), 2, "17.0s must be CHORUS (2)")
+	assert_eq(AUDIO_LIBRARY.get_music_section(24.0), 3, "24.0s must be BREAKDOWN (3)")
+	assert_eq(AUDIO_LIBRARY.get_music_section(34.0), 4, "34.0s must be CLIMAX (4)")
+	assert_eq(AUDIO_LIBRARY.get_music_section(43.0), 5, "43.0s must be FINALE (5)")
+	assert_gt(AUDIO_LIBRARY.get_music_section_name(34.0).length(), 0, "Section name must be non-empty")
+
+	# Verify distinct section audio content and dynamic contrast (Climax RMS > Breakdown RMS)
+	var bar_bytes: int = AUDIO_LIBRARY.BAR_SAMPLES * 2
+	var intro_bar: PackedByteArray = music_stream.data.slice(0, bar_bytes)
+	var verse_bar: PackedByteArray = music_stream.data.slice(4 * bar_bytes, 5 * bar_bytes)
+	var breakdown_bar: PackedByteArray = music_stream.data.slice(12 * bar_bytes, 13 * bar_bytes)
+	var climax_bar: PackedByteArray = music_stream.data.slice(16 * bar_bytes, 17 * bar_bytes)
+	assert_true(intro_bar != verse_bar, "Verse bar must differ from Intro bar")
+	assert_true(verse_bar != breakdown_bar, "Breakdown bar must differ from Verse bar")
+	assert_true(climax_bar != breakdown_bar, "Climax bar must differ from Breakdown bar")
+
+	var breakdown_sq: float = 0.0
+	var climax_sq: float = 0.0
+	for s_idx: int in range(0, AUDIO_LIBRARY.BAR_SAMPLES, 16):
+		var b_val: float = float(breakdown_bar.decode_s16(s_idx * 2)) / 32767.0
+		var c_val: float = float(climax_bar.decode_s16(s_idx * 2)) / 32767.0
+		breakdown_sq += b_val * b_val
+		climax_sq += c_val * c_val
+	assert_gt(climax_sq, breakdown_sq * 1.4, "Climax drop must have significantly higher RMS energy than Breakdown")
+
+	# Verify Level beat tracking and ArenaGrid synchronization
+	var level: Node2D = track(LEVEL_SCENE.instantiate()) as Node2D
+	level._ready()
+	level.restart_level()
+	assert_eq(level.current_music_section, 0, "Level must start in MusicSection.INTRO (0)")
+	for _i: int in range(20):
+		level.simulate_physics(0.5)
+	assert_gt(level.music_beat_count, 15, "Level must track 128 BPM beats during gameplay")
+	assert_eq(level.current_music_section, 1, "Level at 10.0s must transition to MusicSection.VERSE (1)")
+	var grid: Node2D = level.get_node("ArenaGrid") as Node2D
+	assert_gt(float(grid.get("beat_energy")), 0.1, "ArenaGrid must receive active beat_energy from Level")
+
+
+func test_beam_exact_hitbox_and_shield_latch_guard() -> void:
+	# 1. Verify LightBeam BEAM telegraph visual width matches active width and exact local-space hitbox
+	var beam: Area2D = track(LIGHT_BEAM_SCENE.instantiate()) as Area2D
+	beam._ready()
+	beam.configure(Vector2(576.0, 324.0), 0.0, 44.0, 0.5, 0.4)
+	var beam_vis: Polygon2D = beam.get_node("BeamVisual") as Polygon2D
+	assert_eq(beam_vis.scale, Vector2.ONE, "Telegraph BeamVisual must stay at 1:1 width scale with hitbox")
+
+	var player: CharacterBody2D = track(PLAYER_SCENE.instantiate()) as CharacterBody2D
+	player._ready()
+	# Position player outside exact beam width (22.0 + 13.0 = 35.0 -> y offset 48.0 is outside)
+	player.reset_player(Vector2(576.0, 324.0 + 48.0))
+	assert_false(beam._is_body_within_exact_hitbox(player), "Player 48px off beam axis must be outside 44px beam hitbox")
+
+	# Position player inside exact beam width (y offset 12.0 is inside)
+	player.reset_player(Vector2(576.0, 324.0 + 12.0))
+	assert_true(beam._is_body_within_exact_hitbox(player), "Player 12px off beam axis must be inside 44px beam hitbox")
+
+	# 2. Verify held shield input across reset_player does not auto-latch shield active
+	Input.action_press("shield")
+	player.reset_player(Vector2(576.0, 324.0))
+	player.simulate_physics(0.05)
+	var latched_after_reset: bool = player.is_shielding
+	Input.action_release("shield")
+	assert_false(latched_after_reset, "Held shield input across reset_player must not latch shield active")
+	player.simulate_physics(0.05)
+	assert_false(player.is_shielding, "Releasing shield input clears latch guard without activating shield")
+
+	# Fresh press activates shield, and window focus loss immediately releases it
+	Input.action_press("shield")
+	player.simulate_physics(0.05)
+	var active_on_fresh_press: bool = player.is_shielding
+	player._notification(Node.NOTIFICATION_WM_WINDOW_FOCUS_OUT)
+	Input.action_release("shield")
+	assert_true(active_on_fresh_press, "Fresh shield press after release must activate shield")
+	assert_false(player.is_shielding, "Window focus loss must immediately release active shield")
+
+
 func _build_hand_landmarks(palm_target: Vector2, closed_fist: bool) -> Array[Vector3]:
 	# Builds a 21-landmark hand where average of #0, #5, #9, #13, #17 equals palm_target:
 	# Offsets around palm_target sum to (0.0, 0.0):

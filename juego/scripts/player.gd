@@ -47,6 +47,7 @@ var hit_invincibility_timer: float = 0.0
 var hit_flash_timer: float = 0.0
 var shield_activation_flash: float = 0.0
 var _light_pulse_time: float = 0.0
+var _shield_require_release: bool = false
 
 var hit_sfx_play_count: int = 0
 var shield_sfx_play_count: int = 0
@@ -97,6 +98,7 @@ func _ready() -> void:
 		shield_glow.visible = false
 	add_to_group("player")
 	target_position = global_position
+	_shield_require_release = InputMap.has_action("shield") and Input.is_action_pressed("shield")
 	_update_visuals(0.0)
 
 
@@ -106,6 +108,17 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and not external_tracking_active:
 		var motion_event: InputEventMouseMotion = event as InputEventMouseMotion
 		set_target_position(motion_event.position)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		shield_held = false
+		if InputMap.has_action("shield") and Input.is_action_pressed("shield"):
+			Input.action_release("shield")
+			_shield_require_release = true
+		if is_shielding:
+			is_shielding = false
+			shield_changed.emit(false)
 
 
 func _physics_process(delta: float) -> void:
@@ -137,7 +150,12 @@ func simulate_physics(delta: float) -> void:
 	if keyboard_dir.length_squared() > 0.001 and not external_tracking_active:
 		use_target_position = false
 
-	var keyboard_shield: bool = InputMap.has_action("shield") and Input.is_action_pressed("shield")
+	var raw_keyboard_shield: bool = InputMap.has_action("shield") and Input.is_action_pressed("shield")
+	if _shield_require_release:
+		if not raw_keyboard_shield:
+			_shield_require_release = false
+		raw_keyboard_shield = false
+	var keyboard_shield: bool = raw_keyboard_shield
 	_update_shield(shield_held or keyboard_shield, delta)
 	_move_player(delta, keyboard_dir)
 	_constrain_to_viewport()
@@ -343,6 +361,7 @@ func reset_player(spawn_position: Vector2) -> void:
 	shield_activation_flash = 0.0
 	hit_invincibility_timer = 0.0
 	hit_flash_timer = 0.0
+	_shield_require_release = InputMap.has_action("shield") and Input.is_action_pressed("shield")
 	hp_changed.emit(current_hp, MAX_HP)
 	shield_changed.emit(false)
 	_update_visuals(0.0)

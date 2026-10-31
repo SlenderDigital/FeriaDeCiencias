@@ -4,7 +4,7 @@ extends Node2D
 ##
 ## All sparks and shockwaves are drawn by this single node instead of spawning
 ## one node per particle, which keeps draw calls low while adding readable
-## hit/shield feedback.
+## hit, shield, bounce, and detonation feedback.
 
 const DEFAULT_SHARD_COLOR: Color = Color(0.92, 0.92, 0.92, 1.0)
 
@@ -45,9 +45,43 @@ func spawn_burst(
 		})
 	if not is_processing():
 		set_process(true)
+	queue_redraw()
 
 
-## Emits an expanding ring (shield block, explosion, level complete).
+## Emits a directional cone of line shards (used for wall bounces and enemy lunges).
+func spawn_directional_burst(
+	origin: Vector2,
+	direction: Vector2,
+	spread_radians: float = 0.85,
+	count: int = 8,
+	speed: float = 240.0,
+	shard_color: Color = DEFAULT_SHARD_COLOR,
+	duration: float = 0.30,
+	shard_length: float = 8.5,
+	width: float = 2.0
+) -> void:
+	if count <= 0:
+		return
+	var base_angle: float = direction.angle() if direction.length_squared() > 0.001 else 0.0
+	var safe_count: int = mini(count, 32)
+	for i: int in range(safe_count):
+		var angle: float = base_angle + _rng.randf_range(-spread_radians, spread_radians)
+		var shard_speed: float = speed * _rng.randf_range(0.55, 1.25)
+		_shards.append({
+			"pos": origin,
+			"vel": Vector2.from_angle(angle) * shard_speed,
+			"life": duration * _rng.randf_range(0.75, 1.15),
+			"max_life": duration,
+			"length": shard_length * _rng.randf_range(0.7, 1.25),
+			"color": shard_color,
+			"width": width,
+		})
+	if not is_processing():
+		set_process(true)
+	queue_redraw()
+
+
+## Emits an expanding ring (shield block, explosion, bounce, level complete).
 func spawn_ring(
 	origin: Vector2,
 	start_radius: float = 8.0,
@@ -67,6 +101,7 @@ func spawn_ring(
 	})
 	if not is_processing():
 		set_process(true)
+	queue_redraw()
 
 
 ## Removes every active effect immediately (used when restarting a level).

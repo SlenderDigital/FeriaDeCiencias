@@ -57,6 +57,9 @@ var elapsed_time: float = 0.0
 var is_level_running: bool = true
 var is_music_playing: bool = false
 var music_restart_count: int = 0
+var current_music_section: int = 0
+var music_beat_count: int = 0
+var _last_music_beat_idx: int = 0
 var sfx_play_count: int = 0
 var last_sfx_played: StringName = &""
 var spawn_timer: float = 0.45
@@ -355,6 +358,7 @@ func simulate_physics(delta: float) -> void:
 
 	elapsed_time += delta
 	_update_hud_timer()
+	_update_music_reactivity()
 
 	if elapsed_time >= level_duration:
 		trigger_level_complete()
@@ -383,6 +387,9 @@ func restart_level() -> void:
 	walls_spawned = 0
 	enemies_spawned = 0
 	autonomous_spawn_cursor = 0
+	current_music_section = 0
+	music_beat_count = 0
+	_last_music_beat_idx = 0
 	_hud_timer_bucket = -1
 	_last_shield_ratio = -1.0
 	_last_shield_state = ""
@@ -507,6 +514,8 @@ func spawn_exploder(
 	beam_container.add_child(hazard)
 	if hazard.has_method("configure_exploder"):
 		hazard.call("configure_exploder", spawn_pos, warning_time, burst_count, projectile_speed)
+	if hazard.has_signal("exploder_detonated") and not hazard.is_connected("exploder_detonated", _on_exploder_detonated):
+		hazard.connect("exploder_detonated", _on_exploder_detonated)
 	return hazard
 
 
@@ -534,6 +543,8 @@ func spawn_closing_wall(
 	var hold_time: float = 1.25 - 0.05 * float(difficulty_mode)
 	if wall.has_method("configure"):
 		wall.call("configure", chosen_axis, chosen_center, gap_size, 46.0, warning, close_time, hold_time, 0.55)
+	if wall.has_signal("wall_slammed") and not wall.is_connected("wall_slammed", _on_wall_slammed):
+		wall.connect("wall_slammed", _on_wall_slammed)
 	walls_spawned += 1
 	_spawn_threat_arrival_fx(_get_gap_center_for_axis(chosen_axis, chosen_center, arena))
 	return wall
@@ -585,6 +596,8 @@ func spawn_saw(
 	beam_container.add_child(saw)
 	if saw.has_method("configure"):
 		saw.call("configure", chosen_mode, pos, dir, chosen_speed, radius, chosen_warning, chosen_lifetime)
+	if saw.has_signal("bounced") and not saw.is_connected("bounced", _on_saw_bounced):
+		saw.connect("bounced", _on_saw_bounced)
 	saws_spawned += 1
 	_spawn_threat_arrival_fx(pos)
 	return saw
@@ -600,7 +613,7 @@ func spawn_enemy(
 ) -> Area2D:
 	if beam_container == null:
 		return null
-	var chosen_type: int = type if type >= 0 else enemies_spawned % 3
+	var chosen_type: int = type if type >= 0 else enemies_spawned % 4
 	var pos: Vector2 = spawn_position
 	if pos.x < -9000.0:
 		pos = _find_safe_spawn_position()
@@ -611,6 +624,10 @@ func spawn_enemy(
 		enemy.call("configure_enemy", chosen_type, pos, player, chosen_scale, warning, max_lifetime)
 	if enemy.has_signal("fire_projectile") and not enemy.is_connected("fire_projectile", _on_enemy_fire_projectile):
 		enemy.connect("fire_projectile", _on_enemy_fire_projectile)
+	if enemy.has_signal("enemy_lunged") and not enemy.is_connected("enemy_lunged", _on_enemy_lunged):
+		enemy.connect("enemy_lunged", _on_enemy_lunged)
+	if enemy.has_signal("enemy_despawned") and not enemy.is_connected("enemy_despawned", _on_enemy_despawned):
+		enemy.connect("enemy_despawned", _on_enemy_despawned)
 	enemies_spawned += 1
 	_spawn_threat_arrival_fx(pos)
 	return enemy
@@ -649,6 +666,58 @@ func _on_enemy_fire_projectile(origin: Vector2, direction: Vector2, speed: float
 	spawn_projectile(origin, direction, speed, radius)
 	if arena_fx != null:
 		arena_fx.call("spawn_burst", origin, 4, 110.0, Color(0.85, 0.85, 0.85, 1.0), 0.22, 6.0, 1.5)
+	_play_ambient_threat_sfx(AudioLibrary.enemy_fire(), -6.0)
+
+
+func _on_enemy_lunged(origin: Vector2, direction: Vector2) -> void:
+	if arena_fx != null:
+		arena_fx.call("spawn_ring", origin, 10.0, 42.0, 0.24, Color(0.92, 0.92, 0.92, 0.82), 2.0)
+		if arena_fx.has_method("spawn_directional_burst"):
+			arena_fx.call("spawn_directional_burst", origin, -direction, 0.65, 7, 185.0, Color(0.88, 0.88, 0.88, 0.95), 0.24, 8.0, 1.6)
+	_play_ambient_threat_sfx(AudioLibrary.enemy_lunge(), -5.0)
+
+
+func _on_enemy_despawned(origin: Vector2) -> void:
+	if arena_fx != null:
+		arena_fx.call("spawn_ring", origin, 14.0, 38.0, 0.22, Color(0.65, 0.65, 0.65, 0.6), 1.5)
+		arena_fx.call("spawn_burst", origin, 6, 130.0, Color(0.75, 0.75, 0.75, 0.8), 0.22, 6.5, 1.5)
+
+
+func _on_saw_bounced(at_position: Vector2, normal: Vector2) -> void:
+	if arena_fx != null:
+		arena_fx.call("spawn_ring", at_position, 14.0, 48.0, 0.24, Color(0.92, 0.92, 0.92, 0.8), 2.0)
+		if arena_fx.has_method("spawn_directional_burst"):
+			arena_fx.call("spawn_directional_burst", at_position, normal, 0.95, 8, 220.0, Color(0.94, 0.94, 0.94, 1.0), 0.26, 8.5, 1.8)
+	if arena_grid != null and arena_grid.has_method("pulse"):
+		arena_grid.call("pulse", 0.26)
+	_play_ambient_threat_sfx(AudioLibrary.saw_bounce(), -5.0)
+
+
+func _on_wall_slammed(gap_world_center: Vector2, _axis: int) -> void:
+	if arena_fx != null:
+		arena_fx.call("spawn_ring", gap_world_center, 18.0, 84.0, 0.36, Color(0.95, 0.95, 0.95, 0.88), 2.4)
+		arena_fx.call("spawn_burst", gap_world_center, 10, 210.0, Color(0.90, 0.90, 0.90, 0.95), 0.30, 9.0, 1.8)
+	if arena_grid != null and arena_grid.has_method("pulse"):
+		arena_grid.call("pulse", 0.52)
+	trigger_screen_shake(3.2, 0.18)
+	_play_ambient_threat_sfx(AudioLibrary.wall_slam(), -3.0)
+
+
+func _on_exploder_detonated(at_position: Vector2) -> void:
+	if arena_fx != null:
+		arena_fx.call("spawn_ring", at_position, 14.0, 76.0, 0.34, Color(0.96, 0.96, 0.96, 0.92), 2.4)
+		arena_fx.call("spawn_burst", at_position, 12, 230.0, Color(0.92, 0.92, 0.92, 1.0), 0.30, 9.5, 1.8)
+	if arena_grid != null and arena_grid.has_method("pulse"):
+		arena_grid.call("pulse", 0.42)
+	trigger_screen_shake(2.6, 0.15)
+
+
+func _play_ambient_threat_sfx(stream: AudioStreamWAV, volume_db: float = -4.0) -> void:
+	if not is_inside_tree() or Engine.is_editor_hint() or stream == null:
+		return
+	var sm: Node = get_node_or_null("/root/SoundManager")
+	if sm != null and sm.has_method("play_sfx"):
+		sm.call("play_sfx", stream, volume_db)
 
 
 ## Forwards direct 2D viewport coordinates to the player for hand-tracking integration.
@@ -700,6 +769,7 @@ func trigger_level_complete() -> void:
 	_center_end_panels()
 	if replay_button != null and is_inside_tree() and not Engine.is_editor_hint():
 		replay_button.grab_focus()
+	_play_ambient_threat_sfx(AudioLibrary.victory(), -1.5)
 
 	level_completed.emit()
 
@@ -1071,7 +1141,7 @@ func _spawn_rotating_autonomous_threat() -> bool:
 		match threat_kind:
 			0:
 				if _count_active_threats(&"enemies") < get_max_enemies():
-					spawn_enemy(enemies_spawned % 3)
+					spawn_enemy(enemies_spawned % 4)
 					autonomous_spawn_cursor = (threat_kind + 1) % 3
 					return true
 			1:
@@ -1220,6 +1290,7 @@ func _on_player_died() -> void:
 	if arena_grid != null and arena_grid.has_method("pulse"):
 		arena_grid.call("pulse", 0.8)
 	trigger_screen_shake(6.0, 0.35)
+	_play_ambient_threat_sfx(AudioLibrary.game_over(), -1.5)
 
 	game_over.emit()
 
@@ -1323,18 +1394,72 @@ func _start_music() -> void:
 	_resolve_nodes()
 	var stream: AudioStreamWAV = AudioLibrary.music()
 	if music_player != null:
+		if AudioServer.get_bus_index(&"Music") != -1:
+			music_player.bus = &"Music"
+		music_player.pitch_scale = _get_music_pitch_for_difficulty()
 		music_player.stream = stream
 		music_player.stop()
 		if is_inside_tree() and not Engine.is_editor_hint():
 			music_player.play(0.0)
+	if sfx_player != null and AudioServer.get_bus_index(&"SFX") != -1:
+		sfx_player.bus = &"SFX"
 	is_music_playing = true
 	music_restart_count += 1
+	_update_music_reactivity()
 
 
 func _stop_music() -> void:
 	is_music_playing = false
 	if music_player != null:
 		music_player.stop()
+	if arena_grid != null and arena_grid.has_method("set_music_state"):
+		arena_grid.call("set_music_state", 0.0, 0.0, 0)
+
+
+func _get_music_pitch_for_difficulty() -> float:
+	match difficulty_mode:
+		Difficulty.EASY:
+			return 0.97
+		Difficulty.HARD:
+			return 1.04
+		_:
+			return 1.00
+
+
+func _update_music_reactivity() -> void:
+	if not is_music_playing:
+		return
+	var eff_time: float = elapsed_time * _get_music_pitch_for_difficulty()
+	var beat_idx: int = int(floor(eff_time / AudioLibrary.BEAT_DURATION))
+	var section: int = AudioLibrary.get_music_section(eff_time)
+	var beat_phase: float = AudioLibrary.get_beat_phase(eff_time)
+	var beat_energy: float = AudioLibrary.get_beat_intensity(eff_time)
+
+	if beat_idx > _last_music_beat_idx:
+		music_beat_count += beat_idx - _last_music_beat_idx
+		_last_music_beat_idx = beat_idx
+		if arena_grid != null and arena_grid.has_method("pulse"):
+			var is_downbeat: bool = (beat_idx % 4 == 0)
+			var base_pulse: float = 0.24 if is_downbeat else 0.12
+			arena_grid.call("pulse", base_pulse * beat_energy)
+
+	if section != current_music_section:
+		current_music_section = section
+		if section in [
+			AudioLibrary.MusicSection.VERSE,
+			AudioLibrary.MusicSection.CHORUS,
+			AudioLibrary.MusicSection.CLIMAX,
+			AudioLibrary.MusicSection.FINALE,
+		]:
+			if arena_fx != null and arena_fx.has_method("spawn_ring"):
+				var center: Vector2 = _get_arena_size() * 0.5
+				var max_r: float = 260.0 if section >= AudioLibrary.MusicSection.CLIMAX else 190.0
+				arena_fx.call("spawn_ring", center, 24.0, max_r, 0.48, Color(0.82, 0.82, 0.82, 0.45), 2.2)
+			if arena_grid != null and arena_grid.has_method("pulse"):
+				arena_grid.call("pulse", 0.58 if section >= AudioLibrary.MusicSection.CLIMAX else 0.42)
+
+	if arena_grid != null and arena_grid.has_method("set_music_state"):
+		arena_grid.call("set_music_state", beat_phase, beat_energy, current_music_section)
 
 
 func _play_menu_sfx(persist_across_scene: bool = false) -> void:

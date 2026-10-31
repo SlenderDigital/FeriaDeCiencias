@@ -1,10 +1,12 @@
 @tool
 extends Node2D
-## Pair of closing arena walls with a traversable gap.
+## Pair of closing monochrome arena walls with a traversable safe gap.
 ##
-## The pair telegraphs its final position, slides in from opposite edges, holds
-## for a readable window, then retracts. The gap never becomes narrower than the
-## configured minimum so the arena always stays humanly playable.
+## The pair telegraphs its crush zones and safe gap corridor with geometric
+## brackets and compression chevrons, slides in from opposite edges with heavy
+## piston backing, slams into a hold window with impact feedback, then retracts.
+
+signal wall_slammed(gap_world_center: Vector2, axis: int)
 
 enum WallAxis {
 	HORIZONTAL = 0, # walls slide in from left and right, gap is vertical
@@ -43,7 +45,9 @@ var hold_time: float = DEFAULT_HOLD_TIME
 var retract_time: float = DEFAULT_RETRACT_TIME
 var is_hazard_active: bool = false
 var contact_count: int = 0
+var slam_count: int = 0
 var _overlap_timer: float = 0.0
+var _slam_flash: float = 0.0
 var _arena_size: Vector2 = Vector2(1152.0, 648.0)
 var _wall_a_start: Vector2 = Vector2.ZERO
 var _wall_a_target: Vector2 = Vector2.ZERO
@@ -103,8 +107,11 @@ func configure(
 	close_time = maxf(closing_time, 0.25)
 	hold_time = maxf(hold_duration, 0.25)
 	retract_time = maxf(retracting_time, 0.20)
+	slam_count = 0
+	_slam_flash = 0.0
 	_build_layout()
 	_enter_phase(Phase.TELEGRAPH)
+	queue_redraw()
 
 
 func _physics_process(delta: float) -> void:
@@ -117,6 +124,8 @@ func _physics_process(delta: float) -> void:
 func simulate_physics(delta: float) -> void:
 	var safe_delta: float = maxf(delta, 0.0)
 	phase_timer += safe_delta
+	if _slam_flash > 0.0:
+		_slam_flash = maxf(0.0, _slam_flash - safe_delta * 3.8)
 	match current_phase:
 		Phase.TELEGRAPH:
 			_update_telegraph()
@@ -154,6 +163,7 @@ func simulate_physics(delta: float) -> void:
 				_despawn()
 		Phase.DONE:
 			pass
+	queue_redraw()
 
 
 func _build_layout() -> void:
@@ -188,8 +198,9 @@ func _build_layout() -> void:
 
 
 func _build_wall_visuals(horizontal: bool) -> void:
+	z_index = -3
 	var wall_poly: PackedVector2Array = _rect_polygon(_wall_size)
-	var edge_size: float = 5.0
+	var edge_size: float = 6.0
 	var edge_poly: PackedVector2Array
 	if horizontal:
 		edge_poly = _rect_polygon(Vector2(edge_size, _wall_size.y))
@@ -198,31 +209,32 @@ func _build_wall_visuals(horizontal: bool) -> void:
 	for wall_visual: Polygon2D in [visual_a, visual_b]:
 		if wall_visual != null:
 			wall_visual.polygon = wall_poly
-			wall_visual.color = Color(0.08, 0.08, 0.08, 0.96)
+			wall_visual.color = Color(0.14, 0.14, 0.14, 0.98)
 	for wall_edge: Polygon2D in [edge_a, edge_b]:
 		if wall_edge != null:
 			wall_edge.polygon = edge_poly
-			wall_edge.color = Color(0.82, 0.82, 0.82, 0.95)
+			wall_edge.color = Color(0.95, 0.95, 0.95, 1.0)
 	if edge_a != null:
 		edge_a.position = Vector2(_wall_size.x * 0.5 - edge_size * 0.5, 0.0) if horizontal else Vector2(0.0, _wall_size.y * 0.5 - edge_size * 0.5)
 	if edge_b != null:
 		edge_b.position = Vector2(-_wall_size.x * 0.5 + edge_size * 0.5, 0.0) if horizontal else Vector2(0.0, -_wall_size.y * 0.5 + edge_size * 0.5)
 	if telegraph_a != null:
 		telegraph_a.polygon = wall_poly
-		telegraph_a.z_index = -2
+		telegraph_a.z_index = -1
 	if telegraph_b != null:
 		telegraph_b.polygon = wall_poly
-		telegraph_b.z_index = -2
+		telegraph_b.z_index = -1
 
 
 func _update_telegraph() -> void:
-	var pulse: float = 0.5 + 0.5 * sin(phase_timer * 9.0)
-	var alpha: float = 0.14 + 0.12 * pulse
+	var progress: float = clampf(phase_timer / maxf(warning_time, 0.001), 0.0, 1.0)
+	var pulse: float = 0.5 + 0.5 * sin(phase_timer * 11.0)
+	var alpha: float = 0.16 + 0.16 * pulse + 0.10 * progress
 	for telegraph: Polygon2D in [telegraph_a, telegraph_b]:
 		if telegraph == null:
 			continue
 		telegraph.visible = true
-		telegraph.color = Color(0.58, 0.58, 0.58, alpha)
+		telegraph.color = Color(0.62, 0.62, 0.62, alpha)
 	if wall_a != null:
 		wall_a.modulate = Color(1.0, 1.0, 1.0, 0.42)
 	if wall_b != null:
@@ -233,10 +245,11 @@ func _update_telegraph() -> void:
 
 func _update_hold_visual() -> void:
 	var pulse: float = 0.5 + 0.5 * sin(phase_timer * 18.0)
-	var white: float = 0.78 + 0.22 * pulse
+	var white: float = clampf(0.82 + 0.18 * pulse + 0.18 * _slam_flash, 0.0, 1.0)
 	for wall_visual: Polygon2D in [visual_a, visual_b]:
 		if wall_visual != null:
-			wall_visual.color = Color(0.06, 0.06, 0.06, 0.98)
+			var body_g: float = 0.08 + 0.14 * _slam_flash
+			wall_visual.color = Color(body_g, body_g, body_g, 0.98)
 	for wall_edge: Polygon2D in [edge_a, edge_b]:
 		if wall_edge != null:
 			wall_edge.color = Color(white, white, white, 1.0)
@@ -274,6 +287,9 @@ func _enter_phase(new_phase: Phase) -> void:
 			is_hazard_active = true
 			_set_damage_enabled(true)
 			_hide_telegraphs()
+			_slam_flash = 1.0
+			slam_count += 1
+			wall_slammed.emit(get_gap_center(), wall_axis)
 			_check_overlap(0.0)
 		Phase.RETRACTING:
 			is_hazard_active = false
@@ -284,6 +300,88 @@ func _enter_phase(new_phase: Phase) -> void:
 		Phase.DONE, _:
 			is_hazard_active = false
 			_set_damage_enabled(false)
+	queue_redraw()
+
+
+func _draw() -> void:
+	var span_x: float = _arena_size.x
+	var span_y: float = _arena_size.y
+	var half_gap: float = gap_size * 0.5
+	var half_thick: float = wall_thickness * 0.5
+
+	if current_phase == Phase.TELEGRAPH:
+		var progress: float = clampf(phase_timer / maxf(warning_time, 0.001), 0.0, 1.0)
+		var rail_col: Color = Color(0.88, 0.88, 0.88, 0.32 + 0.48 * progress)
+		if wall_axis == WallAxis.HORIZONTAL:
+			var left_limit: float = gap_center - half_gap
+			var right_limit: float = gap_center + half_gap
+			draw_line(Vector2(left_limit, 0.0), Vector2(left_limit, span_y), rail_col, 2.0, true)
+			draw_line(Vector2(right_limit, 0.0), Vector2(right_limit, span_y), rail_col, 2.0, true)
+			# Inward compression chevrons showing sweep trajectory toward the target bars
+			for row: int in range(5):
+				var y_pos: float = span_y * (0.16 + 0.17 * float(row))
+				var slide_a: float = lerpf(28.0, maxf(32.0, left_limit - 18.0), progress)
+				var slide_b: float = lerpf(span_x - 28.0, minf(span_x - 32.0, right_limit + 18.0), progress)
+				draw_line(Vector2(slide_a - 10.0, y_pos - 8.0), Vector2(slide_a, y_pos), rail_col, 2.0, true)
+				draw_line(Vector2(slide_a - 10.0, y_pos + 8.0), Vector2(slide_a, y_pos), rail_col, 2.0, true)
+				draw_line(Vector2(slide_b + 10.0, y_pos - 8.0), Vector2(slide_b, y_pos), rail_col, 2.0, true)
+				draw_line(Vector2(slide_b + 10.0, y_pos + 8.0), Vector2(slide_b, y_pos), rail_col, 2.0, true)
+		else:
+			var top_limit: float = gap_center - half_gap
+			var bot_limit: float = gap_center + half_gap
+			draw_line(Vector2(0.0, top_limit), Vector2(span_x, top_limit), rail_col, 2.0, true)
+			draw_line(Vector2(0.0, bot_limit), Vector2(span_x, bot_limit), rail_col, 2.0, true)
+			for col_idx: int in range(6):
+				var x_pos: float = span_x * (0.14 + 0.144 * float(col_idx))
+				var slide_t: float = lerpf(24.0, maxf(28.0, top_limit - 16.0), progress)
+				var slide_b2: float = lerpf(span_y - 24.0, minf(span_y - 28.0, bot_limit + 16.0), progress)
+				draw_line(Vector2(x_pos - 8.0, slide_t - 10.0), Vector2(x_pos, slide_t), rail_col, 2.0, true)
+				draw_line(Vector2(x_pos + 8.0, slide_t - 10.0), Vector2(x_pos, slide_t), rail_col, 2.0, true)
+				draw_line(Vector2(x_pos - 8.0, slide_b2 + 10.0), Vector2(x_pos, slide_b2), rail_col, 2.0, true)
+				draw_line(Vector2(x_pos + 8.0, slide_b2 + 10.0), Vector2(x_pos, slide_b2), rail_col, 2.0, true)
+		return
+
+	if current_phase in [Phase.CLOSING, Phase.HOLD, Phase.RETRACTING, Phase.FADE_OUT] and wall_a != null and wall_b != null:
+		var rib_col: Color = Color(0.45 + 0.35 * _slam_flash, 0.45 + 0.35 * _slam_flash, 0.45 + 0.35 * _slam_flash, 0.78)
+		var tooth_col: Color = Color(0.94, 0.94, 0.94, 0.92)
+		if wall_axis == WallAxis.HORIZONTAL:
+			var a_outer: float = wall_a.global_position.x - half_thick
+			var a_inner: float = wall_a.global_position.x + half_thick
+			var b_inner: float = wall_b.global_position.x - half_thick
+			var b_outer: float = wall_b.global_position.x + half_thick
+			for r_idx: int in range(7):
+				var ry: float = span_y * (0.08 + 0.14 * float(r_idx))
+				if a_inner > 0.0:
+					draw_line(Vector2(maxf(0.0, a_outer), ry), Vector2(a_inner, ry), rib_col, 2.0, true)
+					draw_line(Vector2(a_inner - 5.0, ry - 5.0), Vector2(a_inner, ry), tooth_col, 2.0, true)
+					draw_line(Vector2(a_inner - 5.0, ry + 5.0), Vector2(a_inner, ry), tooth_col, 2.0, true)
+				if b_inner < span_x:
+					draw_line(Vector2(b_inner, ry), Vector2(minf(span_x, b_outer), ry), rib_col, 2.0, true)
+					draw_line(Vector2(b_inner + 5.0, ry - 5.0), Vector2(b_inner, ry), tooth_col, 2.0, true)
+					draw_line(Vector2(b_inner + 5.0, ry + 5.0), Vector2(b_inner, ry), tooth_col, 2.0, true)
+			if _slam_flash > 0.01:
+				var f_col: Color = Color(1.0, 1.0, 1.0, 0.72 * _slam_flash)
+				draw_line(Vector2(a_inner, 0.0), Vector2(a_inner, span_y), f_col, 4.0, true)
+				draw_line(Vector2(b_inner, 0.0), Vector2(b_inner, span_y), f_col, 4.0, true)
+		else:
+			var a_outer_y: float = wall_a.global_position.y - half_thick
+			var a_inner_y: float = wall_a.global_position.y + half_thick
+			var b_inner_y: float = wall_b.global_position.y - half_thick
+			var b_outer_y: float = wall_b.global_position.y + half_thick
+			for c_idx: int in range(9):
+				var cx: float = span_x * (0.06 + 0.11 * float(c_idx))
+				if a_inner_y > 0.0:
+					draw_line(Vector2(cx, maxf(0.0, a_outer_y)), Vector2(cx, a_inner_y), rib_col, 2.0, true)
+					draw_line(Vector2(cx - 5.0, a_inner_y - 5.0), Vector2(cx, a_inner_y), tooth_col, 2.0, true)
+					draw_line(Vector2(cx + 5.0, a_inner_y - 5.0), Vector2(cx, a_inner_y), tooth_col, 2.0, true)
+				if b_inner_y < span_y:
+					draw_line(Vector2(cx, b_inner_y), Vector2(cx, minf(span_y, b_outer_y)), rib_col, 2.0, true)
+					draw_line(Vector2(cx - 5.0, b_inner_y + 5.0), Vector2(cx, b_inner_y), tooth_col, 2.0, true)
+					draw_line(Vector2(cx + 5.0, b_inner_y + 5.0), Vector2(cx, b_inner_y), tooth_col, 2.0, true)
+			if _slam_flash > 0.01:
+				var f_col2: Color = Color(1.0, 1.0, 1.0, 0.72 * _slam_flash)
+				draw_line(Vector2(0.0, a_inner_y), Vector2(span_x, a_inner_y), f_col2, 4.0, true)
+				draw_line(Vector2(0.0, b_inner_y), Vector2(span_x, b_inner_y), f_col2, 4.0, true)
 
 
 func _hide_telegraphs() -> void:

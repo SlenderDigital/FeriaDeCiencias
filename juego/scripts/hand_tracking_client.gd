@@ -396,11 +396,14 @@ static func evaluate_closed_fist(points: Array[Vector3]) -> bool:
 		var tip_pt: Vector2 = Vector2(points[int(triplet[2])].x, points[int(triplet[2])].y)
 
 		var tip_to_palm: float = tip_pt.distance_to(palm_center)
+		var pip_to_palm: float = pip_pt.distance_to(palm_center)
 		var mcp_to_palm: float = mcp_pt.distance_to(palm_center)
 		var tip_to_wrist: float = tip_pt.distance_to(wrist)
 		var pip_to_wrist: float = pip_pt.distance_to(wrist)
 
-		if tip_to_palm <= maxf(mcp_to_palm * 1.35, palm_radius * 1.35) or tip_to_wrist <= pip_to_wrist * 1.05:
+		var curled_into_palm: bool = tip_to_palm <= maxf(mcp_to_palm * 1.18, palm_radius * 1.18)
+		var curled_past_pip: bool = tip_to_palm < pip_to_palm * 0.92 and tip_to_wrist < pip_to_wrist * 0.92
+		if (curled_into_palm and tip_to_wrist < pip_to_wrist * 0.96) or curled_past_pip:
 			curled_fingers += 1
 
 	return curled_fingers >= 3

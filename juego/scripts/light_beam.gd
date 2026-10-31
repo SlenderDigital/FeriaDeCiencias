@@ -4,8 +4,10 @@ extends Area2D
 ## Consolidates four hazard behaviors into a single scene/script:
 ## 0. BEAM: Edge-to-edge rectangular light beam (telegraph -> solid white active -> fade out).
 ## 1. CIRCLE: Multi-pattern filling circle (center-out, outside-in, or angular sweep fill -> active burst -> fade out).
-## 2. PROJECTILE: Un-telegraphed solid-white projectile with immediate active collision, despawning outside viewport.
-## 3. EXPLODER: Stationary pulsing arena telegraph that detonates into a radial burst of active projectiles.
+## 2. PROJECTILE: Un-telegraphed solid-white projectile with directional comet tail and immediate active collision, despawning outside viewport.
+## 3. EXPLODER: Stationary pulsing arena telegraph with radial spike indicators that detonates into a radial burst of active projectiles.
+
+signal exploder_detonated(at_position: Vector2)
 
 enum Phase {
 	TELEGRAPH,
@@ -120,6 +122,7 @@ func configure(
 	last_sfx_played = &""
 	_rebuild_geometry()
 	_enter_phase(Phase.TELEGRAPH)
+	queue_redraw()
 
 
 ## Configures the hazard as a filling circle with one of three fill patterns:
@@ -143,6 +146,7 @@ func configure_circle(
 	last_sfx_played = &""
 	_rebuild_geometry()
 	_enter_phase(Phase.TELEGRAPH)
+	queue_redraw()
 
 
 ## Configures the hazard as an un-telegraphed solid-white projectile with immediate active collision.
@@ -163,6 +167,7 @@ func configure_projectile(
 	last_sfx_played = &""
 	_rebuild_geometry()
 	_enter_phase(Phase.ACTIVE)
+	queue_redraw()
 
 
 ## Configures the hazard as a stationary pulsing arena object that detonates into radial projectiles.
@@ -186,6 +191,7 @@ func configure_exploder(
 	last_sfx_played = &""
 	_rebuild_geometry()
 	_enter_phase(Phase.TELEGRAPH)
+	queue_redraw()
 
 
 func _physics_process(delta: float) -> void:
@@ -207,6 +213,7 @@ func simulate_physics(delta: float) -> void:
 			_simulate_projectile(delta)
 		HazardType.EXPLODER:
 			_simulate_exploder(delta)
+	queue_redraw()
 
 
 func _simulate_beam(_delta: float) -> void:
@@ -214,9 +221,15 @@ func _simulate_beam(_delta: float) -> void:
 		Phase.TELEGRAPH:
 			var progress: float = clampf(phase_timer / maxf(telegraph_duration, 0.001), 0.0, 1.0)
 			if beam_visual != null:
-				var pulse_alpha: float = lerpf(0.35, 0.68, progress)
-				beam_visual.color = Color(0.35, 0.35, 0.35, pulse_alpha)
-				beam_visual.scale.y = lerpf(0.85, 1.0, progress)
+				var pulse_alpha: float = lerpf(0.28, 0.56, progress)
+				beam_visual.color = Color(0.32, 0.32, 0.32, pulse_alpha)
+				beam_visual.scale = Vector2.ONE
+			if center_line != null:
+				var max_core_scale: float = maxf(beam_width / 3.0, 1.0)
+				var core_y: float = lerpf(1.0, max_core_scale, pow(progress, 1.6))
+				center_line.scale = Vector2(1.0, core_y)
+				var line_g: float = lerpf(0.62, 0.94, progress)
+				center_line.color = Color(line_g, line_g, line_g, lerpf(0.65, 0.92, progress))
 			if phase_timer >= telegraph_duration:
 				_enter_phase(Phase.ACTIVE)
 
@@ -267,19 +280,22 @@ func _simulate_projectile(delta: float) -> void:
 		_despawn()
 
 
-func _simulate_exploder(_delta: float) -> void:
+func _simulate_exploder(delta: float) -> void:
 	match current_phase:
 		Phase.TELEGRAPH:
 			var progress: float = clampf(phase_timer / maxf(telegraph_duration, 0.001), 0.0, 1.0)
+			var freq: float = lerpf(14.0, 28.0, progress)
 			if beam_visual != null:
-				var pulse: float = 0.35 + 0.35 * (0.5 + 0.5 * sin(phase_timer * 18.0))
-				beam_visual.color = Color(pulse, pulse, pulse, 0.75)
-				var s: float = lerpf(0.85, 1.15, 0.5 + 0.5 * sin(phase_timer * 18.0))
+				var pulse: float = 0.35 + 0.38 * (0.5 + 0.5 * sin(phase_timer * freq))
+				beam_visual.color = Color(pulse, pulse, pulse, 0.78)
+				var s: float = lerpf(0.86, 1.16, 0.5 + 0.5 * sin(phase_timer * freq))
 				beam_visual.scale = Vector2(s, s)
+				beam_visual.rotation += delta * (1.2 + 2.4 * progress)
 			if center_line != null:
 				var core_scale: float = lerpf(0.25, 1.0, progress)
 				center_line.scale = Vector2(core_scale, core_scale)
-				center_line.color = Color(0.9, 0.9, 0.9, lerpf(0.4, 0.95, progress))
+				center_line.color = Color(0.92, 0.92, 0.92, lerpf(0.45, 0.98, progress))
+				center_line.rotation -= delta * (1.8 + 3.0 * progress)
 			if phase_timer >= telegraph_duration:
 				_detonate_exploder()
 
@@ -309,6 +325,7 @@ func _detonate_exploder() -> void:
 					parent_node.add_child(proj)
 					proj.call("configure_projectile", global_position, dir, exploder_projectile_speed, DEFAULT_PROJECTILE_RADIUS)
 
+	exploder_detonated.emit(global_position)
 	_play_hazard_sfx(&"explosion", AudioLibrary.explosion(), true)
 	_enter_phase(Phase.FADE_OUT)
 	_despawn()
@@ -327,6 +344,7 @@ func _enter_phase(new_phase: Phase) -> void:
 			_enter_projectile_phase(new_phase)
 		HazardType.EXPLODER:
 			_enter_exploder_phase(new_phase)
+	queue_redraw()
 
 
 func _enter_beam_phase(new_phase: Phase) -> void:
@@ -411,7 +429,9 @@ func _enter_projectile_phase(_new_phase: Phase) -> void:
 		beam_visual.color = ACTIVE_COLOR
 		beam_visual.scale = Vector2.ONE
 	if center_line != null:
-		center_line.visible = false
+		center_line.visible = true
+		center_line.scale = Vector2.ONE
+		center_line.color = Color(0.08, 0.08, 0.08, 0.94)
 	_check_player_overlap()
 
 
@@ -424,10 +444,12 @@ func _enter_exploder_phase(new_phase: Phase) -> void:
 			if beam_visual != null:
 				beam_visual.color = TELEGRAPH_COLOR
 				beam_visual.scale = Vector2.ONE
+				beam_visual.rotation = 0.0
 			if center_line != null:
 				center_line.visible = true
 				center_line.scale = Vector2(0.25, 0.25)
 				center_line.color = CIRCLE_FILL_COLOR
+				center_line.rotation = 0.0
 
 		Phase.ACTIVE, Phase.FADE_OUT:
 			is_hazard_active = false
@@ -462,6 +484,7 @@ func _rebuild_beam_geometry() -> void:
 		])
 
 	if center_line != null:
+		center_line.position = Vector2.ZERO
 		center_line.polygon = PackedVector2Array([
 			Vector2(-half_len, -1.5),
 			Vector2(half_len, -1.5),
@@ -480,6 +503,7 @@ func _rebuild_circle_geometry() -> void:
 	if beam_visual != null:
 		beam_visual.polygon = full_circle
 	if center_line != null:
+		center_line.position = Vector2.ZERO
 		center_line.polygon = PackedVector2Array()
 	if collision_shape != null:
 		var circle_shape: CircleShape2D = CircleShape2D.new()
@@ -488,11 +512,12 @@ func _rebuild_circle_geometry() -> void:
 
 
 func _rebuild_projectile_geometry() -> void:
-	var poly: PackedVector2Array = _build_circle_polygon(projectile_radius, 12)
+	var poly: PackedVector2Array = _build_projectile_polygon(projectile_radius)
 	if beam_visual != null:
 		beam_visual.polygon = poly
 	if center_line != null:
-		center_line.polygon = PackedVector2Array()
+		center_line.position = Vector2(projectile_radius * 0.14, 0.0)
+		center_line.polygon = _build_circle_polygon(projectile_radius * 0.44, 10)
 	if collision_shape != null:
 		var circle_shape: CircleShape2D = CircleShape2D.new()
 		circle_shape.radius = projectile_radius
@@ -504,11 +529,93 @@ func _rebuild_exploder_geometry() -> void:
 	if beam_visual != null:
 		beam_visual.polygon = oct_poly
 	if center_line != null:
+		center_line.position = Vector2.ZERO
 		center_line.polygon = oct_poly
 	if collision_shape != null:
 		var circle_shape: CircleShape2D = CircleShape2D.new()
 		circle_shape.radius = exploder_radius
 		collision_shape.shape = circle_shape
+
+
+func _draw() -> void:
+	match hazard_type:
+		HazardType.BEAM:
+			_draw_beam_overlay()
+		HazardType.CIRCLE:
+			_draw_circle_overlay()
+		HazardType.PROJECTILE:
+			_draw_projectile_overlay()
+		HazardType.EXPLODER:
+			_draw_exploder_overlay()
+
+
+func _draw_beam_overlay() -> void:
+	var half_len: float = beam_length * 0.5
+	var half_w: float = beam_width * 0.5
+	if current_phase == Phase.TELEGRAPH:
+		var progress: float = clampf(phase_timer / maxf(telegraph_duration, 0.001), 0.0, 1.0)
+		var rail_col: Color = Color(0.90, 0.90, 0.90, 0.38 + 0.52 * progress)
+		# Crisp boundary rails pinned strictly to the exact hitbox edges [-half_w, +half_w]
+		draw_line(Vector2(-half_len, -half_w), Vector2(half_len, -half_w), rail_col, 1.6, true)
+		draw_line(Vector2(-half_len, half_w), Vector2(half_len, half_w), rail_col, 1.6, true)
+	elif current_phase == Phase.ACTIVE:
+		# Tight 1.5px edge highlight on the exact hitbox boundary (no false-hitbox rectangle outside [-half_w, +half_w])
+		var edge_col: Color = Color(1.0, 1.0, 1.0, 0.95)
+		draw_line(Vector2(-half_len, -half_w), Vector2(half_len, -half_w), edge_col, 1.5, true)
+		draw_line(Vector2(-half_len, half_w), Vector2(half_len, half_w), edge_col, 1.5, true)
+
+
+func _draw_circle_overlay() -> void:
+	if current_phase == Phase.TELEGRAPH:
+		var progress: float = clampf(phase_timer / maxf(telegraph_duration, 0.001), 0.0, 1.0)
+		var rim_col: Color = Color(0.86, 0.86, 0.86, 0.36 + 0.48 * progress)
+		draw_arc(Vector2.ZERO, circle_radius, 0.0, TAU, 40, rim_col, 2.0, true)
+		for i: int in range(8):
+			var ang: float = TAU * float(i) / 8.0
+			var d: Vector2 = Vector2.from_angle(ang)
+			draw_line(d * (circle_radius - 5.0), d * (circle_radius + 5.0), rim_col, 1.8, true)
+	elif current_phase == Phase.ACTIVE:
+		var progress_a: float = clampf(phase_timer / maxf(active_duration, 0.001), 0.0, 1.0)
+		var halo_r: float = circle_radius * (1.06 + 0.24 * progress_a)
+		draw_arc(Vector2.ZERO, halo_r, 0.0, TAU, 44, Color(1.0, 1.0, 1.0, 0.65 * (1.0 - progress_a)), 3.0, true)
+
+
+func _draw_projectile_overlay() -> void:
+	if current_phase != Phase.ACTIVE:
+		return
+	var r: float = projectile_radius
+	# Comet wake tail & outer aura + dark pinpoint core for high contrast
+	var tail_outer: PackedVector2Array = PackedVector2Array([
+		Vector2(-r * 0.2, -r * 0.72),
+		Vector2(-r * 3.1, 0.0),
+		Vector2(-r * 0.2, r * 0.72),
+	])
+	var tail_inner: PackedVector2Array = PackedVector2Array([
+		Vector2(-r * 0.1, -r * 0.42),
+		Vector2(-r * 1.9, 0.0),
+		Vector2(-r * 0.1, r * 0.42),
+	])
+	draw_colored_polygon(tail_outer, Color(0.65, 0.65, 0.65, 0.28))
+	draw_colored_polygon(tail_inner, Color(0.92, 0.92, 0.92, 0.55))
+	draw_circle(Vector2.ZERO, r * 1.42, Color(0.88, 0.88, 0.88, 0.18))
+	draw_circle(Vector2(r * 0.12, 0.0), r * 0.36, Color(0.08, 0.08, 0.08, 0.92))
+
+
+func _draw_exploder_overlay() -> void:
+	if current_phase != Phase.TELEGRAPH:
+		return
+	var progress: float = clampf(phase_timer / maxf(telegraph_duration, 0.001), 0.0, 1.0)
+	var r: float = exploder_radius
+	var ring_r: float = lerpf(r * 2.1, r * 1.08, progress)
+	var spike_col: Color = Color(0.90, 0.90, 0.90, 0.35 + 0.55 * progress)
+	draw_arc(Vector2.ZERO, ring_r, 0.0, TAU, 32, spike_col, 1.8, true)
+	# Draw 8 radial burst trajectory spikes matching the exact detonation directions
+	for i: int in range(exploder_burst_count):
+		var ang: float = (TAU * float(i)) / float(exploder_burst_count)
+		var d: Vector2 = Vector2.from_angle(ang)
+		var start_r: float = r * 1.15
+		var end_r: float = r * (1.55 + 0.45 * progress)
+		draw_line(d * start_r, d * end_r, spike_col, 2.0, true)
 
 
 func _update_circle_fill_visual(progress: float) -> void:
@@ -527,6 +634,19 @@ func _update_circle_fill_visual(progress: float) -> void:
 		CircleFillMode.ANGULAR_SWEEP:
 			var sweep_angle: float = TAU * clamped
 			center_line.polygon = _build_sector_polygon(circle_radius, sweep_angle, CIRCLE_SEGMENTS)
+
+
+func _build_projectile_polygon(radius: float) -> PackedVector2Array:
+	var pts: PackedVector2Array = PackedVector2Array()
+	var count: int = 12
+	pts.resize(count)
+	for i: int in range(count):
+		var angle: float = (TAU * float(i)) / float(count)
+		var dir_vec: Vector2 = Vector2.from_angle(angle)
+		var x_scale: float = 1.28 if dir_vec.x >= 0.0 else 1.45
+		var y_scale: float = 0.86
+		pts[i] = Vector2(dir_vec.x * radius * x_scale, dir_vec.y * radius * y_scale)
+	return pts
 
 
 func _build_circle_polygon(radius: float, segments: int) -> PackedVector2Array:
@@ -607,13 +727,41 @@ func _check_player_overlap() -> void:
 	if not is_hazard_active or not is_inside_tree():
 		return
 	for body: Node2D in get_overlapping_bodies():
-		if body.is_in_group("player") and body.has_method("take_damage"):
-			body.call("take_damage", 1)
+		if body != null and body.is_in_group("player") and body.has_method("take_damage"):
+			if _is_body_within_exact_hitbox(body):
+				body.call("take_damage", 1)
+				return
+	var tree: SceneTree = get_tree()
+	if tree == null:
+		return
+	for node: Node in tree.get_nodes_in_group("player"):
+		var player_body: Node2D = node as Node2D
+		if player_body != null and player_body.has_method("take_damage") and _is_body_within_exact_hitbox(player_body):
+			player_body.call("take_damage", 1)
+			return
+
+
+func _is_body_within_exact_hitbox(body: Node2D) -> bool:
+	var local_pos: Vector2 = to_local(body.global_position)
+	const PLAYER_HIT_RADIUS: float = 12.0
+	match hazard_type:
+		HazardType.BEAM:
+			return (
+				absf(local_pos.x) <= beam_length * 0.5 + PLAYER_HIT_RADIUS
+				and absf(local_pos.y) <= beam_width * 0.5 + PLAYER_HIT_RADIUS
+			)
+		HazardType.CIRCLE:
+			return local_pos.length() <= circle_radius + PLAYER_HIT_RADIUS
+		HazardType.PROJECTILE:
+			return local_pos.length() <= projectile_radius + PLAYER_HIT_RADIUS
+		_:
+			return false
 
 
 func _on_body_entered(body: Node2D) -> void:
-	if is_hazard_active and body.is_in_group("player") and body.has_method("take_damage"):
-		body.call("take_damage", 1)
+	if is_hazard_active and body != null and body.is_in_group("player") and body.has_method("take_damage"):
+		if _is_body_within_exact_hitbox(body):
+			body.call("take_damage", 1)
 
 
 func _play_hazard_sfx(sfx_name: StringName, stream: AudioStreamWAV, persist_on_despawn: bool) -> void:
