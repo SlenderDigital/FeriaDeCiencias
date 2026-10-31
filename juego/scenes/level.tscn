@@ -1,0 +1,455 @@
+[gd_scene format=3 uid="uid://cd3kx0thu3oiq"]
+
+[ext_resource type="Script" uid="uid://bxxeew45dhcdn" path="res://scripts/level.gd" id="1_w7c3h"]
+[ext_resource type="PackedScene" uid="uid://1yybbpoa4773" path="res://scenes/player.tscn" id="2_w8frs"]
+[ext_resource type="Script" path="res://scripts/arena_grid.gd" id="3_grid"]
+[ext_resource type="Script" path="res://scripts/arena_fx.gd" id="4_fx"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_w7c3h"]
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+bg_color = Color(0.12, 0.12, 0.12, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.85, 0.85, 0.85, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_w8frs"]
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+bg_color = Color(0.65, 0.65, 0.65, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 1, 1, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_mx8sn"]
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+bg_color = Color(0.9, 0.9, 0.9, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 1, 1, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ppgk2"]
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+bg_color = Color(0.12, 0.12, 0.12, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.85, 0.85, 0.85, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_2r41h"]
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+bg_color = Color(0.65, 0.65, 0.65, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 1, 1, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_klq6b"]
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+bg_color = Color(0.9, 0.9, 0.9, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 1, 1, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_b121j"]
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+bg_color = Color(0.12, 0.12, 0.12, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.85, 0.85, 0.85, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_8c41q"]
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+bg_color = Color(0.65, 0.65, 0.65, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 1, 1, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_olg7q"]
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+bg_color = Color(0.9, 0.9, 0.9, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 1, 1, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_t1rx8"]
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+bg_color = Color(0.12, 0.12, 0.12, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.85, 0.85, 0.85, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_8iemx"]
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+bg_color = Color(0.65, 0.65, 0.65, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 1, 1, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_64w2a"]
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+bg_color = Color(0.9, 0.9, 0.9, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 1, 1, 1)
+
+[node name="Level" type="Node2D" unique_id=1684268238]
+script = ExtResource("1_w7c3h")
+
+[node name="Background" type="ColorRect" parent="." unique_id=210539112]
+z_index = -100
+offset_right = 1152.0
+offset_bottom = 648.0
+mouse_filter = 2
+color = Color(0, 0, 0, 1)
+
+[node name="ArenaGrid" type="Node2D" parent="." unique_id=1983207712]
+script = ExtResource("3_grid")
+
+[node name="HandShadow" type="Node2D" parent="." unique_id=360529702]
+
+[node name="PalmPolygon" type="Polygon2D" parent="HandShadow" unique_id=1427960650]
+color = Color(0.18, 0.18, 0.18, 0.42)
+
+[node name="ThumbBone" type="Line2D" parent="HandShadow" unique_id=1876834343]
+
+[node name="IndexBone" type="Line2D" parent="HandShadow" unique_id=891709964]
+
+[node name="MiddleBone" type="Line2D" parent="HandShadow" unique_id=80071320]
+
+[node name="RingBone" type="Line2D" parent="HandShadow" unique_id=1361875844]
+
+[node name="PinkyBone" type="Line2D" parent="HandShadow" unique_id=1882542854]
+
+[node name="PalmBridgeBone" type="Line2D" parent="HandShadow" unique_id=1922877469]
+
+[node name="Fingertip4" type="Polygon2D" parent="HandShadow" unique_id=1511696965]
+color = Color(0.76, 0.76, 0.76, 0.85)
+
+[node name="Fingertip8" type="Polygon2D" parent="HandShadow" unique_id=1547795978]
+color = Color(0.76, 0.76, 0.76, 0.85)
+
+[node name="Fingertip12" type="Polygon2D" parent="HandShadow" unique_id=1178452734]
+color = Color(0.76, 0.76, 0.76, 0.85)
+
+[node name="Fingertip16" type="Polygon2D" parent="HandShadow" unique_id=1788402579]
+color = Color(0.76, 0.76, 0.76, 0.85)
+
+[node name="Fingertip20" type="Polygon2D" parent="HandShadow" unique_id=372421356]
+color = Color(0.76, 0.76, 0.76, 0.85)
+
+[node name="BeamContainer" type="Node2D" parent="." unique_id=872610127]
+
+[node name="ArenaFX" type="Node2D" parent="." unique_id=1983207713]
+script = ExtResource("4_fx")
+
+[node name="Player" parent="." unique_id=1888517061 instance=ExtResource("2_w8frs")]
+position = Vector2(576, 324)
+
+[node name="GameCamera" type="Camera2D" parent="." unique_id=1983207714]
+position = Vector2(576, 324)
+enabled = true
+
+[node name="HUD" type="CanvasLayer" parent="." unique_id=157681507]
+
+[node name="HUDRoot" type="Control" parent="HUD" unique_id=600990485]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="ProgressBg" type="ColorRect" parent="HUD/HUDRoot" unique_id=1741638621]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 14.0
+offset_right = 1128.0
+offset_bottom = 22.0
+mouse_filter = 2
+color = Color(0.2, 0.2, 0.2, 1)
+
+[node name="ProgressFill" type="ColorRect" parent="HUD/HUDRoot" unique_id=1282632914]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 14.0
+offset_right = 24.0
+offset_bottom = 22.0
+mouse_filter = 2
+
+[node name="HPLabel" type="Label" parent="HUD/HUDRoot" unique_id=566029690]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 30.0
+offset_right = 24.0
+offset_bottom = 30.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "HP: ■ ■ ■ (3/3)"
+
+[node name="ShieldLabel" type="Label" parent="HUD/HUDRoot" unique_id=1983207715]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 52.0
+offset_right = 230.0
+offset_bottom = 70.0
+theme_override_colors/font_color = Color(0.82, 0.82, 0.82, 1)
+theme_override_font_sizes/font_size = 13
+text = "SHIELD: READY"
+
+[node name="ShieldBg" type="ColorRect" parent="HUD/HUDRoot" unique_id=1983207716]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 71.0
+offset_right = 174.0
+offset_bottom = 79.0
+mouse_filter = 2
+color = Color(0.2, 0.2, 0.2, 1)
+
+[node name="ShieldFill" type="ColorRect" parent="HUD/HUDRoot" unique_id=1983207717]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 71.0
+offset_right = 174.0
+offset_bottom = 79.0
+mouse_filter = 2
+color = Color(1, 1, 1, 1)
+
+[node name="TimerLabel" type="Label" parent="HUD/HUDRoot" unique_id=1048565316]
+layout_mode = 0
+offset_left = 1002.0
+offset_top = 30.0
+offset_right = 1002.0
+offset_bottom = 30.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "TIME: 45.0s"
+
+[node name="ControlsHintLabel" type="Label" parent="HUD/HUDRoot" unique_id=433746607]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 614.0
+offset_right = 24.0
+offset_bottom = 614.0
+theme_override_colors/font_color = Color(0.55, 0.55, 0.55, 1)
+theme_override_font_sizes/font_size = 14
+text = "MOVE: WASD / Arrows / Mouse / Hand   |   SHIELD: Hold Space / Shift / Click / Fist"
+
+[node name="HandStatusPill" type="ColorRect" parent="HUD/HUDRoot" unique_id=170372952]
+layout_mode = 0
+offset_left = 471.0
+offset_top = 26.0
+offset_right = 681.0
+offset_bottom = 54.0
+color = Color(0.12, 0.12, 0.12, 0.92)
+
+[node name="HandStatusIcon" type="Polygon2D" parent="HUD/HUDRoot/HandStatusPill" unique_id=1841162935]
+position = Vector2(16, 14)
+color = Color(0.42, 0.42, 0.42, 1)
+
+[node name="HandStatusLabel" type="Label" parent="HUD/HUDRoot/HandStatusPill" unique_id=1804407841]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 3.0
+offset_right = 202.0
+offset_bottom = 26.0
+text = "HAND: OFFLINE"
+
+[node name="GameOverPanel" type="ColorRect" parent="HUD/HUDRoot" unique_id=381955615]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.039215688, 0.039215688, 0.039215688, 0.9019608)
+
+[node name="VBoxContainer" type="VBoxContainer" parent="HUD/HUDRoot/GameOverPanel" unique_id=1702007090]
+custom_minimum_size = Vector2(360, 230)
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -180.0
+offset_top = -115.0
+offset_right = 180.0
+offset_bottom = 115.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 16
+alignment = 1
+
+[node name="GameOverTitle" type="Label" parent="HUD/HUDRoot/GameOverPanel/VBoxContainer" unique_id=305953362]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 36
+text = "GAME OVER"
+horizontal_alignment = 1
+
+[node name="GameOverSubtitle" type="Label" parent="HUD/HUDRoot/GameOverPanel/VBoxContainer" unique_id=1385971730]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.68, 0.68, 0.68, 1)
+theme_override_font_sizes/font_size = 16
+text = "All 3 HP Depleted"
+horizontal_alignment = 1
+
+[node name="RetryButton" type="Button" parent="HUD/HUDRoot/GameOverPanel/VBoxContainer" unique_id=511508503]
+custom_minimum_size = Vector2(240, 46)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_focus_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
+theme_override_styles/normal = SubResource("StyleBoxFlat_w7c3h")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_w8frs")
+theme_override_styles/hover = SubResource("StyleBoxFlat_mx8sn")
+theme_override_styles/focus = SubResource("StyleBoxFlat_w7c3h")
+text = "Retry"
+
+[node name="GameOverMainMenuButton" type="Button" parent="HUD/HUDRoot/GameOverPanel/VBoxContainer" unique_id=1687478780]
+custom_minimum_size = Vector2(240, 46)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_focus_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
+theme_override_styles/normal = SubResource("StyleBoxFlat_ppgk2")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_2r41h")
+theme_override_styles/hover = SubResource("StyleBoxFlat_klq6b")
+theme_override_styles/focus = SubResource("StyleBoxFlat_ppgk2")
+text = "Main Menu"
+
+[node name="LevelCompletePanel" type="ColorRect" parent="HUD/HUDRoot" unique_id=1151737732]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.039215688, 0.039215688, 0.039215688, 0.9019608)
+
+[node name="VBoxContainer" type="VBoxContainer" parent="HUD/HUDRoot/LevelCompletePanel" unique_id=42730527]
+custom_minimum_size = Vector2(360, 230)
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -180.0
+offset_top = -115.0
+offset_right = 180.0
+offset_bottom = 115.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 16
+alignment = 1
+
+[node name="LevelCompleteTitle" type="Label" parent="HUD/HUDRoot/LevelCompletePanel/VBoxContainer" unique_id=1395575405]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 36
+text = "LEVEL COMPLETE"
+horizontal_alignment = 1
+
+[node name="LevelCompleteSubtitle" type="Label" parent="HUD/HUDRoot/LevelCompletePanel/VBoxContainer" unique_id=1574628376]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.68, 0.68, 0.68, 1)
+theme_override_font_sizes/font_size = 16
+text = "Survived 45 Seconds!"
+horizontal_alignment = 1
+
+[node name="ReplayButton" type="Button" parent="HUD/HUDRoot/LevelCompletePanel/VBoxContainer" unique_id=318689266]
+custom_minimum_size = Vector2(240, 46)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_focus_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
+theme_override_styles/normal = SubResource("StyleBoxFlat_b121j")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_8c41q")
+theme_override_styles/hover = SubResource("StyleBoxFlat_olg7q")
+theme_override_styles/focus = SubResource("StyleBoxFlat_b121j")
+text = "Replay"
+
+[node name="CompleteMainMenuButton" type="Button" parent="HUD/HUDRoot/LevelCompletePanel/VBoxContainer" unique_id=940292266]
+custom_minimum_size = Vector2(240, 46)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_focus_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
+theme_override_styles/normal = SubResource("StyleBoxFlat_t1rx8")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_8iemx")
+theme_override_styles/hover = SubResource("StyleBoxFlat_64w2a")
+theme_override_styles/focus = SubResource("StyleBoxFlat_t1rx8")
+text = "Main Menu"
+
+[node name="MusicPlayer" type="AudioStreamPlayer" parent="." unique_id=888780756]
+
+[node name="SfxPlayer" type="AudioStreamPlayer" parent="." unique_id=2052378268]

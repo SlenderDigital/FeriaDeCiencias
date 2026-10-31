@@ -1,53 +1,23 @@
-# Tracker runtime status (regenerado al arrancar el tracker)
-.tracker.status
-
-# Godot 4+ specific ignores
+# Godot 4+ caches and local state
 .godot/
-.nomedia
+juego/.godot/
+juego/.tracker.status
+*.import.tmp
+*.tmp
 
-# Third-party addons (re-downloadable)
-addons/godot_ai/
-
-# User-specific export configuration
-export_presets.cfg
-
-# Python tracker server
+# Tracker runtime & Python virtual environment
+.tracker.status
 tracker_server/.venv/
+tracker_server/.tracker.*
 tracker_server/hand_landmarker.task
-tracker_server/.tracker.pid
-tracker_server/.tracker.status
-tracker_server/.tracker.log
 __pycache__/
 *.pyc
 
-# Hermes agent internal (no del projecto)
+# Local skills / scratch
+scf-skills/
 
-# Godot-specific ignores
-.import/
-export.cfg
-export_credentials.cfg
-*.tmp
-
-# Paquetes exportados (van a Drive, no a git)
+# Exported builds
 build-linux/
 build-win/
 *.zip
-
-# Imported translations (automatically generated from CSV files)
-*.translation
-
-# Mono-specific ignores
-.mono/
-data_*/
-mono_crash.*.json
-
-# T9/T10: capturas de revisión visual y artefactos de captura (no son código).
-# Escriben en /tmp/shot_*.png y en .jsab_ref/ — regenerables con tools/record_run.sh
-.jsab_ref/
-*.log
-
-# El ledger de SDD SÍ se versiona; este patrón sólo cubre el scratch runtime.
-.superpowers/*/scratch/
-
-# .hermes/ SÍ se versiona (planes de trabajo). Antes ignorado: los planes
-# se perdían con un reset de disco.
+export_presets.cfg

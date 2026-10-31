@@ -1,7 +1,0 @@
-# El ledger SÍ se versiona (progress.md, rulings, briefs).
-!*/
-!*/**/
-# Los .diff son artefactos de revisión regenerables: no se versionan.
-*.diff
-*.png
-!*/progress.md
