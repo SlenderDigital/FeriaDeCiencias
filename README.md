@@ -85,6 +85,14 @@ godot --headless --path juego -s res://tests/test_records_menu_panel.gd
 
 ---
 
+## TODO / Próximos pasos
+
+- [ ] Exportar builds ejecutables para Linux y Windows junto con `tracker_server/`.
+- [ ] Subir los archivos del juego a **itch.io** y agregar el enlace de descarga acá.
+- [ ] Grabar y enlazar un **video tutorial** mostrando cómo instalar y jugar con el control por manos.
+
+---
+
 ## Créditos
 
 - **Desarrollado por**: Facundo Guiñazú y Bautista Prieto
