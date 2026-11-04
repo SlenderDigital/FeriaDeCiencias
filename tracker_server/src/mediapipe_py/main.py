@@ -17,10 +17,53 @@ if sys.platform.startswith("linux"):
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 os.environ.setdefault("GLOG_minloglevel", "2")
 
-STATUS_FILE = ".tracker.status"   # mismo archivo de fase que lee el juego
+STATUS_FILE = os.environ.get("TRACKER_STATUS_FILE", ".tracker.status")   # mismo archivo de fase que lee el juego
 # Sin ventana: el juego (fullscreen) lo lanza headless; a mano se corre con
 # ventana para verse. El launcher pasa --headless o pone TRACKER_HEADLESS=1.
 HEADLESS = os.environ.get("TRACKER_HEADLESS", "0") == "1" or "--headless" in sys.argv
+
+
+def _resolve_parent_pid() -> int:
+    for i, arg in enumerate(sys.argv):
+        if arg == "--parent-pid" and i + 1 < len(sys.argv):
+            try:
+                return int(sys.argv[i + 1])
+            except ValueError:
+                pass
+    try:
+        return int(os.environ.get("TRACKER_PARENT_PID", "0"))
+    except ValueError:
+        return 0
+
+
+PARENT_PID = _resolve_parent_pid()
+
+
+def _is_pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return True
+    if sys.platform.startswith("win"):
+        try:
+            import ctypes
+            SYNCHRONIZE = 0x00100000
+            WAIT_OBJECT_0 = 0x00000000
+            handle = ctypes.windll.kernel32.OpenProcess(SYNCHRONIZE, False, pid)
+            if not handle:
+                return False
+            res = ctypes.windll.kernel32.WaitForSingleObject(handle, 0)
+            ctypes.windll.kernel32.CloseHandle(handle)
+            return res != WAIT_OBJECT_0
+        except Exception:
+            return True
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
 
 UDP_IP = "127.0.0.1"
 UDP_PORT = 5005
@@ -115,6 +158,15 @@ def main() -> None:
 
     grabber = threading.Thread(target=_grab, daemon=True)
     grabber.start()
+
+    if PARENT_PID > 0:
+        def _watch_parent() -> None:
+            while latest["ok"]:
+                if not _is_pid_alive(PARENT_PID):
+                    latest["ok"] = False
+                    break
+                time.sleep(0.8)
+        threading.Thread(target=_watch_parent, daemon=True).start()
     # Esperar el primer frame (la camara puede tardar ~1s en arrancar).
     for _ in range(150):  # ~3s max
         if latest["seq"] > 0:

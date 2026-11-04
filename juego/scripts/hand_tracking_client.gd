@@ -54,6 +54,7 @@ var _has_received_packet: bool = false
 var _was_fist: bool = false
 var _has_seen_open_hand: bool = false
 var _status_file_override: String = ""
+var _tracker_dir_override: String = ""
 var _status_check_timer: float = 0.0
 var _cached_heartbeat_ready: bool = false
 var _cached_heartbeat_error: bool = false
@@ -103,6 +104,11 @@ func set_status_file_override(path: String) -> void:
 	_refresh_heartbeat_cache()
 
 
+## Overrides the tracker_server directory path for deterministic packaging tests.
+func set_tracker_dir_override(path: String) -> void:
+	_tracker_dir_override = path
+
+
 ## Binds the non-blocking UDP socket to 127.0.0.1:port.
 func bind_udp(port: int = UDP_PORT) -> Error:
 	if udp_bound and udp_port == port:
@@ -121,22 +127,64 @@ func close_udp() -> void:
 		udp_bound = false
 
 
-## Resolves the tracker_server directory path relative to the Godot project.
+## Resolves the tracker_server directory path relative to the Godot project or exported executable.
 func get_tracker_server_dir() -> String:
+	if not _tracker_dir_override.is_empty():
+		return _tracker_dir_override.simplify_path()
+	if not OS.has_feature("editor"):
+		var exe_dir: String = OS.get_executable_path().get_base_dir()
+		var bundled_dir: String = exe_dir.path_join("tracker_server").simplify_path()
+		if DirAccess.dir_exists_absolute(bundled_dir):
+			return bundled_dir
+		var sibling_dir: String = exe_dir.path_join("../tracker_server").simplify_path()
+		if DirAccess.dir_exists_absolute(sibling_dir):
+			return sibling_dir
 	return ProjectSettings.globalize_path("res://../tracker_server").simplify_path()
 
 
 ## Resolves the Python tracker executable and arguments for headless launch.
-func resolve_tracker_launch_command() -> Dictionary:
+func resolve_tracker_launch_command(for_windows_override: Variant = null) -> Dictionary:
 	var tracker_dir: String = get_tracker_server_dir()
-	var is_windows: bool = OS.get_name() == "Windows"
+	var is_windows: bool = bool(for_windows_override) if for_windows_override != null else (OS.get_name() == "Windows")
+	var parent_pid_str: String = str(OS.get_process_id())
+	var module_args: PackedStringArray = PackedStringArray(["-m", "mediapipe_py.main", "--headless", "--parent-pid", parent_pid_str])
+	var script_args: PackedStringArray = PackedStringArray(["--headless", "--parent-pid", parent_pid_str])
+
+	# 1. Pre-bundled portable Python runtime (tracker_server/python/...) for offline builds
+	var bundled_candidates: Array[String] = []
+	if is_windows:
+		bundled_candidates = [
+			tracker_dir.path_join("python/pythonw.exe"),
+			tracker_dir.path_join("python/python.exe"),
+		]
+	else:
+		bundled_candidates = [
+			tracker_dir.path_join("python/bin/python3"),
+			tracker_dir.path_join("python/bin/python"),
+		]
+	for bundled_py: String in bundled_candidates:
+		if FileAccess.file_exists(bundled_py):
+			return {
+				"executable": bundled_py,
+				"args": module_args,
+			}
+
+	# 2. Local virtual environment (.venv) for development / uv sync setups
+	if is_windows:
+		var venv_pythonw: String = tracker_dir.path_join(".venv/Scripts/pythonw.exe")
+		if FileAccess.file_exists(venv_pythonw):
+			return {
+				"executable": venv_pythonw,
+				"args": module_args,
+			}
+
 	var venv_entry: String = tracker_dir.path_join(
 		".venv/Scripts/mediapipe-py.exe" if is_windows else ".venv/bin/mediapipe-py"
 	)
 	if FileAccess.file_exists(venv_entry):
 		return {
 			"executable": venv_entry,
-			"args": PackedStringArray(["--headless"]),
+			"args": script_args,
 		}
 
 	var venv_python: String = tracker_dir.path_join(
@@ -145,12 +193,12 @@ func resolve_tracker_launch_command() -> Dictionary:
 	if FileAccess.file_exists(venv_python):
 		return {
 			"executable": venv_python,
-			"args": PackedStringArray(["-m", "mediapipe_py.main", "--headless"]),
+			"args": module_args,
 		}
 
 	return {
 		"executable": "uv",
-		"args": PackedStringArray(["run", "--directory", tracker_dir, "mediapipe-py", "--headless"]),
+		"args": PackedStringArray(["run", "--directory", tracker_dir, "mediapipe-py", "--headless", "--parent-pid", parent_pid_str]),
 	}
 
 
@@ -167,7 +215,10 @@ func start_tracker_process(allow_in_test: bool = false) -> bool:
 		return false
 
 	_clear_stale_status_files()
+	var tracker_dir: String = get_tracker_server_dir()
 	OS.set_environment("TRACKER_HEADLESS", "1")
+	OS.set_environment("TRACKER_PARENT_PID", str(OS.get_process_id()))
+	OS.set_environment("TRACKER_STATUS_FILE", tracker_dir.path_join(".tracker.status"))
 	var cmd: Dictionary = resolve_tracker_launch_command()
 	var executable: String = str(cmd.get("executable", ""))
 	var args: PackedStringArray = cmd.get("args", PackedStringArray()) as PackedStringArray
@@ -495,8 +546,9 @@ func _get_candidate_status_files() -> Array[String]:
 	if not auto_manage_process:
 		return []
 	return [
-		ProjectSettings.globalize_path("res://.tracker.status").simplify_path(),
 		get_tracker_server_dir().path_join(".tracker.status"),
+		OS.get_executable_path().get_base_dir().path_join(".tracker.status").simplify_path(),
+		ProjectSettings.globalize_path("res://.tracker.status").simplify_path(),
 		ProjectSettings.globalize_path("res://../.tracker.status").simplify_path(),
 	]
 

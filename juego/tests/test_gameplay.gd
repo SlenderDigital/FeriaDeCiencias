@@ -619,6 +619,30 @@ func test_hand_tracker_process_lifecycle_and_single_instance() -> void:
 	var args: PackedStringArray = cmd.get("args", PackedStringArray()) as PackedStringArray
 	assert_gt(str(cmd.get("executable", "")).length(), 0, "Tracker launch executable must resolve")
 	assert_true(args.has("--headless"), "Tracker launch args must include --headless (AC1)")
+	assert_true(args.has("--parent-pid"), "Tracker launch args must include --parent-pid for watchdog cleanup")
+
+	# Verify bundled portable Python runtime resolution for offline Linux and Windows builds
+	var mock_bundle_dir: String = ProjectSettings.globalize_path("user://test_bundled_tracker")
+	DirAccess.make_dir_recursive_absolute(mock_bundle_dir.path_join("python/bin"))
+	var f_lin_py: FileAccess = FileAccess.open(mock_bundle_dir.path_join("python/bin/python3"), FileAccess.WRITE)
+	if f_lin_py != null:
+		f_lin_py.store_string("")
+		f_lin_py.close()
+	var f_win_py: FileAccess = FileAccess.open(mock_bundle_dir.path_join("python/pythonw.exe"), FileAccess.WRITE)
+	if f_win_py != null:
+		f_win_py.store_string("")
+		f_win_py.close()
+	client.call("set_tracker_dir_override", mock_bundle_dir)
+	var cmd_lin: Dictionary = client.call("resolve_tracker_launch_command", false) as Dictionary
+	var cmd_win: Dictionary = client.call("resolve_tracker_launch_command", true) as Dictionary
+	assert_true(str(cmd_lin.get("executable", "")).ends_with("python/bin/python3"), "Linux bundled build must resolve python/bin/python3")
+	assert_true(str(cmd_win.get("executable", "")).ends_with("python/pythonw.exe"), "Windows bundled build must resolve windowless python/pythonw.exe")
+	client.call("set_tracker_dir_override", "")
+	DirAccess.remove_absolute(mock_bundle_dir.path_join("python/bin/python3"))
+	DirAccess.remove_absolute(mock_bundle_dir.path_join("python/pythonw.exe"))
+	DirAccess.remove_absolute(mock_bundle_dir.path_join("python/bin"))
+	DirAccess.remove_absolute(mock_bundle_dir.path_join("python"))
+	DirAccess.remove_absolute(mock_bundle_dir)
 
 	# Spawn first headless tracker instance
 	var first_spawn: bool = bool(client.call("start_tracker_process", true))

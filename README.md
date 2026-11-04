@@ -83,11 +83,19 @@ godot --headless --path juego -s res://tests/test_persistence_loop.gd
 godot --headless --path juego -s res://tests/test_records_menu_panel.gd
 ```
 
+### 4. Generar builds para Linux y Windows (con Python + MediaPipe incluidos)
+
+```bash
+./scripts/build_release.sh all
+```
+
+Esto genera `build-linux/` (`ShapesAndBeams-linux-x86_64.zip`) y `build-win/` (`ShapesAndBeams-windows-x86_64.zip`) con un entorno portátil de Python 3.12 + MediaPipe + OpenCV preinstalado en `tracker_server/python/` (listo para jugar sin internet ni configuración previa).
+
 ---
 
 ## TODO / Próximos pasos
 
-- [ ] Exportar builds ejecutables para Linux y Windows junto con `tracker_server/`.
+- [x] Exportar builds ejecutables para Linux y Windows junto con `tracker_server/`.
 - [ ] Subir los archivos del juego a **itch.io** y agregar el enlace de descarga acá.
 - [ ] Grabar y enlazar un **video tutorial** mostrando cómo instalar y jugar con el control por manos.
 

@@ -8,6 +8,7 @@ juego/.tracker.status
 # Tracker runtime & Python virtual environment
 .tracker.status
 tracker_server/.venv/
+tracker_server/python/
 tracker_server/.tracker.*
 tracker_server/hand_landmarker.task
 __pycache__/
@@ -16,8 +17,14 @@ __pycache__/
 # Local skills / scratch
 scf-skills/
 
-# Exported builds
+# Exported builds & release archives
 build-linux/
 build-win/
+build-*/
 *.zip
-export_presets.cfg
+*.tar.gz
+*.pck
+*.x86_64
+*.exe
+export_credentials.cfg
+juego/export_credentials.cfg
