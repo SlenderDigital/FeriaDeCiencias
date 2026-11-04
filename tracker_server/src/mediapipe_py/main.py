@@ -83,9 +83,11 @@ def main() -> None:
     """Tracker real: abre la cámara y manda los 21 landmarks por UDP a 5005."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
+    _write_status("loading_model")
     landmarker = Landmarker()
     landmarker.init()
 
+    _write_status("opening_camera")
     cap = _open_camera()
     if not cap.isOpened():
         dev_desc = V4L2_DEV if sys.platform.startswith("linux") else str(CAM_INDEX)

@@ -46,6 +46,14 @@ var records_normal_label: Label = null
 var records_hard_label: Label = null
 var records_close_button: Button = null
 var _play_pulse_tween: Tween = null
+var tracker_progress_box: VBoxContainer = null
+var tracker_status_label: Label = null
+var tracker_bar_bg: ColorRect = null
+var tracker_bar_fill: ColorRect = null
+var hand_tracker: Node = null
+var _tracker_progress_value: float = 0.0
+var _tracker_done_hold_timer: float = 0.0
+var _tracker_fade_alpha: float = 1.0
 
 
 func _ready() -> void:
@@ -116,6 +124,7 @@ func _process(delta: float) -> void:
 	if decor_beam_b != null:
 		var pulse_b: float = 0.12 + 0.05 * cos(_anim_time * 1.6)
 		decor_beam_b.color = Color(pulse_b, pulse_b, pulse_b, 1.0)
+	_update_tracker_progress(delta)
 
 
 ## Sets the active difficulty mode (0 = Easy, 1 = Normal, 2 = Hard) and updates the toggle button label.
@@ -302,6 +311,7 @@ func _build_extras() -> void:
 	_refresh_best_label()
 	_build_records_panel()
 	_build_ambient_particles()
+	_build_tracker_progress()
 	_start_play_pulse()
 
 	if is_inside_tree():
@@ -589,3 +599,108 @@ func _on_resized() -> void:
 	if particles is CPUParticles2D:
 		(particles as CPUParticles2D).position = Vector2(view.x * 0.5, view.y + 12.0)
 		(particles as CPUParticles2D).emission_rect_extents = Vector2(view.x * 0.5, 4.0)
+	if tracker_progress_box != null:
+		var bar_w: float = clampf(260.0 * s, 180.0, 380.0)
+		var bar_h: float = maxf(6.0, round(6.0 * s))
+		tracker_progress_box.size = Vector2(bar_w, 30.0 * s)
+		tracker_progress_box.position = Vector2((view.x - bar_w) * 0.5, view.y - 42.0 * s)
+		if tracker_status_label != null:
+			tracker_status_label.add_theme_font_size_override("font_size", int(maxf(11.0, 12.0 * s)))
+		if tracker_bar_bg != null:
+			tracker_bar_bg.custom_minimum_size = Vector2(bar_w, bar_h)
+			tracker_bar_bg.size = Vector2(bar_w, bar_h)
+		if tracker_bar_fill != null and tracker_bar_bg != null:
+			tracker_bar_fill.size = Vector2(tracker_bar_bg.size.x * _tracker_progress_value, bar_h)
+
+
+func set_hand_tracker(tracker: Node) -> void:
+	hand_tracker = tracker
+	_update_tracker_progress(0.0)
+
+
+func _get_hand_tracker() -> Node:
+	if hand_tracker != null and is_instance_valid(hand_tracker):
+		return hand_tracker
+	if is_inside_tree():
+		return get_node_or_null("/root/HandTrackingClient")
+	return null
+
+
+func _build_tracker_progress() -> void:
+	if has_node("TrackerProgressBox"):
+		return
+	tracker_progress_box = VBoxContainer.new()
+	tracker_progress_box.name = "TrackerProgressBox"
+	tracker_progress_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tracker_progress_box.add_theme_constant_override("separation", 4)
+	tracker_progress_box.position = Vector2((1152.0 - 260.0) * 0.5, 648.0 - 42.0)
+	tracker_progress_box.size = Vector2(260.0, 30.0)
+	add_child(tracker_progress_box)
+
+	tracker_status_label = Label.new()
+	tracker_status_label.name = "TrackerStatusLabel"
+	tracker_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tracker_status_label.text = "HAND TRACKER: STARTING..."
+	tracker_status_label.add_theme_font_size_override("font_size", 12)
+	tracker_status_label.add_theme_color_override("font_color", Color(0.75, 0.75, 0.75, 1.0))
+	tracker_progress_box.add_child(tracker_status_label)
+
+	tracker_bar_bg = ColorRect.new()
+	tracker_bar_bg.name = "TrackerBarBg"
+	tracker_bar_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tracker_bar_bg.custom_minimum_size = Vector2(260.0, 6.0)
+	tracker_bar_bg.size = Vector2(260.0, 6.0)
+	tracker_bar_bg.color = Color(0.18, 0.18, 0.18, 0.9)
+	tracker_progress_box.add_child(tracker_bar_bg)
+
+	tracker_bar_fill = ColorRect.new()
+	tracker_bar_fill.name = "TrackerBarFill"
+	tracker_bar_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tracker_bar_fill.position = Vector2.ZERO
+	tracker_bar_fill.size = Vector2(260.0 * 0.08, 6.0)
+	tracker_bar_fill.color = Color(0.92, 0.92, 0.92, 1.0)
+	tracker_bar_bg.add_child(tracker_bar_fill)
+
+	_tracker_progress_value = 0.08
+	_update_tracker_progress(0.0)
+
+
+func _update_tracker_progress(delta: float) -> void:
+	if tracker_progress_box == null:
+		return
+	var tracker: Node = _get_hand_tracker()
+	var target_progress: float = 0.08
+	var label_str: String = "HAND TRACKER: STARTING..."
+	var is_done: bool = false
+	var is_failed: bool = false
+
+	if tracker != null and tracker.has_method("get_startup_progress_info"):
+		var info: Dictionary = tracker.call("get_startup_progress_info") as Dictionary
+		target_progress = clampf(float(info.get("progress", 0.08)), 0.0, 1.0)
+		label_str = str(info.get("text", label_str))
+		is_done = bool(info.get("done", false))
+		is_failed = bool(info.get("failed", false))
+
+	if delta > 0.0:
+		_tracker_progress_value = move_toward(_tracker_progress_value, target_progress, delta * 1.8)
+	else:
+		_tracker_progress_value = target_progress
+
+	if tracker_status_label != null and tracker_status_label.text != label_str:
+		tracker_status_label.text = label_str
+
+	var fill_gray: float = 0.45 if is_failed else (1.0 if is_done else 0.88)
+	if tracker_bar_fill != null and tracker_bar_bg != null:
+		tracker_bar_fill.size = Vector2(tracker_bar_bg.size.x * _tracker_progress_value, tracker_bar_bg.size.y)
+		tracker_bar_fill.color = Color(fill_gray, fill_gray, fill_gray, 1.0)
+
+	if is_done:
+		_tracker_done_hold_timer += maxf(0.0, delta)
+		if _tracker_done_hold_timer >= 1.5:
+			_tracker_fade_alpha = maxf(0.0, _tracker_fade_alpha - maxf(0.0, delta) * 2.0)
+	else:
+		_tracker_done_hold_timer = 0.0
+		_tracker_fade_alpha = 1.0
+
+	tracker_progress_box.modulate = Color(1.0, 1.0, 1.0, _tracker_fade_alpha)
+	tracker_progress_box.visible = _tracker_fade_alpha > 0.01

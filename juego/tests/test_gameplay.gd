@@ -656,6 +656,38 @@ func test_hand_tracker_process_lifecycle_and_single_instance() -> void:
 	client.call("set_status_file_override", temp_status_path)
 	client.call("poll_and_update", 0.016)
 	assert_eq(str(client.call("get_status_label_text")), "HAND: OFFLINE", "'error:camera' status must report HAND: OFFLINE (AC6)")
+
+	# Verify MainMenu hand-tracking startup progress bar phases & auto-fade
+	var menu: Control = track(MAIN_MENU_SCENE.instantiate()) as Control
+	menu._ready()
+	menu.call("set_hand_tracker", client)
+	var prog_box: Control = menu.get_node_or_null("TrackerProgressBox") as Control
+	var prog_lbl: Label = menu.get_node_or_null("TrackerProgressBox/TrackerStatusLabel") as Label
+	var prog_bg: ColorRect = menu.get_node_or_null("TrackerProgressBox/TrackerBarBg") as ColorRect
+	var prog_fill: ColorRect = menu.get_node_or_null("TrackerProgressBox/TrackerBarBg/TrackerBarFill") as ColorRect
+	assert_true(prog_box != null and prog_lbl != null and prog_bg != null and prog_fill != null, "MainMenu must build TrackerProgressBox with label and bar")
+
+	for phase_pair: Array in [
+		["loading_model", "HAND TRACKER: LOADING MODEL...", 0.42],
+		["opening_camera", "HAND TRACKER: OPENING CAMERA...", 0.72],
+		["ready", "HAND TRACKER: READY", 1.0],
+	]:
+		var f_phase: FileAccess = FileAccess.open(temp_status_path, FileAccess.WRITE)
+		if f_phase != null:
+			f_phase.store_string(str(phase_pair[0]))
+			f_phase.close()
+		client.call("set_status_file_override", temp_status_path)
+		client.call("poll_and_update", 0.016)
+		menu.call("_update_tracker_progress", 0.0)
+		assert_eq(prog_lbl.text, str(phase_pair[1]), "Progress label must match startup phase")
+		assert_true(absf(prog_fill.size.x - prog_bg.size.x * float(phase_pair[2])) < 1.0, "Progress bar fill width must match phase ratio")
+		assert_true(prog_box.visible, "Progress box must be visible before auto-fade")
+
+	# Step past 1.5s hold + fade duration -> auto-fades out
+	for _i: int in range(25):
+		menu.call("_update_tracker_progress", 0.1)
+	assert_false(prog_box.visible, "Progress box must auto-fade out ~1.5s after reaching ready")
+
 	if FileAccess.file_exists(temp_status_path):
 		DirAccess.remove_absolute(temp_status_path)
 

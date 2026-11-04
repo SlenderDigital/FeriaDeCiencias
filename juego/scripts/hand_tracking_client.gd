@@ -320,7 +320,7 @@ func poll_and_update(delta: float) -> void:
 
 	_status_check_timer -= delta
 	if _status_check_timer <= 0.0:
-		_status_check_timer = 0.5
+		_status_check_timer = 0.15 if not _cached_heartbeat_ready and not _cached_heartbeat_error else 0.5
 		_refresh_heartbeat_cache()
 
 	_refresh_tracking_state()
@@ -371,6 +371,27 @@ func get_status_label_text() -> String:
 			return "HAND: NO HAND"
 		_:
 			return "HAND: OFFLINE"
+
+
+## Returns startup progress info {"progress": float, "text": String, "done": bool, "failed": bool}.
+func get_startup_progress_info() -> Dictionary:
+	var packet_fresh: bool = _has_received_packet and _time_since_last_packet <= PACKET_TIMEOUT
+	if tracking_state == TrackingState.TRACKING or (has_hand and packet_fresh):
+		return {"progress": 1.0, "text": "HAND TRACKER: READY", "done": true, "failed": false}
+	if tracking_state == TrackingState.NO_HAND or _cached_heartbeat_ready or packet_fresh:
+		return {"progress": 1.0, "text": "HAND TRACKER: READY", "done": true, "failed": false}
+	if _cached_heartbeat_error or last_status_text.begins_with("error"):
+		return {"progress": 1.0, "text": "HAND TRACKER: OFFLINE (MOUSE/KEYS)", "done": true, "failed": true}
+	match last_status_text:
+		"opening_camera":
+			return {"progress": 0.72, "text": "HAND TRACKER: OPENING CAMERA...", "done": false, "failed": false}
+		"loading_model":
+			return {"progress": 0.42, "text": "HAND TRACKER: LOADING MODEL...", "done": false, "failed": false}
+	if is_tracker_process_alive():
+		return {"progress": 0.16, "text": "HAND TRACKER: STARTING SERVICE...", "done": false, "failed": false}
+	if process_spawn_count > 0:
+		return {"progress": 1.0, "text": "HAND TRACKER: OFFLINE (MOUSE/KEYS)", "done": true, "failed": true}
+	return {"progress": 0.08, "text": "HAND TRACKER: STARTING...", "done": false, "failed": false}
 
 
 ## Evaluates whether the given 21 landmarks form a closed fist (#8, #12, #16, #20 curled to palm).
