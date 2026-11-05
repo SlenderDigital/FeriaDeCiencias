@@ -1,7 +1,4 @@
 extends Node
-## Autoload client that regulates the headless Python MediaPipe hand-tracker
-## subprocess across the game's lifetime and polls UDP 127.0.0.1:5005 for
-## little-endian binary landmark packets (<i63f and <i).
 
 signal tracking_state_changed(new_state: int, label_text: String)
 signal fist_closed_triggered
@@ -22,7 +19,6 @@ const PACKET_TIMEOUT: float = 0.5
 const HEARTBEAT_MAX_AGE_SEC: int = 5
 
 const PALM_LANDMARK_INDICES: Array[int] = [0, 5, 9, 13, 17]
-const FINGERTIP_LANDMARK_INDICES: Array[int] = [4, 8, 12, 16, 20]
 const FIST_FINGER_TRIPLETS: Array[Array] = [
 	[5, 6, 8],
 	[9, 10, 12],
@@ -30,7 +26,6 @@ const FIST_FINGER_TRIPLETS: Array[Array] = [
 	[17, 18, 20],
 ]
 
-var auto_manage_process: bool = true
 var udp_port: int = UDP_PORT
 var udp_bound: bool = false
 var tracker_pid: int = -1
@@ -40,43 +35,25 @@ var is_fist: bool = false
 var fist_just_closed: bool = false
 var landmark_revision: int = 0
 var landmarks: Array[Vector3] = []
-var packets_received_count: int = 0
-var process_spawn_count: int = 0
-var process_stop_count: int = 0
 var last_status_text: String = ""
-var last_launch_executable: String = ""
-var last_launch_args: PackedStringArray = PackedStringArray()
+var status_file_override: String = ""
 
 var _udp: PacketPeerUDP = PacketPeerUDP.new()
-var _queued_packets: Array[PackedByteArray] = []
 var _time_since_last_packet: float = 999.0
 var _has_received_packet: bool = false
 var _was_fist: bool = false
 var _has_seen_open_hand: bool = false
-var _status_file_override: String = ""
-var _tracker_dir_override: String = ""
 var _status_check_timer: float = 0.0
 var _cached_heartbeat_ready: bool = false
 var _cached_heartbeat_error: bool = false
-var _mock_process_mode: bool = false
-var _mock_running_pids: Dictionary = {}
-var _next_mock_pid: int = 41000
 
 
 func _ready() -> void:
-	if Engine.is_editor_hint():
-		return
-	if not is_inside_tree() or not auto_manage_process:
-		return
 	bind_udp(udp_port)
 	start_tracker_process()
 
 
 func _process(delta: float) -> void:
-	if Engine.is_editor_hint():
-		return
-	if not is_inside_tree() or not auto_manage_process:
-		return
 	poll_and_update(delta)
 
 
@@ -91,25 +68,6 @@ func _exit_tree() -> void:
 	close_udp()
 
 
-## Enables or disables mock subprocess lifecycle mode for hardware-independent tests.
-func set_mock_process_mode(enabled: bool) -> void:
-	_mock_process_mode = enabled
-	if not enabled:
-		_mock_running_pids.clear()
-
-
-## Overrides the .tracker.status file path for deterministic status tests.
-func set_status_file_override(path: String) -> void:
-	_status_file_override = path
-	_refresh_heartbeat_cache()
-
-
-## Overrides the tracker_server directory path for deterministic packaging tests.
-func set_tracker_dir_override(path: String) -> void:
-	_tracker_dir_override = path
-
-
-## Binds the non-blocking UDP socket to 127.0.0.1:port.
 func bind_udp(port: int = UDP_PORT) -> Error:
 	if udp_bound and udp_port == port:
 		return OK
@@ -120,17 +78,13 @@ func bind_udp(port: int = UDP_PORT) -> Error:
 	return err
 
 
-## Closes the UDP socket if bound.
 func close_udp() -> void:
 	if udp_bound:
 		_udp.close()
 		udp_bound = false
 
 
-## Resolves the tracker_server directory path relative to the Godot project or exported executable.
 func get_tracker_server_dir() -> String:
-	if not _tracker_dir_override.is_empty():
-		return _tracker_dir_override.simplify_path()
 	if not OS.has_feature("editor"):
 		var exe_dir: String = OS.get_executable_path().get_base_dir()
 		var bundled_dir: String = exe_dir.path_join("tracker_server").simplify_path()
@@ -142,59 +96,34 @@ func get_tracker_server_dir() -> String:
 	return ProjectSettings.globalize_path("res://../tracker_server").simplify_path()
 
 
-## Resolves the Python tracker executable and arguments for headless launch.
-func resolve_tracker_launch_command(for_windows_override: Variant = null) -> Dictionary:
+func resolve_tracker_launch_command() -> Dictionary:
 	var tracker_dir: String = get_tracker_server_dir()
-	var is_windows: bool = bool(for_windows_override) if for_windows_override != null else (OS.get_name() == "Windows")
+	var is_windows: bool = OS.get_name() == "Windows"
 	var parent_pid_str: String = str(OS.get_process_id())
 	var module_args: PackedStringArray = PackedStringArray(["-m", "mediapipe_py.main", "--headless", "--parent-pid", parent_pid_str])
 	var script_args: PackedStringArray = PackedStringArray(["--headless", "--parent-pid", parent_pid_str])
 
-	# 1. Pre-bundled portable Python runtime (tracker_server/python/...) for offline builds
 	var bundled_candidates: Array[String] = []
 	if is_windows:
-		bundled_candidates = [
-			tracker_dir.path_join("python/pythonw.exe"),
-			tracker_dir.path_join("python/python.exe"),
-		]
+		bundled_candidates = [tracker_dir.path_join("python/pythonw.exe"), tracker_dir.path_join("python/python.exe")]
 	else:
-		bundled_candidates = [
-			tracker_dir.path_join("python/bin/python3"),
-			tracker_dir.path_join("python/bin/python"),
-		]
+		bundled_candidates = [tracker_dir.path_join("python/bin/python3"), tracker_dir.path_join("python/bin/python")]
 	for bundled_py: String in bundled_candidates:
 		if FileAccess.file_exists(bundled_py):
-			return {
-				"executable": bundled_py,
-				"args": module_args,
-			}
+			return {"executable": bundled_py, "args": module_args}
 
-	# 2. Local virtual environment (.venv) for development / uv sync setups
 	if is_windows:
 		var venv_pythonw: String = tracker_dir.path_join(".venv/Scripts/pythonw.exe")
 		if FileAccess.file_exists(venv_pythonw):
-			return {
-				"executable": venv_pythonw,
-				"args": module_args,
-			}
+			return {"executable": venv_pythonw, "args": module_args}
 
-	var venv_entry: String = tracker_dir.path_join(
-		".venv/Scripts/mediapipe-py.exe" if is_windows else ".venv/bin/mediapipe-py"
-	)
+	var venv_entry: String = tracker_dir.path_join(".venv/Scripts/mediapipe-py.exe" if is_windows else ".venv/bin/mediapipe-py")
 	if FileAccess.file_exists(venv_entry):
-		return {
-			"executable": venv_entry,
-			"args": script_args,
-		}
+		return {"executable": venv_entry, "args": script_args}
 
-	var venv_python: String = tracker_dir.path_join(
-		".venv/Scripts/python.exe" if is_windows else ".venv/bin/python"
-	)
+	var venv_python: String = tracker_dir.path_join(".venv/Scripts/python.exe" if is_windows else ".venv/bin/python")
 	if FileAccess.file_exists(venv_python):
-		return {
-			"executable": venv_python,
-			"args": module_args,
-		}
+		return {"executable": venv_python, "args": module_args}
 
 	return {
 		"executable": "uv",
@@ -202,13 +131,8 @@ func resolve_tracker_launch_command(for_windows_override: Variant = null) -> Dic
 	}
 
 
-## Starts the Python tracker server in headless mode if not already running.
-func start_tracker_process(allow_in_test: bool = false) -> bool:
-	# Headless test runs have no display/camera context; only explicit tests may
-	# launch the tracker there. Normal games still auto-manage the subprocess.
-	if (Engine.is_editor_hint() or DisplayServer.get_name() == "headless") and not allow_in_test:
-		return false
-	if is_tracker_process_alive():
+func start_tracker_process() -> bool:
+	if DisplayServer.get_name() == "headless" or is_tracker_process_alive():
 		return false
 	_refresh_heartbeat_cache()
 	if _cached_heartbeat_ready or (_has_received_packet and _time_since_last_packet <= PACKET_TIMEOUT):
@@ -219,89 +143,50 @@ func start_tracker_process(allow_in_test: bool = false) -> bool:
 	OS.set_environment("TRACKER_HEADLESS", "1")
 	OS.set_environment("TRACKER_PARENT_PID", str(OS.get_process_id()))
 	OS.set_environment("TRACKER_STATUS_FILE", tracker_dir.path_join(".tracker.status"))
+
 	var cmd: Dictionary = resolve_tracker_launch_command()
 	var executable: String = str(cmd.get("executable", ""))
 	var args: PackedStringArray = cmd.get("args", PackedStringArray()) as PackedStringArray
 	if executable.is_empty():
 		return false
 
-	last_launch_executable = executable
-	last_launch_args = args
-
-	if _mock_process_mode:
-		var pid: int = _next_mock_pid
-		_next_mock_pid += 1
-		_mock_running_pids[pid] = true
-		tracker_pid = pid
-		process_spawn_count += 1
-		return true
-
 	var spawned_pid: int = OS.create_process(executable, args, false)
-	if spawned_pid <= 0:
-		tracker_pid = -1
-		return false
-
-	tracker_pid = spawned_pid
-	process_spawn_count += 1
-	return true
+	tracker_pid = spawned_pid if spawned_pid > 0 else -1
+	return tracker_pid > 0
 
 
-## Terminates the spawned Python tracker process if one is active.
 func stop_tracker_process() -> void:
 	if tracker_pid <= 0:
 		return
-	var pid_to_stop: int = tracker_pid
+	if OS.is_process_running(tracker_pid):
+		OS.kill(tracker_pid)
 	tracker_pid = -1
-	if _mock_process_mode:
-		if _mock_running_pids.has(pid_to_stop):
-			_mock_running_pids.erase(pid_to_stop)
-			process_stop_count += 1
-		return
-
-	if OS.is_process_running(pid_to_stop):
-		OS.kill(pid_to_stop)
-		process_stop_count += 1
 
 
-## Returns true if the spawned tracker subprocess is currently running.
 func is_tracker_process_alive() -> bool:
-	if tracker_pid <= 0:
-		return false
-	if _mock_process_mode:
-		return _mock_running_pids.get(tracker_pid, false) == true
-	return OS.is_process_running(tracker_pid)
+	return tracker_pid > 0 and OS.is_process_running(tracker_pid)
 
 
-## Queues a raw UDP binary packet for deterministic processing on the next poll_and_update call.
-func queue_synthetic_packet(packet: PackedByteArray) -> void:
-	_queued_packets.append(packet)
-
-
-## Drains a batch of UDP binary packets and applies only the newest valid packet (O5).
 func ingest_packet_batch(packets: Array[PackedByteArray]) -> bool:
 	var latest_valid: Dictionary = {}
 	for pkt: PackedByteArray in packets:
 		var decoded: Dictionary = decode_packet(pkt)
 		if bool(decoded.get("valid", false)):
 			latest_valid = decoded
-			packets_received_count += 1
 	if latest_valid.is_empty():
 		return false
 	_apply_decoded_packet(latest_valid)
 	return true
 
 
-## Decodes and immediately applies a single raw binary UDP packet (<i63f or <i).
 func ingest_packet(packet: PackedByteArray) -> bool:
 	var decoded: Dictionary = decode_packet(packet)
 	if not bool(decoded.get("valid", false)):
 		return false
-	packets_received_count += 1
 	_apply_decoded_packet(decoded)
 	return true
 
 
-## Decodes a little-endian binary UDP packet from tracker_server (<i63f or <i).
 func decode_packet(packet: PackedByteArray) -> Dictionary:
 	if packet.size() < EMPTY_PACKET_BYTES:
 		return {"valid": false, "count": 0, "landmarks": []}
@@ -309,7 +194,6 @@ func decode_packet(packet: PackedByteArray) -> Dictionary:
 	var count: int = packet.decode_s32(0)
 	if count == 0:
 		return {"valid": true, "count": 0, "landmarks": []}
-
 	if count != LANDMARK_COUNT or packet.size() < FULL_PACKET_BYTES:
 		return {"valid": false, "count": count, "landmarks": []}
 
@@ -317,16 +201,15 @@ func decode_packet(packet: PackedByteArray) -> Dictionary:
 	parsed.resize(LANDMARK_COUNT)
 	var offset: int = 4
 	for i: int in range(LANDMARK_COUNT):
-		var lx: float = packet.decode_float(offset)
-		var ly: float = packet.decode_float(offset + 4)
-		var lz: float = packet.decode_float(offset + 8)
-		parsed[i] = Vector3(lx, ly, lz)
+		parsed[i] = Vector3(
+			packet.decode_float(offset),
+			packet.decode_float(offset + 4),
+			packet.decode_float(offset + 8)
+		)
 		offset += 12
-
 	return {"valid": true, "count": LANDMARK_COUNT, "landmarks": parsed}
 
 
-## Encodes 21 (x, y, z) landmarks into the tracker's little-endian <i63f binary format.
 static func encode_landmarks_packet(points: Array[Vector3]) -> PackedByteArray:
 	if points.size() != LANDMARK_COUNT:
 		return encode_empty_packet()
@@ -334,8 +217,7 @@ static func encode_landmarks_packet(points: Array[Vector3]) -> PackedByteArray:
 	buf.resize(FULL_PACKET_BYTES)
 	buf.encode_s32(0, LANDMARK_COUNT)
 	var offset: int = 4
-	for i: int in range(LANDMARK_COUNT):
-		var pt: Vector3 = points[i]
+	for pt: Vector3 in points:
 		buf.encode_float(offset, pt.x)
 		buf.encode_float(offset + 4, pt.y)
 		buf.encode_float(offset + 8, pt.z)
@@ -343,7 +225,6 @@ static func encode_landmarks_packet(points: Array[Vector3]) -> PackedByteArray:
 	return buf
 
 
-## Encodes a 0-landmark packet in the tracker's little-endian <i binary format.
 static func encode_empty_packet() -> PackedByteArray:
 	var buf: PackedByteArray = PackedByteArray()
 	buf.resize(EMPTY_PACKET_BYTES)
@@ -351,13 +232,8 @@ static func encode_empty_packet() -> PackedByteArray:
 	return buf
 
 
-## Polls queued UDP packets, drains the socket buffer to the freshest packet, and updates state.
 func poll_and_update(delta: float) -> void:
 	var drained: Array[PackedByteArray] = []
-	if not _queued_packets.is_empty():
-		drained.append_array(_queued_packets)
-		_queued_packets.clear()
-
 	if udp_bound:
 		while _udp.get_available_packet_count() > 0:
 			var pkt: PackedByteArray = _udp.get_packet()
@@ -377,23 +253,16 @@ func poll_and_update(delta: float) -> void:
 	_refresh_tracking_state()
 
 
-## Returns the horizontally mirrored palm center (average of #0, #5, #9, #13, #17 with 1.0 - x).
 func get_mirrored_palm_center() -> Vector2:
 	if landmarks.size() < LANDMARK_COUNT:
 		return Vector2(0.5, 0.5)
-	var sum_x: float = 0.0
-	var sum_y: float = 0.0
+	var sum: Vector2 = Vector2.ZERO
 	for idx: int in PALM_LANDMARK_INDICES:
-		var lm: Vector3 = landmarks[idx]
-		sum_x += lm.x
-		sum_y += lm.y
-	var count_f: float = float(PALM_LANDMARK_INDICES.size())
-	var avg_x: float = sum_x / count_f
-	var avg_y: float = sum_y / count_f
-	return Vector2(clampf(1.0 - avg_x, 0.0, 1.0), clampf(avg_y, 0.0, 1.0))
+		sum += Vector2(landmarks[idx].x, landmarks[idx].y)
+	var avg: Vector2 = sum / float(PALM_LANDMARK_INDICES.size())
+	return Vector2(clampf(1.0 - avg.x, 0.0, 1.0), clampf(avg.y, 0.0, 1.0))
 
 
-## Returns all 21 landmarks as horizontally mirrored normalized 2D coordinates (1.0 - x, y).
 func get_mirrored_landmarks_2d() -> PackedVector2Array:
 	var result: PackedVector2Array = PackedVector2Array()
 	if landmarks.size() < LANDMARK_COUNT:
@@ -405,15 +274,6 @@ func get_mirrored_landmarks_2d() -> PackedVector2Array:
 	return result
 
 
-## Consumes and returns true if a rising-edge open-to-closed fist trigger is pending.
-func consume_fist_closed_trigger() -> bool:
-	if not fist_just_closed:
-		return false
-	fist_just_closed = false
-	return true
-
-
-## Returns the HUD status pill text for the current tracking state (AC6).
 func get_status_label_text() -> String:
 	match tracking_state:
 		TrackingState.TRACKING:
@@ -424,12 +284,9 @@ func get_status_label_text() -> String:
 			return "HAND: OFFLINE"
 
 
-## Returns startup progress info {"progress": float, "text": String, "done": bool, "failed": bool}.
 func get_startup_progress_info() -> Dictionary:
 	var packet_fresh: bool = _has_received_packet and _time_since_last_packet <= PACKET_TIMEOUT
-	if tracking_state == TrackingState.TRACKING or (has_hand and packet_fresh):
-		return {"progress": 1.0, "text": "HAND TRACKER: READY", "done": true, "failed": false}
-	if tracking_state == TrackingState.NO_HAND or _cached_heartbeat_ready or packet_fresh:
+	if tracking_state == TrackingState.TRACKING or tracking_state == TrackingState.NO_HAND or _cached_heartbeat_ready or packet_fresh:
 		return {"progress": 1.0, "text": "HAND TRACKER: READY", "done": true, "failed": false}
 	if _cached_heartbeat_error or last_status_text.begins_with("error"):
 		return {"progress": 1.0, "text": "HAND TRACKER: OFFLINE (MOUSE/KEYS)", "done": true, "failed": true}
@@ -440,12 +297,9 @@ func get_startup_progress_info() -> Dictionary:
 			return {"progress": 0.42, "text": "HAND TRACKER: LOADING MODEL...", "done": false, "failed": false}
 	if is_tracker_process_alive():
 		return {"progress": 0.16, "text": "HAND TRACKER: STARTING SERVICE...", "done": false, "failed": false}
-	if process_spawn_count > 0:
-		return {"progress": 1.0, "text": "HAND TRACKER: OFFLINE (MOUSE/KEYS)", "done": true, "failed": true}
 	return {"progress": 0.08, "text": "HAND TRACKER: STARTING...", "done": false, "failed": false}
 
 
-## Evaluates whether the given 21 landmarks form a closed fist (#8, #12, #16, #20 curled to palm).
 static func evaluate_closed_fist(points: Array[Vector3]) -> bool:
 	if points.size() < LANDMARK_COUNT:
 		return false
@@ -531,20 +385,33 @@ func _refresh_tracking_state() -> void:
 		next_state = TrackingState.TRACKING
 	elif packet_fresh or (_cached_heartbeat_ready and not _cached_heartbeat_error):
 		next_state = TrackingState.NO_HAND
-	else:
-		next_state = TrackingState.OFFLINE
 
-	var prev_state: int = tracking_state
-	tracking_state = next_state
-	if prev_state != tracking_state:
+	if next_state != tracking_state:
+		tracking_state = next_state
 		tracking_state_changed.emit(tracking_state, get_status_label_text())
 
 
+func set_status_file_override(path: String) -> void:
+	status_file_override = path
+	_status_check_timer = 0.0
+	_refresh_heartbeat_cache()
+	_refresh_tracking_state()
+
+
+func reset_state() -> void:
+	_clear_hand_tracking_state()
+	_has_received_packet = false
+	_time_since_last_packet = 999.0
+	last_status_text = ""
+	status_file_override = ""
+	_cached_heartbeat_ready = false
+	_cached_heartbeat_error = false
+	tracking_state = TrackingState.OFFLINE
+
+
 func _get_candidate_status_files() -> Array[String]:
-	if not _status_file_override.is_empty():
-		return [_status_file_override]
-	if not auto_manage_process:
-		return []
+	if not status_file_override.is_empty():
+		return [status_file_override]
 	return [
 		get_tracker_server_dir().path_join(".tracker.status"),
 		OS.get_executable_path().get_base_dir().path_join(".tracker.status").simplify_path(),
@@ -556,15 +423,11 @@ func _get_candidate_status_files() -> Array[String]:
 func _refresh_heartbeat_cache() -> void:
 	_cached_heartbeat_ready = false
 	_cached_heartbeat_error = false
-	var candidates: Array[String] = _get_candidate_status_files()
-	if candidates.is_empty():
-		return
-
 	var now_unix: int = int(Time.get_unix_time_from_system())
 	var newest_mtime: int = -1
 	var newest_text: String = ""
 
-	for path: String in candidates:
+	for path: String in _get_candidate_status_files():
 		if not FileAccess.file_exists(path):
 			continue
 		var mtime: int = int(FileAccess.get_modified_time(path))
@@ -579,9 +442,8 @@ func _refresh_heartbeat_cache() -> void:
 
 	last_status_text = newest_text
 	var age: int = maxi(0, now_unix - newest_mtime)
-	if newest_text.begins_with("error"):
-		if age <= HEARTBEAT_MAX_AGE_SEC * 2:
-			_cached_heartbeat_error = true
+	if newest_text.begins_with("error") and age <= HEARTBEAT_MAX_AGE_SEC * 2:
+		_cached_heartbeat_error = true
 	elif newest_text == "ready" and age <= HEARTBEAT_MAX_AGE_SEC:
 		_cached_heartbeat_ready = true
 
@@ -589,8 +451,5 @@ func _refresh_heartbeat_cache() -> void:
 func _clear_stale_status_files() -> void:
 	var now_unix: int = int(Time.get_unix_time_from_system())
 	for path: String in _get_candidate_status_files():
-		if not FileAccess.file_exists(path):
-			continue
-		var mtime: int = int(FileAccess.get_modified_time(path))
-		if now_unix - mtime > HEARTBEAT_MAX_AGE_SEC:
+		if FileAccess.file_exists(path) and now_unix - int(FileAccess.get_modified_time(path)) > HEARTBEAT_MAX_AGE_SEC:
 			DirAccess.remove_absolute(path)

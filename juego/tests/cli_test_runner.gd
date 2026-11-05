@@ -1,11 +1,13 @@
 extends SceneTree
 
-func _init() -> void:
+
+func _process(_delta: float) -> bool:
+	root.size = Vector2i(1152, 648)
 	var suite_script: GDScript = load("res://tests/test_gameplay.gd")
 	if suite_script == null:
 		print("ERROR: Failed to load test_gameplay.gd")
 		quit(1)
-		return
+		return true
 	var suite: Object = suite_script.new()
 	var runner_class: GDScript = load("res://addons/godot_ai/testing/test_runner.gd")
 	var runner: Object = runner_class.new()
@@ -21,3 +23,4 @@ func _init() -> void:
 	else:
 		print("SUCCESS: ALL TESTS PASSED!")
 		quit(0)
+	return true

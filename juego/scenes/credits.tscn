@@ -1,6 +1,56 @@
-[gd_scene format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/credits.gd" id="1_credits"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_normal"]
+content_margin_left = 12.0
+content_margin_top = 12.0
+content_margin_right = 12.0
+content_margin_bottom = 12.0
+bg_color = Color(0.06, 0.06, 0.06, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.85, 0.85, 0.85, 1)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_hover"]
+content_margin_left = 12.0
+content_margin_top = 12.0
+content_margin_right = 12.0
+content_margin_bottom = 12.0
+bg_color = Color(1, 1, 1, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 1, 1, 1)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+shadow_color = Color(1, 1, 1, 0.35)
+shadow_size = 14
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_pressed"]
+content_margin_left = 12.0
+content_margin_top = 12.0
+content_margin_right = 12.0
+content_margin_bottom = 12.0
+bg_color = Color(0.7, 0.7, 0.7, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 1, 1, 1)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
 
 [node name="Credits" type="Control"]
 layout_mode = 3
@@ -10,3 +60,178 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_credits")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 1)
+
+[node name="DecorSquare" type="Polygon2D" parent="."]
+position = Vector2(576, 324)
+color = Color(0.1, 0.1, 0.1, 1)
+polygon = PackedVector2Array(-90, -90, 90, -90, 90, 90, -90, 90)
+
+[node name="AmbientParticles" type="CPUParticles2D" parent="."]
+z_index = -1
+position = Vector2(576, 700)
+amount = 40
+lifetime = 7.0
+preprocess = 7.0
+emission_shape = 3
+emission_rect_extents = Vector2(700, 4)
+direction = Vector2(0, -1)
+spread = 12.0
+gravity = Vector2(0, 0)
+initial_velocity_min = 18.0
+initial_velocity_max = 48.0
+scale_amount_min = 1.5
+scale_amount_max = 4.0
+color = Color(1, 1, 1, 0.35)
+
+[node name="ScrollClip" type="Control" parent="."]
+clip_contents = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_bottom = -90.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="CreditsColumn" type="VBoxContainer" parent="ScrollClip"]
+layout_mode = 0
+offset_right = 1152.0
+offset_bottom = 520.0
+mouse_filter = 2
+theme_override_constants/separation = 14
+
+[node name="Title" type="Label" parent="ScrollClip/CreditsColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 56
+text = "SHAPES & BEAMS"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="ScrollClip/CreditsColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
+theme_override_font_sizes/font_size = 18
+text = "Monochrome Dodge Game"
+horizontal_alignment = 1
+
+[node name="Spacer1" type="Control" parent="ScrollClip/CreditsColumn"]
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+
+[node name="DevHeader" type="Label" parent="ScrollClip/CreditsColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.5, 0.5, 0.5, 1)
+theme_override_font_sizes/font_size = 16
+text = "DEVELOPED BY"
+horizontal_alignment = 1
+
+[node name="Dev1" type="Label" parent="ScrollClip/CreditsColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 34
+text = "Facundo Guiñazú"
+horizontal_alignment = 1
+
+[node name="Dev2" type="Label" parent="ScrollClip/CreditsColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 34
+text = "Bautista Prieto"
+horizontal_alignment = 1
+
+[node name="Spacer2" type="Control" parent="ScrollClip/CreditsColumn"]
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+
+[node name="BuiltHeader" type="Label" parent="ScrollClip/CreditsColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.5, 0.5, 0.5, 1)
+theme_override_font_sizes/font_size = 16
+text = "BUILT WITH"
+horizontal_alignment = 1
+
+[node name="Tech1" type="Label" parent="ScrollClip/CreditsColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
+theme_override_font_sizes/font_size = 26
+text = "Godot Engine 4.7"
+horizontal_alignment = 1
+
+[node name="Tech2" type="Label" parent="ScrollClip/CreditsColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
+theme_override_font_sizes/font_size = 26
+text = "MediaPipe Hand Tracking"
+horizontal_alignment = 1
+
+[node name="Tech3" type="Label" parent="ScrollClip/CreditsColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
+theme_override_font_sizes/font_size = 26
+text = "OpenCV"
+horizontal_alignment = 1
+
+[node name="Spacer3" type="Control" parent="ScrollClip/CreditsColumn"]
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+
+[node name="AudioHeader" type="Label" parent="ScrollClip/CreditsColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.5, 0.5, 0.5, 1)
+theme_override_font_sizes/font_size = 16
+text = "AUDIO"
+horizontal_alignment = 1
+
+[node name="AudioDesc" type="Label" parent="ScrollClip/CreditsColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85, 0.85, 0.85, 1)
+theme_override_font_sizes/font_size = 22
+text = "Procedurally synthesized in code"
+horizontal_alignment = 1
+
+[node name="Spacer4" type="Control" parent="ScrollClip/CreditsColumn"]
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+
+[node name="Thanks" type="Label" parent="ScrollClip/CreditsColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 30
+text = "Thanks for playing!"
+horizontal_alignment = 1
+
+[node name="BackButton" type="Button" parent="."]
+custom_minimum_size = Vector2(200, 48)
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -100.0
+offset_top = -66.0
+offset_right = 100.0
+offset_bottom = -18.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_focus_color = Color(0, 0, 0, 1)
+theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn_hover")
+text = "Back"

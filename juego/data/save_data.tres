@@ -8,7 +8,7 @@ player_name = "Facundo & Ba"
 records = {
 1: {
 "completed": false,
-"time": 41.666666666665584
+"time": 32.049999999999464
 },
 2: {
 "completed": true,

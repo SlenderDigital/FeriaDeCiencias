@@ -1,698 +1,216 @@
-@tool
 extends Control
-## Main Menu controller for the black-and-white dodge game prototype.
-## Displays the game title, difficulty mode toggle ("Easy", "Normal", "Hard"),
-## "Play" button, and "Quit" button with primitive 2D visuals.
 
-enum Difficulty {
-	EASY = 0,
-	NORMAL = 1,
-	HARD = 2,
-}
-
-const LEVEL_SCENE_PATH: String = "res://scenes/level.tscn"
-const DIFFICULTY_META_KEY: StringName = &"selected_difficulty"
 const DIFFICULTY_NAMES: Array[String] = ["Easy", "Normal", "Hard"]
-const AudioLibrary: GDScript = preload("res://scripts/audio_library.gd")
-const UiStyle: GDScript = preload("res://scripts/ui_style.gd")
-const CREDITS_SCENE_PATH: String = "res://scenes/credits.tscn"
 
-@onready var background: ColorRect = $Background
 @onready var decor_beam_a: Polygon2D = $DecorativeShapes/DecorBeamA
 @onready var decor_beam_b: Polygon2D = $DecorativeShapes/DecorBeamB
 @onready var decor_square: Polygon2D = $DecorativeShapes/DecorSquare
-@onready var title_label: Label = $CenterContainer/MenuBox/TitleLabel
-@onready var subtitle_label: Label = $CenterContainer/MenuBox/SubtitleLabel
+@onready var ambient_particles: CPUParticles2D = $AmbientParticles
+@onready var best_label: Label = $CenterContainer/MenuBox/BestLabel
+@onready var name_edit: LineEdit = $CenterContainer/MenuBox/NameEdit
 @onready var difficulty_button: Button = $CenterContainer/MenuBox/DifficultyButton
 @onready var play_button: Button = $CenterContainer/MenuBox/PlayButton
+@onready var records_button: Button = $CenterContainer/MenuBox/RecordsButton
+@onready var credits_button: Button = $CenterContainer/MenuBox/CreditsButton
 @onready var quit_button: Button = $CenterContainer/MenuBox/QuitButton
-@onready var sfx_player: AudioStreamPlayer = $SfxPlayer
+@onready var tracker_progress_box: VBoxContainer = $TrackerProgressBox
+@onready var tracker_status_label: Label = $TrackerProgressBox/TrackerStatusLabel
+@onready var tracker_bar_bg: ColorRect = $TrackerProgressBox/TrackerBarBg
+@onready var tracker_bar_fill: ColorRect = $TrackerProgressBox/TrackerBarBg/TrackerBarFill
+@onready var records_panel: ColorRect = $RecordsPanel
+@onready var records_player_label: Label = $RecordsPanel/RecordsCenter/RecordsBox/Content/RecordsPlayerLabel
+@onready var records_highest_label: Label = $RecordsPanel/RecordsCenter/RecordsBox/Content/RecordsHighestLabel
+@onready var records_easy_label: Label = $RecordsPanel/RecordsCenter/RecordsBox/Content/RecordsEasyLabel
+@onready var records_normal_label: Label = $RecordsPanel/RecordsCenter/RecordsBox/Content/RecordsNormalLabel
+@onready var records_hard_label: Label = $RecordsPanel/RecordsCenter/RecordsBox/Content/RecordsHardLabel
+@onready var records_close_button: Button = $RecordsPanel/RecordsCenter/RecordsBox/Content/RecordsCloseButton
 
-var selected_difficulty: int = Difficulty.NORMAL
-var sfx_play_count: int = 0
-var last_sfx_played: StringName = &""
+var selected_difficulty: int = GameManager.Difficulty.NORMAL
 var _anim_time: float = 0.0
 var _square_pos: Vector2 = Vector2(210.0, 160.0)
 var _square_vel: Vector2 = Vector2(135.0, 95.0)
-var name_edit: LineEdit = null
-var best_label: Label = null
-var credits_button: Button = null
-var records_button: Button = null
-var records_panel: ColorRect = null
-var records_player_label: Label = null
-var records_highest_label: Label = null
-var records_easy_label: Label = null
-var records_normal_label: Label = null
-var records_hard_label: Label = null
-var records_close_button: Button = null
-var _play_pulse_tween: Tween = null
-var tracker_progress_box: VBoxContainer = null
-var tracker_status_label: Label = null
-var tracker_bar_bg: ColorRect = null
-var tracker_bar_fill: ColorRect = null
-var hand_tracker: Node = null
-var _tracker_progress_value: float = 0.0
+var _tracker_progress_value: float = 0.08
 var _tracker_done_hold_timer: float = 0.0
 var _tracker_fade_alpha: float = 1.0
 
 
 func _ready() -> void:
-	background = get_node_or_null("Background") as ColorRect
-	decor_beam_a = get_node_or_null("DecorativeShapes/DecorBeamA") as Polygon2D
-	decor_beam_b = get_node_or_null("DecorativeShapes/DecorBeamB") as Polygon2D
-	decor_square = get_node_or_null("DecorativeShapes/DecorSquare") as Polygon2D
-	title_label = get_node_or_null("CenterContainer/MenuBox/TitleLabel") as Label
-	subtitle_label = get_node_or_null("CenterContainer/MenuBox/SubtitleLabel") as Label
-	difficulty_button = get_node_or_null("CenterContainer/MenuBox/DifficultyButton") as Button
-	play_button = get_node_or_null("CenterContainer/MenuBox/PlayButton") as Button
-	quit_button = get_node_or_null("CenterContainer/MenuBox/QuitButton") as Button
-	sfx_player = get_node_or_null("SfxPlayer") as AudioStreamPlayer
-	if sfx_player != null and (not is_inside_tree() or not Engine.is_editor_hint()):
-		sfx_player.stream = AudioLibrary.menu()
-
 	RenderingServer.set_default_clear_color(Color.BLACK)
-	_apply_monochrome_theme()
+	selected_difficulty = GameManager.selected_difficulty
 	_update_difficulty_button_text()
 
-	if difficulty_button != null:
-		if not difficulty_button.pressed.is_connected(_on_difficulty_pressed):
-			difficulty_button.pressed.connect(_on_difficulty_pressed)
+	name_edit.text = GameManager.get_player_name()
+	best_label.text = GameManager.get_best_summary()
 
-	if play_button != null:
-		if not play_button.pressed.is_connected(_on_play_pressed):
-			play_button.pressed.connect(_on_play_pressed)
-		if is_inside_tree() and not Engine.is_editor_hint():
-			play_button.grab_focus()
+	name_edit.text_submitted.connect(_on_name_submitted)
+	name_edit.focus_exited.connect(_commit_player_name)
+	difficulty_button.pressed.connect(_on_difficulty_pressed)
+	play_button.pressed.connect(_on_play_pressed)
+	records_button.pressed.connect(_on_records_pressed)
+	credits_button.pressed.connect(_on_credits_pressed)
+	quit_button.pressed.connect(_on_quit_pressed)
+	records_close_button.pressed.connect(_on_records_close_pressed)
 
-	if quit_button != null:
-		if not quit_button.pressed.is_connected(_on_quit_pressed):
-			quit_button.pressed.connect(_on_quit_pressed)
+	for btn: Button in [difficulty_button, records_button, credits_button, quit_button, records_close_button]:
+		UiStyle.add_hover_pop(btn)
+	play_button.mouse_entered.connect(func() -> void: SoundManager.play_ui_hover())
 
-	_build_extras()
-
-	if is_inside_tree() and not Engine.is_editor_hint():
-		call_deferred("_prewarm_audio")
+	_start_play_pulse()
+	_update_tracker_progress(0.0)
+	get_viewport().size_changed.connect(_on_resized)
+	_on_resized()
+	play_button.grab_focus()
 
 
 func _process(delta: float) -> void:
-	if Engine.is_editor_hint():
-		return
 	_anim_time += delta
-	if decor_square != null:
-		decor_square.rotation = _anim_time * 0.65
-		var view: Vector2 = get_viewport_rect().size if is_inside_tree() else Vector2(1152.0, 648.0)
-		var margin: float = 34.0
-		_square_pos += _square_vel * delta
-		if _square_pos.x < margin:
-			_square_pos.x = margin
-			_square_vel.x = absf(_square_vel.x)
-		elif _square_pos.x > view.x - margin:
-			_square_pos.x = view.x - margin
-			_square_vel.x = -absf(_square_vel.x)
-		if _square_pos.y < margin:
-			_square_pos.y = margin
-			_square_vel.y = absf(_square_vel.y)
-		elif _square_pos.y > view.y - margin:
-			_square_pos.y = view.y - margin
-			_square_vel.y = -absf(_square_vel.y)
-		decor_square.position = _square_pos
-		var sq_gray: float = 0.24 + 0.06 * sin(_anim_time * 2.4)
-		decor_square.color = Color(sq_gray, sq_gray, sq_gray, 0.65)
-	if decor_beam_a != null:
-		var pulse_a: float = 0.16 + 0.06 * sin(_anim_time * 2.0)
-		decor_beam_a.color = Color(pulse_a, pulse_a, pulse_a, 1.0)
-	if decor_beam_b != null:
-		var pulse_b: float = 0.12 + 0.05 * cos(_anim_time * 1.6)
-		decor_beam_b.color = Color(pulse_b, pulse_b, pulse_b, 1.0)
+	var view: Vector2 = get_viewport_rect().size
+	var margin: float = 34.0
+	_square_pos += _square_vel * delta
+	if _square_pos.x < margin or _square_pos.x > view.x - margin:
+		_square_pos.x = clampf(_square_pos.x, margin, view.x - margin)
+		_square_vel.x = -_square_vel.x
+	if _square_pos.y < margin or _square_pos.y > view.y - margin:
+		_square_pos.y = clampf(_square_pos.y, margin, view.y - margin)
+		_square_vel.y = -_square_vel.y
+
+	decor_square.position = _square_pos
+	decor_square.rotation = _anim_time * 0.65
+	var sq_gray: float = 0.24 + 0.06 * sin(_anim_time * 2.4)
+	decor_square.color = Color(sq_gray, sq_gray, sq_gray, 0.65)
+
+	var pulse_a: float = 0.16 + 0.06 * sin(_anim_time * 2.0)
+	decor_beam_a.color = Color(pulse_a, pulse_a, pulse_a, 1.0)
+	var pulse_b: float = 0.12 + 0.05 * cos(_anim_time * 1.6)
+	decor_beam_b.color = Color(pulse_b, pulse_b, pulse_b, 1.0)
+
 	_update_tracker_progress(delta)
 
 
-## Sets the active difficulty mode (0 = Easy, 1 = Normal, 2 = Hard) and updates the toggle button label.
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel") and records_panel.visible:
+		_on_records_close_pressed()
+
+
 func set_difficulty(mode: int) -> void:
 	selected_difficulty = posmod(mode, DIFFICULTY_NAMES.size())
-	if not Engine.is_editor_hint():
-		Engine.set_meta(DIFFICULTY_META_KEY, selected_difficulty)
+	GameManager.set_difficulty(selected_difficulty)
 	_update_difficulty_button_text()
 
 
-## Returns the human-readable name of the currently selected difficulty mode.
 func get_difficulty_name() -> String:
 	return DIFFICULTY_NAMES[posmod(selected_difficulty, DIFFICULTY_NAMES.size())]
 
 
+func _update_difficulty_button_text() -> void:
+	difficulty_button.text = "Difficulty: %s" % get_difficulty_name()
+
+
 func _on_difficulty_pressed() -> void:
-	_play_menu_sfx(false)
+	SoundManager.play_ui_click()
 	set_difficulty((selected_difficulty + 1) % DIFFICULTY_NAMES.size())
 
 
 func _on_play_pressed() -> void:
-	_play_menu_sfx(true)
+	SoundManager.play_ui_click()
 	_commit_player_name()
-	Engine.set_meta(DIFFICULTY_META_KEY, selected_difficulty)
-	var gm: Node = _get_game_manager()
-	if gm != null:
-		gm.call("set_state", 1)
-	if is_inside_tree():
-		get_tree().change_scene_to_file(LEVEL_SCENE_PATH)
+	GameManager.start_level(selected_difficulty)
 
 
 func _on_quit_pressed() -> void:
-	_play_menu_sfx(false)
-	if is_inside_tree() and get_tree() != null:
-		if get_tree().root != null:
-			var tracker: Node = get_tree().root.get_node_or_null("HandTrackingClient")
-			if tracker != null and tracker.has_method("stop_tracker_process"):
-				tracker.call("stop_tracker_process")
-		get_tree().quit()
+	SoundManager.play_ui_click()
+	HandTrackingClient.stop_tracker_process()
+	get_tree().quit()
 
 
-func _prewarm_audio() -> void:
-	# Pay the one-time procedural synthesis cost while the player is still in
-	# the menu instead of stalling the first level transition.
-	AudioLibrary.prewarm()
+func _on_credits_pressed() -> void:
+	SoundManager.play_ui_click()
+	_commit_player_name()
+	GameManager.go_to_credits()
 
 
-func _play_menu_sfx(persist_across_scene: bool = false) -> void:
-	if sfx_player == null:
-		sfx_player = get_node_or_null("SfxPlayer") as AudioStreamPlayer
-	var stream: AudioStreamWAV = AudioLibrary.menu()
-	sfx_play_count += 1
-	last_sfx_played = &"menu"
-	if sfx_player != null:
-		sfx_player.stream = stream
-	if is_inside_tree() and not Engine.is_editor_hint():
-		if persist_across_scene and get_tree() != null and get_tree().root != null:
-			var bridge: AudioStreamPlayer = get_tree().root.get_node_or_null("MenuSfxBridge") as AudioStreamPlayer
-			if bridge == null:
-				bridge = AudioStreamPlayer.new()
-				bridge.name = "MenuSfxBridge"
-				get_tree().root.add_child(bridge)
-			bridge.stream = stream
-			bridge.play()
-		elif sfx_player != null:
-			sfx_player.play()
+func _on_records_pressed() -> void:
+	SoundManager.play_ui_click()
+	_commit_player_name()
+	_refresh_records_display()
+	records_panel.visible = true
+	records_close_button.grab_focus()
 
 
-func _update_difficulty_button_text() -> void:
-	if difficulty_button != null:
-		difficulty_button.text = "Difficulty: %s" % get_difficulty_name()
-
-
-func _apply_monochrome_theme() -> void:
-	if title_label != null:
-		title_label.add_theme_font_size_override("font_size", 42)
-		title_label.add_theme_color_override("font_color", Color.WHITE)
-
-	if subtitle_label != null:
-		subtitle_label.add_theme_font_size_override("font_size", 16)
-		subtitle_label.add_theme_color_override("font_color", Color(0.68, 0.68, 0.68, 1.0))
-
-	var buttons: Array[Button] = [difficulty_button, play_button, quit_button]
-	for btn: Button in buttons:
-		if btn == null:
-			continue
-		var normal_style: StyleBoxFlat = StyleBoxFlat.new()
-		normal_style.bg_color = Color(0.1, 0.1, 0.1, 1.0)
-		normal_style.border_color = Color.WHITE
-		normal_style.set_border_width_all(2)
-		normal_style.set_content_margin_all(12)
-
-		var hover_style: StyleBoxFlat = StyleBoxFlat.new()
-		hover_style.bg_color = Color.WHITE
-		hover_style.border_color = Color.WHITE
-		hover_style.set_border_width_all(2)
-		hover_style.set_content_margin_all(12)
-
-		var pressed_style: StyleBoxFlat = StyleBoxFlat.new()
-		pressed_style.bg_color = Color(0.7, 0.7, 0.7, 1.0)
-		pressed_style.border_color = Color.WHITE
-		pressed_style.set_border_width_all(2)
-		pressed_style.set_content_margin_all(12)
-
-		btn.add_theme_stylebox_override("normal", normal_style)
-		btn.add_theme_stylebox_override("hover", hover_style)
-		btn.add_theme_stylebox_override("focus", normal_style)
-		btn.add_theme_stylebox_override("pressed", pressed_style)
-		btn.add_theme_font_size_override("font_size", 20)
-		btn.add_theme_color_override("font_color", Color.WHITE)
-		btn.add_theme_color_override("font_focus_color", Color.WHITE)
-		btn.add_theme_color_override("font_hover_color", Color.BLACK)
-		btn.add_theme_color_override("font_pressed_color", Color.BLACK)
-
-
-## Adds the persistent-profile UI (name field + best run), the Credits button,
-## the pulsing Play animation, ambient particles and responsive scaling.
-## Idempotent: calling _ready() twice (tests) never duplicates nodes.
-func _build_extras() -> void:
-	var box: VBoxContainer = get_node_or_null("CenterContainer/MenuBox") as VBoxContainer
-	if box == null or box.has_node("NameEdit"):
-		return
-
-	best_label = Label.new()
-	best_label.name = "BestLabel"
-	best_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	best_label.add_theme_font_size_override("font_size", 15)
-	best_label.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85, 1.0))
-	box.add_child(best_label)
-	box.move_child(best_label, subtitle_label.get_index() + 1 if subtitle_label != null else 1)
-
-	name_edit = LineEdit.new()
-	name_edit.name = "NameEdit"
-	name_edit.placeholder_text = "Enter your name"
-	name_edit.max_length = 12
-	name_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_edit.custom_minimum_size = Vector2(240, 46)
-	name_edit.add_theme_font_size_override("font_size", 18)
-	var edit_style: StyleBoxFlat = UiStyle._box(Color(0.04, 0.04, 0.04, 1.0), Color(0.6, 0.6, 0.6, 1.0), 8)
-	var edit_focus: StyleBoxFlat = UiStyle._box(Color(0.08, 0.08, 0.08, 1.0), Color.WHITE, 8)
-	edit_focus.shadow_color = Color(1.0, 1.0, 1.0, 0.25)
-	edit_focus.shadow_size = 10
-	name_edit.add_theme_stylebox_override("normal", edit_style)
-	name_edit.add_theme_stylebox_override("focus", edit_focus)
-	name_edit.add_theme_color_override("font_color", Color.WHITE)
-	name_edit.add_theme_color_override("caret_color", Color.WHITE)
-	name_edit.add_theme_color_override("font_placeholder_color", Color(0.45, 0.45, 0.45, 1.0))
-	var gm: Node = _get_game_manager()
-	if gm != null:
-		name_edit.text = str(gm.call("get_player_name"))
-	box.add_child(name_edit)
-	box.move_child(name_edit, difficulty_button.get_index() if difficulty_button != null else 3)
-	name_edit.text_submitted.connect(_on_name_submitted)
-	name_edit.focus_exited.connect(_commit_player_name)
-
-	records_button = Button.new()
-	records_button.name = "RecordsButton"
-	records_button.text = "Records"
-	records_button.custom_minimum_size = Vector2(240, 50)
-	box.add_child(records_button)
-	box.move_child(records_button, quit_button.get_index() if quit_button != null else -1)
-	records_button.pressed.connect(_on_records_pressed)
-
-	credits_button = Button.new()
-	credits_button.name = "CreditsButton"
-	credits_button.text = "Credits"
-	credits_button.custom_minimum_size = Vector2(240, 50)
-	box.add_child(credits_button)
-	box.move_child(credits_button, quit_button.get_index() if quit_button != null else -1)
-	credits_button.pressed.connect(_on_credits_pressed)
-
-	for btn: Button in [difficulty_button, play_button, credits_button, records_button, quit_button]:
-		if btn == null:
-			continue
-		UiStyle.style_button(btn, 18, 8)
-		btn.mouse_entered.connect(_play_hover_sfx)
-		if btn != play_button:
-			UiStyle.add_hover_pop(btn)
-	if play_button != null:
-		# Keep the pulsing "normal" look while focused so the animation stays visible.
-		play_button.add_theme_stylebox_override("focus", play_button.get_theme_stylebox("normal"))
-		play_button.add_theme_color_override("font_focus_color", Color.WHITE)
-
-	_refresh_best_label()
-	_build_records_panel()
-	_build_ambient_particles()
-	_build_tracker_progress()
-	_start_play_pulse()
-
-	if is_inside_tree():
-		var vp: Viewport = get_viewport()
-		if vp != null and not vp.size_changed.is_connected(_on_resized):
-			vp.size_changed.connect(_on_resized)
-		_on_resized()
-
-
-func _refresh_best_label() -> void:
-	if best_label == null:
-		return
-	var gm: Node = _get_game_manager()
-	best_label.text = str(gm.call("get_best_summary")) if gm != null else "No runs yet"
-
-
-func _get_game_manager() -> Node:
-	if not is_inside_tree():
-		return null
-	return get_node_or_null("/root/GameManager")
-
-
-func _play_hover_sfx() -> void:
-	if not is_inside_tree() or Engine.is_editor_hint():
-		return
-	var sm: Node = get_node_or_null("/root/SoundManager")
-	if sm != null:
-		sm.call("play_ui_hover")
+func _on_records_close_pressed() -> void:
+	SoundManager.play_ui_click()
+	records_panel.visible = false
+	records_button.grab_focus()
 
 
 func _on_name_submitted(_text: String) -> void:
 	_commit_player_name()
-	if name_edit != null:
-		name_edit.release_focus()
-	if play_button != null and is_inside_tree():
-		play_button.grab_focus()
+	name_edit.release_focus()
+	play_button.grab_focus()
 
 
 func _commit_player_name() -> void:
-	var gm: Node = _get_game_manager()
-	if gm == null or name_edit == null:
-		return
-	gm.call("set_player_name", name_edit.text)
-	name_edit.text = str(gm.call("get_player_name"))
-
-
-func _on_credits_pressed() -> void:
-	_play_menu_sfx(true)
-	_commit_player_name()
-	if is_inside_tree():
-		var gm: Node = _get_game_manager()
-		if gm != null:
-			gm.call("go_to_credits")
-		else:
-			get_tree().change_scene_to_file(CREDITS_SCENE_PATH)
-
-
-func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("ui_cancel"):
-		if records_panel != null and records_panel.visible:
-			_on_records_close_pressed()
-
-
-func _on_records_pressed() -> void:
-	_play_menu_sfx(false)
-	_commit_player_name()
-	_refresh_records_display()
-	if records_panel != null:
-		records_panel.visible = true
-	if records_close_button != null and is_inside_tree() and not Engine.is_editor_hint():
-		records_close_button.grab_focus()
-
-
-func _on_records_close_pressed() -> void:
-	_play_menu_sfx(false)
-	if records_panel != null:
-		records_panel.visible = false
-	if records_button != null and is_inside_tree() and not Engine.is_editor_hint():
-		records_button.grab_focus()
-
-
-func _build_records_panel() -> void:
-	if has_node("RecordsPanel"):
-		return
-	records_panel = ColorRect.new()
-	records_panel.name = "RecordsPanel"
-	records_panel.color = Color(0.0, 0.0, 0.0, 0.92)
-	records_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	records_panel.visible = false
-	records_panel.z_index = 10
-	add_child(records_panel)
-
-	var center: CenterContainer = CenterContainer.new()
-	center.name = "RecordsCenter"
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	records_panel.add_child(center)
-
-	var panel_box: PanelContainer = PanelContainer.new()
-	panel_box.name = "RecordsBox"
-	panel_box.custom_minimum_size = Vector2(380, 320)
-	var box_style: StyleBoxFlat = UiStyle._box(Color(0.06, 0.06, 0.06, 1.0), Color.WHITE, 20)
-	panel_box.add_theme_stylebox_override("panel", box_style)
-	center.add_child(panel_box)
-
-	var content: VBoxContainer = VBoxContainer.new()
-	content.add_theme_constant_override("separation", 12)
-	panel_box.add_child(content)
-
-	var title: Label = Label.new()
-	title.text = "RECORD HISTORY"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 26)
-	title.add_theme_color_override("font_color", Color.WHITE)
-	content.add_child(title)
-
-	records_player_label = Label.new()
-	records_player_label.name = "RecordsPlayerLabel"
-	records_player_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	records_player_label.add_theme_font_size_override("font_size", 16)
-	records_player_label.add_theme_color_override("font_color", Color(0.82, 0.82, 0.82, 1.0))
-	content.add_child(records_player_label)
-
-	records_highest_label = Label.new()
-	records_highest_label.name = "RecordsHighestLabel"
-	records_highest_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	records_highest_label.add_theme_font_size_override("font_size", 15)
-	records_highest_label.add_theme_color_override("font_color", Color.WHITE)
-	content.add_child(records_highest_label)
-
-	var sep: HSeparator = HSeparator.new()
-	var sep_style: StyleBoxLine = StyleBoxLine.new()
-	sep_style.color = Color(0.35, 0.35, 0.35, 1.0)
-	sep_style.thickness = 1
-	sep.add_theme_stylebox_override("separator", sep_style)
-	content.add_child(sep)
-
-	records_easy_label = Label.new()
-	records_easy_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	records_easy_label.add_theme_font_size_override("font_size", 15)
-	records_easy_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9, 1.0))
-	content.add_child(records_easy_label)
-
-	records_normal_label = Label.new()
-	records_normal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	records_normal_label.add_theme_font_size_override("font_size", 15)
-	records_normal_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9, 1.0))
-	content.add_child(records_normal_label)
-
-	records_hard_label = Label.new()
-	records_hard_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	records_hard_label.add_theme_font_size_override("font_size", 15)
-	records_hard_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9, 1.0))
-	content.add_child(records_hard_label)
-
-	var sep2: HSeparator = HSeparator.new()
-	sep2.add_theme_stylebox_override("separator", sep_style)
-	content.add_child(sep2)
-
-	records_close_button = Button.new()
-	records_close_button.name = "RecordsCloseButton"
-	records_close_button.text = "Back to Menu"
-	records_close_button.custom_minimum_size = Vector2(200, 44)
-	UiStyle.style_button(records_close_button, 18, 10)
-	UiStyle.add_hover_pop(records_close_button)
-	records_close_button.pressed.connect(_on_records_close_pressed)
-	records_close_button.mouse_entered.connect(_play_hover_sfx)
-	content.add_child(records_close_button)
+	GameManager.set_player_name(name_edit.text)
+	name_edit.text = GameManager.get_player_name()
 
 
 func _refresh_records_display() -> void:
-	var gm: Node = _get_game_manager()
-	var player_name_str: String = str(gm.call("get_player_name")) if gm != null else "PLAYER"
-	if records_player_label != null:
-		records_player_label.text = "PLAYER: %s" % player_name_str.to_upper()
-	if records_highest_label != null:
-		records_highest_label.text = str(gm.call("get_best_summary")) if gm != null else "No runs recorded"
-
-	var data: Resource = gm.get("save_data") as Resource if gm != null else null
-	var format_diff: Callable = func(diff_idx: int, diff_name: String) -> String:
-		if data == null:
-			return "%s:  No runs recorded" % diff_name
-		var rec: Dictionary = data.call("get_record", diff_idx) as Dictionary
-		if rec.is_empty():
-			return "%s:  No runs recorded" % diff_name
-		var is_comp: bool = bool(rec.get("completed", false))
-		var time_val: float = float(rec.get("time", 0.0))
-		if is_comp:
-			return "%s:  COMPLETED (45.0s) ★" % diff_name
-		return "%s:  Survived %.1fs" % [diff_name, time_val]
-
-	if records_easy_label != null:
-		records_easy_label.text = format_diff.call(0, "EASY  ")
-	if records_normal_label != null:
-		records_normal_label.text = format_diff.call(1, "NORMAL")
-	if records_hard_label != null:
-		records_hard_label.text = format_diff.call(2, "HARD  ")
+	records_player_label.text = "PLAYER: %s" % GameManager.get_player_name().to_upper()
+	records_highest_label.text = GameManager.get_best_summary()
+	records_easy_label.text = _format_record_line(0, "EASY  ")
+	records_normal_label.text = _format_record_line(1, "NORMAL")
+	records_hard_label.text = _format_record_line(2, "HARD  ")
 
 
-## Looping pulse on the Play button: scale breathing plus glowing border/shadow.
+func _format_record_line(diff_idx: int, diff_name: String) -> String:
+	if GameManager.save_data == null:
+		return "%s:  No runs recorded" % diff_name
+	var rec: Dictionary = GameManager.save_data.get_record(diff_idx)
+	if rec.is_empty():
+		return "%s:  No runs recorded" % diff_name
+	if bool(rec.get("completed", false)):
+		return "%s:  COMPLETED (45.0s) ★" % diff_name
+	return "%s:  Survived %.1fs" % [diff_name, float(rec.get("time", 0.0))]
+
+
 func _start_play_pulse() -> void:
-	if play_button == null or not is_inside_tree() or Engine.is_editor_hint():
-		return
-	if _play_pulse_tween != null:
-		_play_pulse_tween.kill()
 	play_button.pivot_offset = play_button.size * 0.5
-	if not play_button.resized.is_connected(_center_play_pivot):
-		play_button.resized.connect(_center_play_pivot)
+	play_button.resized.connect(func() -> void: play_button.pivot_offset = play_button.size * 0.5)
 	var normal_box: StyleBoxFlat = play_button.get_theme_stylebox("normal") as StyleBoxFlat
-	_play_pulse_tween = create_tween().set_loops()
-	_play_pulse_tween.set_parallel(true)
-	_play_pulse_tween.tween_property(play_button, "scale", Vector2.ONE * 1.06, 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	var tw: Tween = create_tween().set_loops()
+	tw.set_parallel(true)
+	tw.tween_property(play_button, "scale", Vector2.ONE * 1.06, 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	if normal_box != null:
-		normal_box.shadow_color = Color(1.0, 1.0, 1.0, 0.0)
-		_play_pulse_tween.tween_property(normal_box, "shadow_size", 18, 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-		_play_pulse_tween.tween_property(normal_box, "shadow_color:a", 0.5, 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_play_pulse_tween.chain().tween_property(play_button, "scale", Vector2.ONE, 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tw.tween_property(normal_box, "shadow_size", 18, 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tw.tween_property(normal_box, "shadow_color:a", 0.5, 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tw.chain().tween_property(play_button, "scale", Vector2.ONE, 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	if normal_box != null:
-		_play_pulse_tween.parallel().tween_property(normal_box, "shadow_size", 0, 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-		_play_pulse_tween.parallel().tween_property(normal_box, "shadow_color:a", 0.0, 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tw.parallel().tween_property(normal_box, "shadow_size", 0, 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tw.parallel().tween_property(normal_box, "shadow_color:a", 0.0, 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 
-func _center_play_pivot() -> void:
-	if play_button != null:
-		play_button.pivot_offset = play_button.size * 0.5
-
-
-func _build_ambient_particles() -> void:
-	if has_node("AmbientParticles"):
-		return
-	var p: CPUParticles2D = CPUParticles2D.new()
-	p.name = "AmbientParticles"
-	p.amount = 36
-	p.lifetime = 8.0
-	p.preprocess = 8.0
-	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
-	p.emission_rect_extents = Vector2(576, 4)
-	p.direction = Vector2.UP
-	p.spread = 15.0
-	p.gravity = Vector2.ZERO
-	p.initial_velocity_min = 14.0
-	p.initial_velocity_max = 40.0
-	p.scale_amount_min = 1.5
-	p.scale_amount_max = 3.5
-	p.color = Color(1.0, 1.0, 1.0, 0.3)
-	p.position = Vector2(576, 660)
-	add_child(p)
-	move_child(p, 2)
-
-
-## Scales fonts, minimum sizes and decor to the current window for a responsive layout.
 func _on_resized() -> void:
-	if not is_inside_tree():
-		return
 	var view: Vector2 = get_viewport_rect().size
-	var s: float = clampf(minf(view.x / 1152.0, view.y / 648.0), 0.6, 2.0)
-	var center_container: Control = get_node_or_null("CenterContainer") as Control
-	if center_container != null:
-		center_container.offset_top = 0.0
-	var menu_box: VBoxContainer = get_node_or_null("CenterContainer/MenuBox") as VBoxContainer
-	if menu_box != null:
-		menu_box.add_theme_constant_override("separation", int(12.0 * s))
-	if title_label != null:
-		title_label.add_theme_font_size_override("font_size", int(40.0 * s))
-	if subtitle_label != null:
-		subtitle_label.add_theme_font_size_override("font_size", int(16.0 * s))
-	if best_label != null:
-		best_label.add_theme_font_size_override("font_size", int(15.0 * s))
-	for btn: Button in [difficulty_button, play_button, credits_button, records_button, quit_button]:
-		if btn != null:
-			btn.custom_minimum_size = Vector2(240.0, 46.0) * s
-			btn.add_theme_font_size_override("font_size", int(19.0 * s))
-	if name_edit != null:
-		name_edit.custom_minimum_size = Vector2(240.0, 42.0) * s
-		name_edit.add_theme_font_size_override("font_size", int(18.0 * s))
-	if decor_beam_a != null:
-		decor_beam_a.position = Vector2(view.x * 0.5, view.y * 0.28)
-	if decor_beam_b != null:
-		decor_beam_b.position = Vector2(view.x * 0.5, view.y * 0.77)
-	if decor_square != null:
-		_square_pos.x = clampf(_square_pos.x, 34.0, maxf(34.0, view.x - 34.0))
-		_square_pos.y = clampf(_square_pos.y, 34.0, maxf(34.0, view.y - 34.0))
-		decor_square.position = _square_pos
-		decor_square.scale = Vector2.ONE * s
-	var particles: Node = get_node_or_null("AmbientParticles")
-	if particles is CPUParticles2D:
-		(particles as CPUParticles2D).position = Vector2(view.x * 0.5, view.y + 12.0)
-		(particles as CPUParticles2D).emission_rect_extents = Vector2(view.x * 0.5, 4.0)
-	if tracker_progress_box != null:
-		var bar_w: float = clampf(260.0 * s, 180.0, 380.0)
-		var bar_h: float = maxf(6.0, round(6.0 * s))
-		tracker_progress_box.size = Vector2(bar_w, 30.0 * s)
-		tracker_progress_box.position = Vector2((view.x - bar_w) * 0.5, view.y - 42.0 * s)
-		if tracker_status_label != null:
-			tracker_status_label.add_theme_font_size_override("font_size", int(maxf(11.0, 12.0 * s)))
-		if tracker_bar_bg != null:
-			tracker_bar_bg.custom_minimum_size = Vector2(bar_w, bar_h)
-			tracker_bar_bg.size = Vector2(bar_w, bar_h)
-		if tracker_bar_fill != null and tracker_bar_bg != null:
-			tracker_bar_fill.size = Vector2(tracker_bar_bg.size.x * _tracker_progress_value, bar_h)
-
-
-func set_hand_tracker(tracker: Node) -> void:
-	hand_tracker = tracker
-	_update_tracker_progress(0.0)
-
-
-func _get_hand_tracker() -> Node:
-	if hand_tracker != null and is_instance_valid(hand_tracker):
-		return hand_tracker
-	if is_inside_tree():
-		return get_node_or_null("/root/HandTrackingClient")
-	return null
-
-
-func _build_tracker_progress() -> void:
-	if has_node("TrackerProgressBox"):
-		return
-	tracker_progress_box = VBoxContainer.new()
-	tracker_progress_box.name = "TrackerProgressBox"
-	tracker_progress_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tracker_progress_box.add_theme_constant_override("separation", 4)
-	tracker_progress_box.position = Vector2((1152.0 - 260.0) * 0.5, 648.0 - 42.0)
-	tracker_progress_box.size = Vector2(260.0, 30.0)
-	add_child(tracker_progress_box)
-
-	tracker_status_label = Label.new()
-	tracker_status_label.name = "TrackerStatusLabel"
-	tracker_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	tracker_status_label.text = "HAND TRACKER: STARTING..."
-	tracker_status_label.add_theme_font_size_override("font_size", 12)
-	tracker_status_label.add_theme_color_override("font_color", Color(0.75, 0.75, 0.75, 1.0))
-	tracker_progress_box.add_child(tracker_status_label)
-
-	tracker_bar_bg = ColorRect.new()
-	tracker_bar_bg.name = "TrackerBarBg"
-	tracker_bar_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tracker_bar_bg.custom_minimum_size = Vector2(260.0, 6.0)
-	tracker_bar_bg.size = Vector2(260.0, 6.0)
-	tracker_bar_bg.color = Color(0.18, 0.18, 0.18, 0.9)
-	tracker_progress_box.add_child(tracker_bar_bg)
-
-	tracker_bar_fill = ColorRect.new()
-	tracker_bar_fill.name = "TrackerBarFill"
-	tracker_bar_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tracker_bar_fill.position = Vector2.ZERO
-	tracker_bar_fill.size = Vector2(260.0 * 0.08, 6.0)
-	tracker_bar_fill.color = Color(0.92, 0.92, 0.92, 1.0)
-	tracker_bar_bg.add_child(tracker_bar_fill)
-
-	_tracker_progress_value = 0.08
-	_update_tracker_progress(0.0)
+	decor_beam_a.position = Vector2(view.x * 0.5, view.y * 0.28)
+	decor_beam_b.position = Vector2(view.x * 0.5, view.y * 0.77)
+	ambient_particles.position = Vector2(view.x * 0.5, view.y + 12.0)
+	ambient_particles.emission_rect_extents = Vector2(view.x * 0.5, 4.0)
 
 
 func _update_tracker_progress(delta: float) -> void:
-	if tracker_progress_box == null:
-		return
-	var tracker: Node = _get_hand_tracker()
-	var target_progress: float = 0.08
-	var label_str: String = "HAND TRACKER: STARTING..."
-	var is_done: bool = false
-	var is_failed: bool = false
+	var info: Dictionary = HandTrackingClient.get_startup_progress_info()
+	var target_progress: float = clampf(float(info.get("progress", 0.08)), 0.0, 1.0)
+	var label_str: String = str(info.get("text", "HAND TRACKER: STARTING..."))
+	var is_done: bool = bool(info.get("done", false))
+	var is_failed: bool = bool(info.get("failed", false))
 
-	if tracker != null and tracker.has_method("get_startup_progress_info"):
-		var info: Dictionary = tracker.call("get_startup_progress_info") as Dictionary
-		target_progress = clampf(float(info.get("progress", 0.08)), 0.0, 1.0)
-		label_str = str(info.get("text", label_str))
-		is_done = bool(info.get("done", false))
-		is_failed = bool(info.get("failed", false))
-
-	if delta > 0.0:
-		_tracker_progress_value = move_toward(_tracker_progress_value, target_progress, delta * 1.8)
-	else:
-		_tracker_progress_value = target_progress
-
-	if tracker_status_label != null and tracker_status_label.text != label_str:
+	_tracker_progress_value = move_toward(_tracker_progress_value, target_progress, delta * 1.8) if delta > 0.0 else target_progress
+	if tracker_status_label.text != label_str:
 		tracker_status_label.text = label_str
 
 	var fill_gray: float = 0.45 if is_failed else (1.0 if is_done else 0.88)
-	if tracker_bar_fill != null and tracker_bar_bg != null:
-		tracker_bar_fill.size = Vector2(tracker_bar_bg.size.x * _tracker_progress_value, tracker_bar_bg.size.y)
-		tracker_bar_fill.color = Color(fill_gray, fill_gray, fill_gray, 1.0)
+	tracker_bar_fill.size = Vector2(tracker_bar_bg.size.x * _tracker_progress_value, tracker_bar_bg.size.y)
+	tracker_bar_fill.color = Color(fill_gray, fill_gray, fill_gray, 1.0)
 
 	if is_done:
 		_tracker_done_hold_timer += maxf(0.0, delta)

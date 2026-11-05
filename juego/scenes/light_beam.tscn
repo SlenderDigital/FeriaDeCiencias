@@ -1,11 +1,13 @@
-[gd_scene format=3 uid="uid://cw6o816sh20ud"]
+[gd_scene load_steps=3 format=3 uid="uid://cw6o816sh20ud"]
 
 [ext_resource type="Script" uid="uid://ccer12ib8eowg" path="res://scripts/light_beam.gd" id="1_mb8gv"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_mb8gv"]
 size = Vector2(3200, 44)
 
-[node name="LightBeam" type="Area2D" unique_id=252016137]
+[node name="LightBeam" type="Area2D" unique_id=252016137 groups=["hazards", "light_beams"]]
+collision_layer = 2
+collision_mask = 1
 script = ExtResource("1_mb8gv")
 
 [node name="BeamVisual" type="Polygon2D" parent="." unique_id=1750078193]
@@ -19,5 +21,3 @@ polygon = PackedVector2Array(-1600, -1.5, 1600, -1.5, 1600, 1.5, -1600, 1.5)
 [node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=219723349]
 shape = SubResource("RectangleShape2D_mb8gv")
 disabled = true
-
-[node name="SfxPlayer" type="AudioStreamPlayer" parent="." unique_id=624917109]

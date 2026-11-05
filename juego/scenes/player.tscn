@@ -1,6 +1,21 @@
-[gd_scene load_steps=3 format=3 uid="uid://1yybbpoa4773"]
+[gd_scene load_steps=6 format=3 uid="uid://1yybbpoa4773"]
 
 [ext_resource type="Script" uid="uid://bvaah8yax45hl" path="res://scripts/player.gd" id="1_3vyb7"]
+
+[sub_resource type="CanvasItemMaterial" id="CanvasItemMaterial_glow"]
+blend_mode = 1
+
+[sub_resource type="Gradient" id="Gradient_light"]
+offsets = PackedFloat32Array(0, 0.35, 0.72, 1)
+colors = PackedColorArray(1, 1, 1, 1, 0.65, 0.65, 0.65, 0.75, 0.22, 0.22, 0.22, 0.25, 0, 0, 0, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_light"]
+gradient = SubResource("Gradient_light")
+width = 128
+height = 128
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(0.5, 0)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_g2els"]
 size = Vector2(24, 24)
@@ -11,19 +26,24 @@ collision_mask = 4
 script = ExtResource("1_3vyb7")
 
 [node name="PlayerGlow" type="Polygon2D" parent="." unique_id=410959642]
+material = SubResource("CanvasItemMaterial_glow")
 color = Color(1, 1, 1, 0.42)
+polygon = PackedVector2Array(32, 0, 22.627, 22.627, 0, 32, -22.627, 22.627, -32, 0, -22.627, -22.627, 0, -32, 22.627, -22.627)
 
 [node name="PlayerLight" type="PointLight2D" parent="." unique_id=410959643]
 color = Color(1, 1, 1, 1)
 energy = 0.85
+texture = SubResource("GradientTexture2D_light")
 texture_scale = 1.6
 
 [node name="ShieldGlow" type="Polygon2D" parent="." unique_id=410959644]
 visible = false
 color = Color(0.72, 0.72, 0.72, 0)
+polygon = PackedVector2Array(20, 0, 14.142, 14.142, 0, 20, -14.142, 14.142, -20, 0, -14.142, -14.142, 0, -20, 14.142, -14.142)
 
 [node name="ShieldRing" type="Line2D" parent="." unique_id=410959645]
 visible = false
+points = PackedVector2Array(20, 0, 14.142, 14.142, 0, 20, -14.142, 14.142, -20, 0, -14.142, -14.142, 0, -20, 14.142, -14.142)
 closed = true
 width = 3.0
 default_color = Color(1, 1, 1, 0.8)
@@ -39,8 +59,3 @@ polygon = PackedVector2Array(-14, -14, 14, -14, 14, 14, -14, 14)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=2145923434]
 shape = SubResource("RectangleShape2D_g2els")
-
-[node name="SfxPlayer" type="AudioStreamPlayer" parent="." unique_id=1670115557]
-
-[node name="ShieldSfxPlayer" type="AudioStreamPlayer" parent="." unique_id=1670115558]
-volume_db = -3.0
