@@ -34,7 +34,6 @@ var shield_block_flash: float = 0.0
 var hit_invincibility_timer: float = 0.0
 var hit_flash_timer: float = 0.0
 var shield_activation_flash: float = 0.0
-var _light_pulse_time: float = 0.0
 var _shield_require_release: bool = false
 
 var target_position: Vector2 = Vector2.ZERO
@@ -50,6 +49,9 @@ var external_tracking_active: bool = false
 
 
 func _ready() -> void:
+	Shapes.apply_radial_glow(player_glow)
+	shield_glow.polygon = Shapes.circle(22.0, 32)
+	shield_ring.points = Shapes.circle(22.0, 32)
 	target_position = global_position
 	_shield_require_release = Input.is_action_pressed("shield")
 	_update_visuals(0.0)
@@ -248,26 +250,23 @@ func _constrain_to_viewport() -> void:
 	global_position.y = clampf(global_position.y, PLAYER_HALF_SIZE, view.y - PLAYER_HALF_SIZE)
 
 
-func _update_visuals(delta: float) -> void:
-	_light_pulse_time += maxf(delta, 0.0)
+func _update_visuals(_delta: float) -> void:
 	outer_polygon.scale = Vector2.ONE * (1.0 + hit_flash_timer * 0.16)
 	var blink_on: bool = hit_invincibility_timer > 0.0 and not is_shielding and (int(hit_invincibility_timer * 16.0) % 2 == 0)
 	outer_polygon.color = Color(0.35, 0.35, 0.35, 1.0) if blink_on else Color.WHITE
 
-	var pulse_wave: float = 0.5 + 0.5 * sin(_light_pulse_time * 3.4)
-	var speed_ratio: float = clampf(velocity.length() / MOVE_SPEED, 0.0, 1.0)
 	var shield_boost: float = 0.28 if is_shielding else 0.0
 	var flash_boost: float = 0.35 * shield_block_flash + 0.25 * shield_activation_flash + 0.22 * hit_flash_timer
 	var dim_factor: float = 0.55 if blink_on else 1.0
 
 	player_glow.visible = is_active
-	var glow_alpha: float = clampf((0.36 + 0.06 * pulse_wave + 0.08 * speed_ratio + shield_boost * 0.5 + flash_boost) * dim_factor, 0.0, 0.92)
+	var glow_alpha: float = clampf((0.42 + shield_boost * 0.5 + flash_boost) * dim_factor, 0.0, 0.92)
 	player_glow.color = Color(1.0, 1.0, 1.0, glow_alpha)
-	player_glow.scale = Vector2.ONE * (1.0 + 0.05 * pulse_wave + 0.08 * speed_ratio + (0.22 if is_shielding else 0.0) + 0.25 * shield_block_flash + 0.16 * shield_activation_flash + 0.12 * hit_flash_timer)
+	player_glow.scale = Vector2.ONE * (1.0 + (0.22 if is_shielding else 0.0) + 0.25 * shield_block_flash + 0.16 * shield_activation_flash + 0.12 * hit_flash_timer)
 
 	player_light.enabled = is_active
-	player_light.energy = (0.75 + 0.12 * pulse_wave + 0.15 * speed_ratio + shield_boost + flash_boost * 1.4) * dim_factor
-	player_light.texture_scale = 1.55 + 0.08 * pulse_wave + (0.30 if is_shielding else 0.0) + 0.35 * shield_block_flash + 0.20 * shield_activation_flash
+	player_light.energy = (0.85 + shield_boost + flash_boost * 1.4) * dim_factor
+	player_light.texture_scale = 2.5 + (0.35 if is_shielding else 0.0) + 0.40 * shield_block_flash + 0.25 * shield_activation_flash
 
 	shield_glow.visible = is_shielding or shield_block_flash > 0.0 or shield_activation_flash > 0.0
 	if shield_glow.visible:
@@ -278,7 +277,6 @@ func _update_visuals(delta: float) -> void:
 
 	shield_ring.visible = is_shielding or shield_block_flash > 0.0 or shield_activation_flash > 0.0
 	if shield_ring.visible:
-		shield_ring.rotation += delta * (2.4 if is_shielding else 0.8)
 		var ring_scale: float = 1.0 + 0.08 * shield_activation_flash - 0.05 * (1.0 - get_shield_energy_ratio()) + 0.10 * shield_block_flash
 		shield_ring.scale = Vector2.ONE * ring_scale
 		var ring_gray: float = 0.72 + 0.28 * get_shield_energy_ratio()

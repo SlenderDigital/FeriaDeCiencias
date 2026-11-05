@@ -831,6 +831,35 @@ func test_beam_exact_hitbox_and_shield_latch_guard() -> void:
 	assert_false(player.is_shielding, "Window focus loss must immediately release active shield")
 
 
+func test_player_radial_glow_and_light_mask_isolation() -> void:
+	var level: Node2D = _spawn(LEVEL_SCENE) as Node2D
+	var player: CharacterBody2D = level.get_node("Player") as CharacterBody2D
+	var glow: Polygon2D = player.get_node("PlayerGlow") as Polygon2D
+	var light: PointLight2D = player.get_node("PlayerLight") as PointLight2D
+	var shield_glow: Polygon2D = player.get_node("ShieldGlow") as Polygon2D
+	var shield_ring: Line2D = player.get_node("ShieldRing") as Line2D
+	var outer_poly: Polygon2D = player.get_node("OuterPolygon") as Polygon2D
+	var arena_grid: Node2D = level.get_node("ArenaGrid") as Node2D
+
+	assert_gt(glow.polygon.size(), 200, "PlayerGlow must use multi-ring radial gradient vertices")
+	assert_eq(glow.vertex_colors.size(), glow.polygon.size(), "PlayerGlow must assign per-vertex alpha falloff colors")
+	assert_gt(glow.polygons.size(), 200, "PlayerGlow must build sub-polygons across concentric rings")
+	assert_eq(shield_glow.polygon.size(), 32, "ShieldGlow must be a smooth 32-segment circle")
+	assert_eq(shield_ring.points.size(), 32, "ShieldRing must be a smooth 32-segment circle")
+
+	assert_eq(glow.light_mask, 0, "PlayerGlow must ignore PointLight2D self-illumination")
+	assert_eq(outer_poly.light_mask, 0, "OuterPolygon must ignore PointLight2D self-illumination")
+	assert_eq(light.range_item_cull_mask, 2, "PlayerLight must only illuminate light_mask layer 2")
+	assert_eq(arena_grid.light_mask, 2, "ArenaGrid must be on light_mask layer 2 to receive PlayerLight")
+
+	var idle_scale: Vector2 = glow.scale
+	var idle_alpha: float = glow.color.a
+	player.velocity = Vector2(420.0, 0.0)
+	player._update_visuals(0.25)
+	assert_eq(glow.scale, idle_scale, "Steady PlayerGlow must not scale with idle time or movement speed")
+	assert_eq(glow.color.a, idle_alpha, "Steady PlayerGlow alpha must not fluctuate with idle time or movement speed")
+
+
 func _build_hand_landmarks(palm_target: Vector2, closed_fist: bool) -> Array[Vector3]:
 	var pts: Array[Vector3] = []
 	pts.resize(21)

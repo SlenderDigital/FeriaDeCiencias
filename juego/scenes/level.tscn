@@ -54,55 +54,69 @@ mouse_filter = 2
 color = Color(0, 0, 0, 1)
 
 [node name="ArenaGrid" type="Node2D" parent="." unique_id=1983207712]
+light_mask = 2
 script = ExtResource("3_grid")
 
 [node name="HandShadow" type="Node2D" parent="." unique_id=360529702]
+light_mask = 2
 script = ExtResource("5_shadow")
 
 [node name="PalmPolygon" type="Polygon2D" parent="HandShadow" unique_id=1427960650]
+light_mask = 2
 color = Color(0.18, 0.18, 0.18, 0.42)
 
 [node name="ThumbBone" type="Line2D" parent="HandShadow" unique_id=1876834343]
+light_mask = 2
 width = 3.0
 default_color = Color(0.38, 0.38, 0.38, 0.68)
 
 [node name="IndexBone" type="Line2D" parent="HandShadow" unique_id=891709964]
+light_mask = 2
 width = 3.0
 default_color = Color(0.38, 0.38, 0.38, 0.68)
 
 [node name="MiddleBone" type="Line2D" parent="HandShadow" unique_id=80071320]
+light_mask = 2
 width = 3.0
 default_color = Color(0.38, 0.38, 0.38, 0.68)
 
 [node name="RingBone" type="Line2D" parent="HandShadow" unique_id=1361875844]
+light_mask = 2
 width = 3.0
 default_color = Color(0.38, 0.38, 0.38, 0.68)
 
 [node name="PinkyBone" type="Line2D" parent="HandShadow" unique_id=1882542854]
+light_mask = 2
 width = 3.0
 default_color = Color(0.38, 0.38, 0.38, 0.68)
 
 [node name="PalmBridgeBone" type="Line2D" parent="HandShadow" unique_id=1922877469]
+light_mask = 2
 width = 2.0
 default_color = Color(0.28, 0.28, 0.28, 0.55)
 
 [node name="Fingertip4" type="Polygon2D" parent="HandShadow" unique_id=1511696965]
+light_mask = 2
 color = Color(0.76, 0.76, 0.76, 0.85)
 polygon = PackedVector2Array(0, -7, 5, -5, 7, 0, 5, 5, 0, 7, -5, 5, -7, 0, -5, -5)
 
 [node name="Fingertip8" type="Polygon2D" parent="HandShadow" unique_id=1547795978]
+light_mask = 2
 color = Color(0.76, 0.76, 0.76, 0.85)
 polygon = PackedVector2Array(0, -7, 5, -5, 7, 0, 5, 5, 0, 7, -5, 5, -7, 0, -5, -5)
 
 [node name="Fingertip12" type="Polygon2D" parent="HandShadow" unique_id=1178452734]
+light_mask = 2
 color = Color(0.76, 0.76, 0.76, 0.85)
 polygon = PackedVector2Array(0, -7, 5, -5, 7, 0, 5, 5, 0, 7, -5, 5, -7, 0, -5, -5)
 
 [node name="Fingertip16" type="Polygon2D" parent="HandShadow" unique_id=1788402579]
+light_mask = 2
 color = Color(0.76, 0.76, 0.76, 0.85)
 polygon = PackedVector2Array(0, -7, 5, -5, 7, 0, 5, 5, 0, 7, -5, 5, -7, 0, -5, -5)
 
 [node name="Fingertip20" type="Polygon2D" parent="HandShadow" unique_id=372421356]
+light_mask = 2
 color = Color(0.76, 0.76, 0.76, 0.85)
 polygon = PackedVector2Array(0, -7, 5, -5, 7, 0, 5, 5, 0, 7, -5, 5, -7, 0, -5, -5)
 

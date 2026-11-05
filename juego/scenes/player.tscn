@@ -26,34 +26,38 @@ collision_mask = 4
 script = ExtResource("1_3vyb7")
 
 [node name="PlayerGlow" type="Polygon2D" parent="." unique_id=410959642]
+light_mask = 0
 material = SubResource("CanvasItemMaterial_glow")
 color = Color(1, 1, 1, 0.42)
-polygon = PackedVector2Array(32, 0, 22.627, 22.627, 0, 32, -22.627, 22.627, -32, 0, -22.627, -22.627, 0, -32, 22.627, -22.627)
 
 [node name="PlayerLight" type="PointLight2D" parent="." unique_id=410959643]
 color = Color(1, 1, 1, 1)
 energy = 0.85
+range_item_cull_mask = 2
 texture = SubResource("GradientTexture2D_light")
-texture_scale = 1.6
+texture_scale = 2.5
 
 [node name="ShieldGlow" type="Polygon2D" parent="." unique_id=410959644]
 visible = false
+light_mask = 0
 color = Color(0.72, 0.72, 0.72, 0)
-polygon = PackedVector2Array(20, 0, 14.142, 14.142, 0, 20, -14.142, 14.142, -20, 0, -14.142, -14.142, 0, -20, 14.142, -14.142)
 
 [node name="ShieldRing" type="Line2D" parent="." unique_id=410959645]
 visible = false
-points = PackedVector2Array(20, 0, 14.142, 14.142, 0, 20, -14.142, 14.142, -20, 0, -14.142, -14.142, 0, -20, 14.142, -14.142)
+light_mask = 0
 closed = true
 width = 3.0
 default_color = Color(1, 1, 1, 0.8)
 joint_mode = 2
+antialiased = true
 
 [node name="OuterPolygon" type="Polygon2D" parent="." unique_id=1306276986]
+light_mask = 0
 polygon = PackedVector2Array(-14, -14, 14, -14, 14, 14, -14, 14)
 
 [node name="InnerPolygon" type="Polygon2D" parent="." unique_id=27585643]
 visible = false
+light_mask = 0
 color = Color(0, 0, 0, 1)
 polygon = PackedVector2Array(-14, -14, 14, -14, 14, 14, -14, 14)
 

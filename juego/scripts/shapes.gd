@@ -97,3 +97,38 @@ static func projectile(radius: float) -> PackedVector2Array:
 		var x_scale: float = 1.28 if dir_vec.x >= 0.0 else 1.45
 		pts[i] = Vector2(dir_vec.x * radius * x_scale, dir_vec.y * radius * 0.86)
 	return pts
+
+
+static func apply_radial_glow(
+	poly: Polygon2D,
+	radii: Array[float] = [14.0, 22.0, 32.0, 44.0, 56.0, 68.0, 80.0, 92.0],
+	alphas: Array[float] = [0.62, 0.42, 0.25, 0.14, 0.07, 0.03, 0.008, 0.0],
+	segments: int = 36,
+	center_alpha: float = 0.85
+) -> void:
+	var verts: PackedVector2Array = PackedVector2Array([Vector2.ZERO])
+	var colors: PackedColorArray = PackedColorArray([Color(1.0, 1.0, 1.0, center_alpha)])
+	for r_idx: int in range(radii.size()):
+		var radius: float = radii[r_idx]
+		var alpha: float = alphas[r_idx]
+		for s: int in range(segments):
+			verts.append(Vector2.from_angle(TAU * float(s) / float(segments)) * radius)
+			colors.append(Color(1.0, 1.0, 1.0, alpha))
+	var polys: Array = []
+	for s: int in range(segments):
+		polys.append(PackedInt32Array([0, 1 + s, 1 + ((s + 1) % segments)]))
+	for r_idx: int in range(radii.size() - 1):
+		var inner_start: int = 1 + r_idx * segments
+		var outer_start: int = 1 + (r_idx + 1) * segments
+		for s: int in range(segments):
+			var next_s: int = (s + 1) % segments
+			polys.append(PackedInt32Array([
+				inner_start + s,
+				outer_start + s,
+				outer_start + next_s,
+				inner_start + next_s,
+			]))
+	poly.polygon = verts
+	poly.polygons = polys
+	poly.vertex_colors = colors
+
