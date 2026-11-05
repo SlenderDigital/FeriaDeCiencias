@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3 uid="uid://b7q2pxt44gpaf"]
+[gd_scene format=3 uid="uid://b7q2pxt44gpaf"]
 
 [ext_resource type="Script" uid="uid://byueg8gd60n7r" path="res://scripts/main_menu.gd" id="1_l6cm7"]
 
@@ -52,22 +52,21 @@ corner_radius_top_right = 2
 corner_radius_bottom_right = 2
 corner_radius_bottom_left = 2
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_play_normal"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_pressed"]
 content_margin_left = 8.0
 content_margin_top = 8.0
 content_margin_right = 8.0
 content_margin_bottom = 8.0
-bg_color = Color(0.06, 0.06, 0.06, 1)
+bg_color = Color(0.7, 0.7, 0.7, 1)
 border_width_left = 2
 border_width_top = 2
 border_width_right = 2
 border_width_bottom = 2
-border_color = Color(0.85, 0.85, 0.85, 1)
+border_color = Color(1, 1, 1, 1)
 corner_radius_top_left = 2
 corner_radius_top_right = 2
 corner_radius_bottom_right = 2
 corner_radius_bottom_left = 2
-shadow_color = Color(1, 1, 1, 0)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_hover"]
 content_margin_left = 8.0
@@ -87,21 +86,22 @@ corner_radius_bottom_left = 2
 shadow_color = Color(1, 1, 1, 0.35)
 shadow_size = 14
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_pressed"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_play_normal"]
 content_margin_left = 8.0
 content_margin_top = 8.0
 content_margin_right = 8.0
 content_margin_bottom = 8.0
-bg_color = Color(0.7, 0.7, 0.7, 1)
+bg_color = Color(0.06, 0.06, 0.06, 1)
 border_width_left = 2
 border_width_top = 2
 border_width_right = 2
 border_width_bottom = 2
-border_color = Color(1, 1, 1, 1)
+border_color = Color(0.85, 0.85, 0.85, 1)
 corner_radius_top_left = 2
 corner_radius_top_right = 2
 corner_radius_bottom_right = 2
 corner_radius_bottom_left = 2
+shadow_color = Color(1, 1, 1, 0)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_records_box"]
 content_margin_left = 20.0
@@ -160,7 +160,7 @@ position = Vector2(210, 160)
 color = Color(0.28, 0.28, 0.28, 0.65)
 polygon = PackedVector2Array(-24, -24, 24, -24, 24, 24, -24, 24)
 
-[node name="AmbientParticles" type="CPUParticles2D" parent="."]
+[node name="AmbientParticles" type="CPUParticles2D" parent="." unique_id=1511259653]
 position = Vector2(576, 660)
 amount = 36
 lifetime = 8.0
@@ -203,22 +203,22 @@ theme_override_font_sizes/font_size = 16
 text = "Monochrome Dodge Prototype"
 horizontal_alignment = 1
 
-[node name="BestLabel" type="Label" parent="CenterContainer/MenuBox"]
+[node name="BestLabel" type="Label" parent="CenterContainer/MenuBox" unique_id=1810968482]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.85, 0.85, 0.85, 1)
 theme_override_font_sizes/font_size = 15
 text = "No runs yet"
 horizontal_alignment = 1
 
-[node name="NameEdit" type="LineEdit" parent="CenterContainer/MenuBox"]
+[node name="NameEdit" type="LineEdit" parent="CenterContainer/MenuBox" unique_id=271030262]
 custom_minimum_size = Vector2(240, 42)
 layout_mode = 2
-theme_override_colors/caret_color = Color(1, 1, 1, 1)
-theme_override_colors/font_placeholder_color = Color(0.45, 0.45, 0.45, 1)
 theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_placeholder_color = Color(0.45, 0.45, 0.45, 1)
+theme_override_colors/caret_color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 18
-theme_override_styles/focus = SubResource("StyleBoxFlat_edit_focus")
 theme_override_styles/normal = SubResource("StyleBoxFlat_edit_normal")
+theme_override_styles/focus = SubResource("StyleBoxFlat_edit_focus")
 placeholder_text = "Enter your name"
 alignment = 1
 max_length = 12
@@ -240,10 +240,11 @@ text = "Difficulty: Normal"
 [node name="PlayButton" type="Button" parent="CenterContainer/MenuBox" unique_id=609968824]
 custom_minimum_size = Vector2(240, 46)
 layout_mode = 2
-theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_color = Color(0.875, 0.875, 0.875, 1)
 theme_override_colors/font_focus_color = Color(1, 1, 1, 1)
 theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
-theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_hover_pressed_color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 19
 theme_override_styles/normal = SubResource("StyleBoxFlat_play_normal")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
@@ -251,7 +252,7 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
 theme_override_styles/focus = SubResource("StyleBoxFlat_play_normal")
 text = "Play"
 
-[node name="RecordsButton" type="Button" parent="CenterContainer/MenuBox"]
+[node name="RecordsButton" type="Button" parent="CenterContainer/MenuBox" unique_id=1689884314]
 custom_minimum_size = Vector2(240, 46)
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -265,7 +266,7 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
 theme_override_styles/focus = SubResource("StyleBoxFlat_btn_hover")
 text = "Records"
 
-[node name="CreditsButton" type="Button" parent="CenterContainer/MenuBox"]
+[node name="CreditsButton" type="Button" parent="CenterContainer/MenuBox" unique_id=826409795]
 custom_minimum_size = Vector2(240, 46)
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -293,7 +294,7 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
 theme_override_styles/focus = SubResource("StyleBoxFlat_btn_hover")
 text = "Quit"
 
-[node name="TrackerProgressBox" type="VBoxContainer" parent="."]
+[node name="TrackerProgressBox" type="VBoxContainer" parent="." unique_id=630319602]
 layout_mode = 1
 anchors_preset = 7
 anchor_left = 0.5
@@ -309,27 +310,27 @@ grow_vertical = 0
 mouse_filter = 2
 theme_override_constants/separation = 4
 
-[node name="TrackerStatusLabel" type="Label" parent="TrackerProgressBox"]
+[node name="TrackerStatusLabel" type="Label" parent="TrackerProgressBox" unique_id=891356294]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.75, 0.75, 0.75, 1)
 theme_override_font_sizes/font_size = 12
 text = "HAND TRACKER: STARTING..."
 horizontal_alignment = 1
 
-[node name="TrackerBarBg" type="ColorRect" parent="TrackerProgressBox"]
+[node name="TrackerBarBg" type="ColorRect" parent="TrackerProgressBox" unique_id=1653216205]
 custom_minimum_size = Vector2(260, 6)
 layout_mode = 2
 mouse_filter = 2
 color = Color(0.18, 0.18, 0.18, 0.9)
 
-[node name="TrackerBarFill" type="ColorRect" parent="TrackerProgressBox/TrackerBarBg"]
+[node name="TrackerBarFill" type="ColorRect" parent="TrackerProgressBox/TrackerBarBg" unique_id=407063055]
 layout_mode = 0
 offset_right = 20.8
 offset_bottom = 6.0
 mouse_filter = 2
 color = Color(0.92, 0.92, 0.92, 1)
 
-[node name="RecordsPanel" type="ColorRect" parent="."]
+[node name="RecordsPanel" type="ColorRect" parent="." unique_id=1573172561]
 visible = false
 z_index = 10
 layout_mode = 1
@@ -340,7 +341,7 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0, 0, 0, 0.92)
 
-[node name="RecordsCenter" type="CenterContainer" parent="RecordsPanel"]
+[node name="RecordsCenter" type="CenterContainer" parent="RecordsPanel" unique_id=665367508]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -348,66 +349,66 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="RecordsBox" type="PanelContainer" parent="RecordsPanel/RecordsCenter"]
+[node name="RecordsBox" type="PanelContainer" parent="RecordsPanel/RecordsCenter" unique_id=539820627]
 custom_minimum_size = Vector2(380, 320)
 layout_mode = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_records_box")
 
-[node name="Content" type="VBoxContainer" parent="RecordsPanel/RecordsCenter/RecordsBox"]
+[node name="Content" type="VBoxContainer" parent="RecordsPanel/RecordsCenter/RecordsBox" unique_id=1010565291]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="Title" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content"]
+[node name="Title" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=717550311]
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 26
 text = "RECORD HISTORY"
 horizontal_alignment = 1
 
-[node name="RecordsPlayerLabel" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content"]
+[node name="RecordsPlayerLabel" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=910048386]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.82, 0.82, 0.82, 1)
 theme_override_font_sizes/font_size = 16
 text = "PLAYER: PLAYER"
 horizontal_alignment = 1
 
-[node name="RecordsHighestLabel" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content"]
+[node name="RecordsHighestLabel" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=1158310726]
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 15
 text = "No runs yet"
 horizontal_alignment = 1
 
-[node name="Sep1" type="HSeparator" parent="RecordsPanel/RecordsCenter/RecordsBox/Content"]
+[node name="Sep1" type="HSeparator" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=1621544469]
 layout_mode = 2
 theme_override_styles/separator = SubResource("StyleBoxLine_sep")
 
-[node name="RecordsEasyLabel" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content"]
+[node name="RecordsEasyLabel" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=2044190037]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
 theme_override_font_sizes/font_size = 15
 text = "EASY  :  No runs recorded"
 horizontal_alignment = 1
 
-[node name="RecordsNormalLabel" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content"]
+[node name="RecordsNormalLabel" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=301575280]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
 theme_override_font_sizes/font_size = 15
 text = "NORMAL:  No runs recorded"
 horizontal_alignment = 1
 
-[node name="RecordsHardLabel" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content"]
+[node name="RecordsHardLabel" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=849707497]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
 theme_override_font_sizes/font_size = 15
 text = "HARD  :  No runs recorded"
 horizontal_alignment = 1
 
-[node name="Sep2" type="HSeparator" parent="RecordsPanel/RecordsCenter/RecordsBox/Content"]
+[node name="Sep2" type="HSeparator" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=1286704987]
 layout_mode = 2
 theme_override_styles/separator = SubResource("StyleBoxLine_sep")
 
-[node name="RecordsCloseButton" type="Button" parent="RecordsPanel/RecordsCenter/RecordsBox/Content"]
+[node name="RecordsCloseButton" type="Button" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=1724928209]
 custom_minimum_size = Vector2(200, 44)
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
