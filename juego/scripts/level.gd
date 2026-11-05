@@ -663,7 +663,7 @@ func _on_main_menu_pressed() -> void:
 	game_camera.offset = Vector2.ZERO
 	SoundManager.stop_music()
 	SoundManager.play_sfx(&"menu")
-	GameManager.go_to_main_menu()
+	GameManager.go_to_menu()
 
 
 func _get_music_pitch_for_difficulty() -> float:
