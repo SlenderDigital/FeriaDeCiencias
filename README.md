@@ -2,6 +2,8 @@
 
 Juego de acción y supervivencia 2D con estética minimalista monocromática (blanco y negro), desarrollado en **Godot 4.7** con control de movimiento y escudo por visión artificial mediante **MediaPipe** y **OpenCV** para la **Feria de Ciencias** (ETEC Mendoza — 6° Informática).
 
+**[▶️ Jugar en itch.io](https://shapesandbeams.itch.io/shapes-and-beams)** — descarga y juega directamente desde el navegador.
+
 ---
 
 ## De qué trata
@@ -96,7 +98,7 @@ Esto genera `build-linux/` (`ShapesAndBeams-linux-x86_64.zip`) y `build-win/` (`
 ## TODO / Próximos pasos
 
 - [x] Exportar builds ejecutables para Linux y Windows junto con `tracker_server/`.
-- [ ] Subir los archivos del juego a **itch.io** y agregar el enlace de descarga acá.
+- [x] Subir los archivos del juego a **itch.io** y agregar el enlace de descarga acá.
 - [ ] Grabar y enlazar un **video tutorial** mostrando cómo instalar y jugar con el control por manos.
 
 ---
