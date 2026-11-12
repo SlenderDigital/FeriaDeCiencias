@@ -22,16 +22,20 @@ var _last_hand_pulse_bucket: int = -1
 @onready var hand_status_icon: Polygon2D = $HUDRoot/HandStatusPill/HandStatusIcon
 @onready var hand_status_label: Label = $HUDRoot/HandStatusPill/HandStatusLabel
 @onready var game_over_panel: ColorRect = $HUDRoot/GameOverPanel
+@onready var game_over_box: VBoxContainer = $HUDRoot/GameOverPanel/VBoxContainer
 @onready var game_over_subtitle: Label = $HUDRoot/GameOverPanel/VBoxContainer/GameOverSubtitle
 @onready var retry_button: Button = $HUDRoot/GameOverPanel/VBoxContainer/RetryButton
 @onready var game_over_menu_button: Button = $HUDRoot/GameOverPanel/VBoxContainer/GameOverMainMenuButton
 @onready var level_complete_panel: ColorRect = $HUDRoot/LevelCompletePanel
+@onready var level_complete_box: VBoxContainer = $HUDRoot/LevelCompletePanel/VBoxContainer
 @onready var level_complete_subtitle: Label = $HUDRoot/LevelCompletePanel/VBoxContainer/LevelCompleteSubtitle
 @onready var replay_button: Button = $HUDRoot/LevelCompletePanel/VBoxContainer/ReplayButton
 @onready var complete_menu_button: Button = $HUDRoot/LevelCompletePanel/VBoxContainer/CompleteMainMenuButton
 
 
 func _ready() -> void:
+	game_over_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	level_complete_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	retry_button.pressed.connect(func() -> void: retry_requested.emit())
 	replay_button.pressed.connect(func() -> void: retry_requested.emit())
 	game_over_menu_button.pressed.connect(func() -> void: main_menu_requested.emit())
@@ -138,5 +142,14 @@ func sync_layout(viewport_size: Vector2) -> void:
 		timer_label.position.x = viewport_size.x - 150.0
 	if viewport_size.x > 240.0:
 		hand_status_pill.position.x = (viewport_size.x - hand_status_pill.size.x) * 0.5
+		hand_status_pill.position.y = 84.0 if viewport_size.x < 620.0 else 26.0
 	if viewport_size.y > 40.0:
 		controls_hint_label.position.y = viewport_size.y - 34.0
+		controls_hint_label.size.x = maxf(200.0, viewport_size.x - 48.0)
+		controls_hint_label.clip_text = viewport_size.x < 720.0
+	var modal_half_w: float = clampf((viewport_size.x - 40.0) * 0.5, 140.0, 240.0)
+	for box: VBoxContainer in [game_over_box, level_complete_box]:
+		if box != null:
+			box.custom_minimum_size.x = modal_half_w * 2.0
+			box.offset_left = -modal_half_w
+			box.offset_right = modal_half_w

@@ -612,8 +612,10 @@ func trigger_level_complete() -> void:
 	player.is_active = false
 
 	var is_record: bool = GameManager.report_result(difficulty_mode, level_duration, true)
+	var rank: int = GameManager.get_player_rank(difficulty_mode)
 	var badge: String = " ★ NEW RECORD! ★" if is_record else ""
-	hud.show_level_complete("%s: Survived 45.0s on %s%s" % [GameManager.get_player_name(), get_difficulty_name(), badge])
+	var rank_str: String = " [Rank #%d]" % rank if rank > 0 else ""
+	hud.show_level_complete("%s: Survived 45.0s on %s%s%s" % [GameManager.get_player_name(), get_difficulty_name(), badge, rank_str])
 	SoundManager.play_sfx(&"victory", -1.5)
 	level_completed.emit()
 
@@ -627,8 +629,10 @@ func _on_player_died() -> void:
 	_clear_beams()
 
 	var is_record: bool = GameManager.report_result(difficulty_mode, elapsed_time, false)
+	var rank: int = GameManager.get_player_rank(difficulty_mode)
 	var badge: String = " ★ NEW RECORD! ★" if is_record else ""
-	hud.show_game_over("%s: Survived %.1fs on %s%s" % [GameManager.get_player_name(), elapsed_time, get_difficulty_name(), badge])
+	var rank_str: String = " [Rank #%d]" % rank if rank > 0 else ""
+	hud.show_game_over("%s: Survived %.1fs on %s%s%s" % [GameManager.get_player_name(), elapsed_time, get_difficulty_name(), badge, rank_str])
 	arena_grid.pulse(0.8)
 	trigger_screen_shake(6.0, 0.35)
 	SoundManager.play_sfx(&"game_over", -1.5)

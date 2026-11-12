@@ -36,6 +36,8 @@ func _add_node(node: Node) -> Node:
 
 func setup() -> void:
 	_tree_root().size = Vector2i(1152, 648)
+	GameManager.save_path = "user://test_gameplay_save.tres"
+	GameManager.save_data = SaveData.new()
 	GameManager.selected_difficulty = GameManager.Difficulty.NORMAL
 	HandTrackingClient.reset_state()
 
@@ -883,6 +885,48 @@ func test_player_radial_glow_and_light_mask_isolation() -> void:
 	player._update_visuals(0.25)
 	assert_eq(glow.scale, idle_scale, "Steady PlayerGlow must not scale with idle time or movement speed")
 	assert_eq(glow.color.a, idle_alpha, "Steady PlayerGlow alpha must not fluctuate with idle time or movement speed")
+
+
+func test_multiplayer_ranking_isolation_and_responsive_leaderboard() -> void:
+	var backup_save: SaveData = GameManager.save_data
+	GameManager.save_data = SaveData.new()
+
+	GameManager.set_player_name("Alice")
+	assert_eq(GameManager.get_best_summary(), "No runs yet", "Fresh Alice must start with no runs")
+	assert_true(GameManager.report_result(2, 45.0, true), "Alice Hard completion must be recorded")
+	assert_eq(GameManager.get_best_summary(), "BEST  HARD  -  COMPLETED", "Alice best summary must be Hard Completed")
+
+	GameManager.set_player_name("Bob")
+	assert_eq(GameManager.get_best_summary(), "No runs yet", "Bob must not share Alice's scores")
+	assert_true(GameManager.save_data.get_record(2).is_empty(), "Bob must have empty Hard record")
+	assert_true(GameManager.report_result(1, 29.4, false), "Bob Normal 29.4s run must be recorded")
+	assert_eq(GameManager.get_best_summary(), "BEST  NORMAL  -  29.4s", "Bob best summary must be Normal 29.4s")
+
+	GameManager.set_player_name("alice")
+	assert_eq(GameManager.get_best_summary(), "BEST  HARD  -  COMPLETED", "Case-insensitive switch to 'alice' must restore Alice's records")
+	assert_eq(GameManager.get_player_rank(-1, "Alice"), 1, "Alice must rank #1 globally")
+	assert_eq(GameManager.get_player_rank(-1, "Bob"), 2, "Bob must rank #2 globally")
+
+	var menu: Control = _spawn(MAIN_MENU_SCENE) as Control
+	menu.name_edit.text = "Bob"
+	menu._on_name_text_changed("Bob")
+	assert_true(menu.best_label.text.find("BEST  NORMAL  -  29.4s") != -1, "Typing Bob in NameEdit must live-update BestLabel")
+
+	menu.name_edit.text = "Charlie"
+	menu._on_name_text_changed("Charlie")
+	assert_eq(menu.best_label.text, "No runs yet", "Typing unplayed Charlie must show 'No runs yet'")
+
+	menu._on_records_pressed()
+	assert_true(menu.records_panel.visible, "RecordsPanel must open")
+	assert_eq(menu.leaderboard_list.get_child_count(), 2, "Global leaderboard must show 2 ranked players (Alice and Bob)")
+	_assert_subtree_monochrome_and_primitive(menu.records_panel)
+
+	menu._on_resized(Vector2(480.0, 360.0))
+	assert_true(menu.records_box.custom_minimum_size.x <= 480.0, "RecordsBox must responsively shrink on narrow viewports")
+	assert_true(menu.personal_stats_box.vertical, "PersonalStatsBox must stack vertically on narrow viewports")
+
+	GameManager.save_data = backup_save
+	GameManager.save_game()
 
 
 func _build_hand_landmarks(palm_target: Vector2, closed_fist: bool) -> Array[Vector3]:

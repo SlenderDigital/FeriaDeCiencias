@@ -104,11 +104,11 @@ corner_radius_bottom_left = 2
 shadow_color = Color(1, 1, 1, 0)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_records_box"]
-content_margin_left = 20.0
-content_margin_top = 20.0
-content_margin_right = 20.0
-content_margin_bottom = 20.0
-bg_color = Color(0.06, 0.06, 0.06, 1)
+content_margin_left = 22.0
+content_margin_top = 18.0
+content_margin_right = 22.0
+content_margin_bottom = 18.0
+bg_color = Color(0.05, 0.05, 0.05, 1)
 border_width_left = 2
 border_width_top = 2
 border_width_right = 2
@@ -219,7 +219,7 @@ theme_override_colors/caret_color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 18
 theme_override_styles/normal = SubResource("StyleBoxFlat_edit_normal")
 theme_override_styles/focus = SubResource("StyleBoxFlat_edit_focus")
-placeholder_text = "Enter your name"
+placeholder_text = "Enter your username"
 alignment = 1
 max_length = 12
 
@@ -350,67 +350,159 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="RecordsBox" type="PanelContainer" parent="RecordsPanel/RecordsCenter" unique_id=539820627]
-custom_minimum_size = Vector2(380, 320)
+custom_minimum_size = Vector2(540, 440)
 layout_mode = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_records_box")
 
 [node name="Content" type="VBoxContainer" parent="RecordsPanel/RecordsCenter/RecordsBox" unique_id=1010565291]
 layout_mode = 2
-theme_override_constants/separation = 12
+theme_override_constants/separation = 10
 
 [node name="Title" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=717550311]
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 26
-text = "RECORD HISTORY"
+theme_override_font_sizes/font_size = 24
+text = "RANKING & RECORDS"
 horizontal_alignment = 1
 
 [node name="RecordsPlayerLabel" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=910048386]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.82, 0.82, 0.82, 1)
-theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.88, 0.88, 0.88, 1)
+theme_override_font_sizes/font_size = 15
 text = "PLAYER: PLAYER"
 horizontal_alignment = 1
 
 [node name="RecordsHighestLabel" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=1158310726]
 layout_mode = 2
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.75, 0.75, 0.75, 1)
+theme_override_font_sizes/font_size = 14
 text = "No runs yet"
+horizontal_alignment = 1
+
+[node name="PersonalStatsBox" type="BoxContainer" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=1412398712]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 12
+
+[node name="RecordsEasyLabel" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content/PersonalStatsBox" unique_id=2044190037]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.88, 0.88, 0.88, 1)
+theme_override_font_sizes/font_size = 13
+text = "EASY: No runs"
+horizontal_alignment = 1
+
+[node name="RecordsNormalLabel" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content/PersonalStatsBox" unique_id=301575280]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.88, 0.88, 0.88, 1)
+theme_override_font_sizes/font_size = 13
+text = "NORMAL: No runs"
+horizontal_alignment = 1
+
+[node name="RecordsHardLabel" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content/PersonalStatsBox" unique_id=849707497]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.88, 0.88, 0.88, 1)
+theme_override_font_sizes/font_size = 13
+text = "HARD: No runs"
 horizontal_alignment = 1
 
 [node name="Sep1" type="HSeparator" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=1621544469]
 layout_mode = 2
 theme_override_styles/separator = SubResource("StyleBoxLine_sep")
 
-[node name="RecordsEasyLabel" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=2044190037]
+[node name="LeaderboardHeader" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=1621544470]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
-theme_override_font_sizes/font_size = 15
-text = "EASY  :  No runs recorded"
+theme_override_colors/font_color = Color(0.95, 0.95, 0.95, 1)
+theme_override_font_sizes/font_size = 14
+text = "COMPETITIVE LEADERBOARD"
 horizontal_alignment = 1
 
-[node name="RecordsNormalLabel" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=301575280]
+[node name="FilterRow" type="HBoxContainer" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=1621544471]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
-theme_override_font_sizes/font_size = 15
-text = "NORMAL:  No runs recorded"
-horizontal_alignment = 1
+alignment = 1
+theme_override_constants/separation = 8
 
-[node name="RecordsHardLabel" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=849707497]
+[node name="FilterAllButton" type="Button" parent="RecordsPanel/RecordsCenter/RecordsBox/Content/FilterRow" unique_id=1621544472]
+custom_minimum_size = Vector2(88, 34)
 layout_mode = 2
-theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
-theme_override_font_sizes/font_size = 15
-text = "HARD  :  No runs recorded"
-horizontal_alignment = 1
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_focus_color = Color(0, 0, 0, 1)
+theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 13
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn_hover")
+text = "GLOBAL"
+
+[node name="FilterEasyButton" type="Button" parent="RecordsPanel/RecordsCenter/RecordsBox/Content/FilterRow" unique_id=1621544473]
+custom_minimum_size = Vector2(88, 34)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_focus_color = Color(0, 0, 0, 1)
+theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 13
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn_hover")
+text = "EASY"
+
+[node name="FilterNormalButton" type="Button" parent="RecordsPanel/RecordsCenter/RecordsBox/Content/FilterRow" unique_id=1621544474]
+custom_minimum_size = Vector2(88, 34)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_focus_color = Color(0, 0, 0, 1)
+theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 13
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn_hover")
+text = "NORMAL"
+
+[node name="FilterHardButton" type="Button" parent="RecordsPanel/RecordsCenter/RecordsBox/Content/FilterRow" unique_id=1621544475]
+custom_minimum_size = Vector2(88, 34)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_focus_color = Color(0, 0, 0, 1)
+theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 13
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn_hover")
+text = "HARD"
+
+[node name="LeaderboardScroll" type="ScrollContainer" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=1621544476]
+custom_minimum_size = Vector2(0, 160)
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="LeaderboardList" type="VBoxContainer" parent="RecordsPanel/RecordsCenter/RecordsBox/Content/LeaderboardScroll" unique_id=1621544477]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
 
 [node name="Sep2" type="HSeparator" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=1286704987]
 layout_mode = 2
 theme_override_styles/separator = SubResource("StyleBoxLine_sep")
 
 [node name="RecordsCloseButton" type="Button" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=1724928209]
-custom_minimum_size = Vector2(200, 44)
+custom_minimum_size = Vector2(200, 42)
 layout_mode = 2
+size_flags_horizontal = 4
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_focus_color = Color(0, 0, 0, 1)
 theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)

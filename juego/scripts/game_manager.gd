@@ -58,13 +58,14 @@ func load_game() -> void:
 			save_data = dev_loaded.duplicate() as SaveData
 	if save_data == null:
 		save_data = SaveData.new()
+	save_data.sync_active_profile(MAX_NAME_LENGTH)
 
 
 func save_game() -> Error:
 	if save_data == null:
 		return ERR_UNCONFIGURED
 	var err: Error = ResourceSaver.save(save_data, save_path)
-	if err == OK and OS.is_debug_build() and DirAccess.dir_exists_absolute(ProjectSettings.globalize_path("res://data")):
+	if err == OK and save_path == SAVE_PATH and OS.is_debug_build() and DirAccess.dir_exists_absolute(ProjectSettings.globalize_path("res://data")):
 		ResourceSaver.save(save_data, DEV_SAVE_PATH)
 	return err
 
@@ -87,8 +88,7 @@ func get_player_name() -> String:
 func set_player_name(new_name: String) -> void:
 	if save_data == null:
 		return
-	var cleaned: String = new_name.strip_edges().left(MAX_NAME_LENGTH)
-	save_data.player_name = "PLAYER" if cleaned.is_empty() else cleaned
+	save_data.set_active_player(new_name, MAX_NAME_LENGTH)
 	save_game()
 	player_name_changed.emit(save_data.player_name)
 
@@ -101,21 +101,33 @@ func report_result(difficulty: int, time_survived: float, completed: bool) -> bo
 	if save_data == null:
 		return false
 	var improved: bool = save_data.submit_result(difficulty, time_survived, completed)
+	save_game()
 	if improved:
-		save_game()
 		record_updated.emit(difficulty, time_survived, completed)
 	set_state(State.COMPLETE if completed else State.GAME_OVER)
 	return improved
 
 
-func get_best_summary() -> String:
+func get_best_summary(for_player: String = "") -> String:
 	if save_data == null:
 		return "No runs yet"
-	var record: Dictionary = save_data.get_highest_record()
+	var record: Dictionary = save_data.get_highest_record(for_player)
 	if record.is_empty():
 		return "No runs yet"
 	var status: String = "COMPLETED" if bool(record.get("completed", false)) else "%.1fs" % float(record.get("time", 0.0))
 	return "BEST  %s  -  %s" % [get_difficulty_name(int(record.get("difficulty", 0))).to_upper(), status]
+
+
+func get_leaderboard(difficulty_filter: int = -1, current_player_override: String = "") -> Array[Dictionary]:
+	if save_data == null:
+		return []
+	return save_data.get_leaderboard(difficulty_filter, current_player_override)
+
+
+func get_player_rank(difficulty_filter: int = -1, for_player: String = "") -> int:
+	if save_data == null:
+		return 0
+	return save_data.get_player_rank(difficulty_filter, for_player)
 
 
 func go_to_menu() -> void:
