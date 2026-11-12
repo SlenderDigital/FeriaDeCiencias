@@ -36,6 +36,8 @@ func _add_node(node: Node) -> Node:
 
 func setup() -> void:
 	_tree_root().size = Vector2i(1152, 648)
+	GameManager.spectator_override_mode = 0
+	GameManager.set_test_screen_count_override(-1)
 	GameManager.save_path = "user://test_gameplay_save.tres"
 	GameManager.save_data = SaveData.new()
 	GameManager.selected_difficulty = GameManager.Difficulty.NORMAL
@@ -927,6 +929,53 @@ func test_multiplayer_ranking_isolation_and_responsive_leaderboard() -> void:
 
 	GameManager.save_data = backup_save
 	GameManager.save_game()
+
+
+func test_dual_monitor_spectator_ranking_window_and_pinned_rank() -> void:
+	assert_false(GameManager.is_spectator_window_active(), "Spectator window must be closed on 1 monitor by default")
+
+	GameManager.set_test_screen_count_override(2)
+	assert_true(GameManager.is_spectator_window_active(), "Connecting 2nd monitor must auto-open SpectatorRankingWindow")
+	assert_true(GameManager.spectator_view != null, "SpectatorRankingView must be instantiated inside SpectatorRankingWindow")
+
+	var view: Control = GameManager.spectator_view
+	_assert_subtree_monochrome_and_primitive(view)
+
+	GameManager.notify_preview_player_name("Valentina")
+	assert_true(view.player_label.text.find("VALENTINA") != -1, "Spectator header must live-update as player types username")
+
+	# Populate 12 players so active player (#12) is outside Top 10
+	for i: int in range(1, 12):
+		GameManager.set_player_name("Player%02d" % i)
+		GameManager.report_result(2, 45.0 - float(i), false)
+
+	GameManager.set_player_name("Challenger12")
+	GameManager.report_result(2, 12.5, false)
+	assert_true(view.record_banner_label.visible, "New record must trigger celebration banner on spectator display")
+
+	var global_list: VBoxContainer = view._column_lists.get(-1) as VBoxContainer
+	assert_true(global_list != null, "Global leaderboard column list must exist")
+	# 8 top rows + 1 ellipsis + 1 pinned row = 10 children
+	assert_eq(global_list.get_child_count(), 10, "Leaderboard column must render Top 8 + ellipsis + pinned #12 active player")
+	assert_true(global_list.get_node_or_null("PinnedCurrentPlayerRow") != null, "Active player ranked #12 must be pinned at bottom")
+
+	# Responsive column adaptation for distance legibility
+	view._on_resized(Vector2(1280.0, 720.0))
+	assert_eq(view.columns_grid.columns, 2, "Wide monitor must display 2 giant side-by-side ranking boards for distance legibility")
+	view._on_resized(Vector2(800.0, 600.0))
+	assert_eq(view.columns_grid.columns, 2, "Medium monitor must display 2 side-by-side ranking boards")
+	view._on_resized(Vector2(500.0, 700.0))
+	assert_eq(view.columns_grid.columns, 1, "Narrow portrait monitor must stack ranking boards")
+
+	# Unplugging 2nd monitor closes auto window
+	GameManager.set_test_screen_count_override(1)
+	assert_false(GameManager.is_spectator_window_active(), "Unplugging 2nd monitor must auto-close spectator window")
+
+	# F10 manual toggle works on 1 monitor
+	assert_true(GameManager.toggle_spectator_window(), "F10 toggle must open preview window on single monitor")
+	assert_false(GameManager.toggle_spectator_window(), "Second F10 toggle must close preview window")
+	GameManager.spectator_override_mode = 0
+	GameManager.set_test_screen_count_override(-1)
 
 
 func _build_hand_landmarks(palm_target: Vector2, closed_fist: bool) -> Array[Vector3]:

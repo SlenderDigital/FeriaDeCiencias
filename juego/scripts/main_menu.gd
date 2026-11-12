@@ -177,6 +177,7 @@ func _on_records_close_pressed() -> void:
 
 func _on_name_text_changed(new_text: String) -> void:
 	_refresh_menu_best_label(new_text)
+	GameManager.notify_preview_player_name(new_text)
 
 
 func _on_name_submitted(_text: String) -> void:
@@ -269,44 +270,54 @@ func _rebuild_leaderboard_rows() -> void:
 		child.free()
 
 	var entries: Array[Dictionary] = GameManager.get_leaderboard(leaderboard_filter)
+	var view: Vector2 = get_viewport_rect().size
+	if view.x <= 0.0 or view.y <= 0.0:
+		view = Vector2(1152.0, 648.0)
+	var compact: bool = view.x < 560.0
+	var ui_scale: float = clampf(minf(view.x / 1152.0, view.y / 648.0), 0.78, 1.45)
+	var row_font_size: int = clampi(int(round((15.0 if compact else 21.0) * ui_scale)), 14, 30)
+	var top_row_font_size: int = clampi(int(round((16.0 if compact else 23.0) * ui_scale)), 15, 32)
+	var tier_font_size: int = clampi(int(round((13.0 if compact else 18.0) * ui_scale)), 12, 26)
+
 	if entries.is_empty():
 		var empty_lbl: Label = Label.new()
 		empty_lbl.name = "EmptyLeaderboardLabel"
 		empty_lbl.text = "No player scores recorded in this category yet.\nEnter your username and press Play to set the #1 record!"
 		empty_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		empty_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		empty_lbl.add_theme_color_override("font_color", Color(0.62, 0.62, 0.62, 1.0))
-		empty_lbl.add_theme_font_size_override("font_size", 13)
+		empty_lbl.add_theme_color_override("font_color", Color(0.68, 0.68, 0.68, 1.0))
+		empty_lbl.add_theme_font_size_override("font_size", row_font_size)
 		leaderboard_list.add_child(empty_lbl)
 		return
 
-	var compact: bool = get_viewport_rect().size.x < 560.0
 	for entry: Dictionary in entries:
 		var rank: int = int(entry.get("rank", 1))
-		var p_name: String = str(entry.get("player_name", "PLAYER"))
+		var p_name: String = str(entry.get("player_name", "PLAYER")).to_upper()
 		var diff_idx: int = int(entry.get("difficulty", 0))
 		var diff_str: String = DIFFICULTY_NAMES[clampi(diff_idx, 0, DIFFICULTY_NAMES.size() - 1)].to_upper()
 		var completed: bool = bool(entry.get("completed", false))
 		var time_val: float = float(entry.get("time", 0.0))
 		var is_current: bool = bool(entry.get("is_current", false))
+		var is_podium: bool = rank <= 3
+		var f_size: int = top_row_font_size if (is_podium or is_current) else row_font_size
 
 		var row_panel: PanelContainer = PanelContainer.new()
 		row_panel.name = "RankRow_%d" % rank
 		row_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 		var row_style: StyleBoxFlat = StyleBoxFlat.new()
-		row_style.content_margin_left = 10.0
-		row_style.content_margin_top = 6.0
-		row_style.content_margin_right = 10.0
-		row_style.content_margin_bottom = 6.0
-		var bg_gray: float = 0.18 if is_current else (0.11 if rank == 1 else 0.07)
+		row_style.content_margin_left = 14.0
+		row_style.content_margin_top = 9.0
+		row_style.content_margin_right = 14.0
+		row_style.content_margin_bottom = 9.0
+		var bg_gray: float = 0.22 if is_current else (0.14 if rank == 1 else (0.10 if is_podium else 0.07))
 		row_style.bg_color = Color(bg_gray, bg_gray, bg_gray, 1.0)
-		var border_w: int = 2 if (is_current or rank == 1) else 1
+		var border_w: int = 3 if (is_current or rank == 1) else 2
 		row_style.border_width_left = border_w
 		row_style.border_width_top = border_w
 		row_style.border_width_right = border_w
 		row_style.border_width_bottom = border_w
-		var border_gray: float = 1.0 if is_current else (0.78 if rank == 1 else 0.32)
+		var border_gray: float = 1.0 if (is_current or rank == 1) else (0.80 if is_podium else 0.36)
 		row_style.border_color = Color(border_gray, border_gray, border_gray, 1.0)
 		row_style.corner_radius_top_left = 2
 		row_style.corner_radius_top_right = 2
@@ -316,41 +327,41 @@ func _rebuild_leaderboard_rows() -> void:
 
 		var row_hbox: HBoxContainer = HBoxContainer.new()
 		row_hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row_hbox.add_theme_constant_override("separation", 10)
+		row_hbox.add_theme_constant_override("separation", 14)
 		row_panel.add_child(row_hbox)
 
 		var rank_lbl: Label = Label.new()
-		rank_lbl.custom_minimum_size = Vector2(36.0 if compact else 46.0, 0.0)
+		rank_lbl.custom_minimum_size = Vector2(44.0 if compact else 68.0, 0.0)
 		rank_lbl.text = "#%d" % rank
-		var rank_gray: float = 1.0 if rank <= 3 else 0.78
+		var rank_gray: float = 1.0 if (is_podium or is_current) else 0.85
 		rank_lbl.add_theme_color_override("font_color", Color(rank_gray, rank_gray, rank_gray, 1.0))
-		rank_lbl.add_theme_font_size_override("font_size", 13 if compact else 14)
+		rank_lbl.add_theme_font_size_override("font_size", f_size)
 		row_hbox.add_child(rank_lbl)
 
 		var name_lbl: Label = Label.new()
 		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		name_lbl.clip_text = true
-		name_lbl.text = "%s%s" % [p_name, " (YOU)" if is_current else ""]
-		var name_gray: float = 1.0 if is_current else 0.90
+		name_lbl.text = "%s%s" % [p_name, "  ◀ YOU" if is_current else ""]
+		var name_gray: float = 1.0 if (is_current or is_podium) else 0.92
 		name_lbl.add_theme_color_override("font_color", Color(name_gray, name_gray, name_gray, 1.0))
-		name_lbl.add_theme_font_size_override("font_size", 13 if compact else 14)
+		name_lbl.add_theme_font_size_override("font_size", f_size)
 		row_hbox.add_child(name_lbl)
 
 		if leaderboard_filter < 0:
 			var tier_lbl: Label = Label.new()
-			tier_lbl.custom_minimum_size = Vector2(58.0 if compact else 72.0, 0.0)
+			tier_lbl.custom_minimum_size = Vector2(72.0 if compact else 110.0, 0.0)
 			tier_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			tier_lbl.text = "[%s]" % diff_str
-			tier_lbl.add_theme_color_override("font_color", Color(0.76, 0.76, 0.76, 1.0))
-			tier_lbl.add_theme_font_size_override("font_size", 12 if compact else 13)
+			tier_lbl.add_theme_color_override("font_color", Color(0.84, 0.84, 0.84, 1.0))
+			tier_lbl.add_theme_font_size_override("font_size", tier_font_size)
 			row_hbox.add_child(tier_lbl)
 
 		var score_lbl: Label = Label.new()
 		score_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		score_lbl.text = "COMPLETED (45.0s) ★" if completed else ("%.1fs" % time_val if compact else "Survived %.1fs" % time_val)
-		var score_gray: float = 1.0 if completed else 0.85
+		var score_gray: float = 1.0 if (completed or is_current) else 0.90
 		score_lbl.add_theme_color_override("font_color", Color(score_gray, score_gray, score_gray, 1.0))
-		score_lbl.add_theme_font_size_override("font_size", 13 if compact else 14)
+		score_lbl.add_theme_font_size_override("font_size", f_size)
 		row_hbox.add_child(score_lbl)
 
 		leaderboard_list.add_child(row_panel)
@@ -396,15 +407,22 @@ func _on_resized(viewport_override: Vector2 = Vector2.ZERO) -> void:
 		btn.custom_minimum_size = Vector2(minf(240.0, menu_w), btn_h)
 		btn.add_theme_font_size_override("font_size", 16 if compact_h else 19)
 
-	var rec_w: float = clampf(view.x - 36.0, 290.0, 660.0)
-	var rec_h: float = clampf(view.y - 36.0, 300.0, 540.0)
+	var rec_w: float = clampf(view.x - 36.0, 290.0, 920.0)
+	var rec_h: float = clampf(view.y - 36.0, 300.0, 740.0)
 	records_box.custom_minimum_size = Vector2(rec_w, rec_h)
 	records_content.add_theme_constant_override("separation", 6 if compact_h else 10)
-	records_title_label.add_theme_font_size_override("font_size", 19 if compact_w else 24)
-	personal_stats_box.vertical = rec_w < 500.0
-	personal_stats_box.add_theme_constant_override("separation", 4 if personal_stats_box.vertical else 12)
-	leaderboard_scroll.custom_minimum_size.y = clampf(rec_h - (270.0 if personal_stats_box.vertical else 230.0), 90.0, 260.0)
-	records_close_button.custom_minimum_size = Vector2(minf(200.0, rec_w - 44.0), 36.0 if compact_h else 42.0)
+	records_title_label.add_theme_font_size_override("font_size", 20 if compact_w else 30)
+	records_player_label.add_theme_font_size_override("font_size", 15 if compact_w else 20)
+	records_highest_label.add_theme_font_size_override("font_size", 14 if compact_w else 18)
+	for stat_lbl: Label in [records_easy_label, records_normal_label, records_hard_label]:
+		stat_lbl.add_theme_font_size_override("font_size", 13 if compact_w else 16)
+	for f_btn: Button in [filter_all_button, filter_easy_button, filter_normal_button, filter_hard_button]:
+		f_btn.add_theme_font_size_override("font_size", 13 if compact_w else 16)
+		f_btn.custom_minimum_size.y = 32.0 if compact_h else 40.0
+	personal_stats_box.vertical = rec_w < 540.0
+	personal_stats_box.add_theme_constant_override("separation", 4 if personal_stats_box.vertical else 14)
+	leaderboard_scroll.custom_minimum_size.y = clampf(rec_h - (280.0 if personal_stats_box.vertical else 245.0), 90.0, 420.0)
+	records_close_button.custom_minimum_size = Vector2(minf(240.0, rec_w - 44.0), 36.0 if compact_h else 46.0)
 
 	var tracker_w: float = clampf(view.x - 40.0, 180.0, 260.0)
 	tracker_bar_bg.custom_minimum_size.x = tracker_w

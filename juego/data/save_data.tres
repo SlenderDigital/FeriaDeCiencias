@@ -4,20 +4,20 @@
 
 [resource]
 script = ExtResource("1_cqg7s")
-player_name = "TORTUTA"
+player_name = "Facu"
 records = {
-1: {
+2: {
 "completed": false,
-"time": 32.64999999999943
+"time": 6.499999999999982
 }
 }
 player_profiles = {
 "facu": {
-"display_name": "facu",
+"display_name": "Facu",
 "records": {
-1: {
+2: {
 "completed": false,
-"time": 32.549999999999436
+"time": 6.499999999999982
 }
 }
 },
@@ -25,17 +25,8 @@ player_profiles = {
 "display_name": "PLAYER",
 "records": {
 1: {
-"completed": true,
-"time": 45.0
-}
-}
-},
-"tortuta": {
-"display_name": "TORTUTA",
-"records": {
-1: {
 "completed": false,
-"time": 32.64999999999943
+"time": 14.600000000000305
 }
 }
 }

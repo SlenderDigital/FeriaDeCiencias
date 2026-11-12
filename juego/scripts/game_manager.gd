@@ -1,8 +1,11 @@
 extends Node
 
 signal state_changed(new_state: int)
+signal difficulty_changed(new_difficulty: int)
 signal record_updated(difficulty: int, time_survived: float, completed: bool)
 signal player_name_changed(new_name: String)
+signal preview_name_changed(preview_name: String)
+signal live_telemetry_updated(elapsed: float, duration: float, hp: int, max_hp: int)
 
 enum State {
 	MENU = 0,
@@ -23,19 +26,149 @@ const DEV_SAVE_PATH: String = "res://data/save_data.tres"
 const MAIN_MENU_SCENE: String = "res://scenes/main_menu.tscn"
 const LEVEL_SCENE: String = "res://scenes/level.tscn"
 const CREDITS_SCENE: String = "res://scenes/credits.tscn"
+const SPECTATOR_VIEW_SCRIPT: GDScript = preload("res://scripts/spectator_ranking_view.gd")
 const DIFFICULTY_NAMES: Array[String] = ["Easy", "Normal", "Hard"]
 const MAX_NAME_LENGTH: int = 12
+const SCREEN_POLL_INTERVAL: float = 1.0
 
 var state: int = State.MENU
 var selected_difficulty: int = Difficulty.NORMAL
 var save_data: SaveData = null
 var save_path: String = SAVE_PATH
 
+var spectator_window: Window = null
+var spectator_view: Control = null
+## 0 = auto (open when >=2 monitors), 1 = forced ON (F10), -1 = forced OFF (F10)
+var spectator_override_mode: int = 0
+var _screen_poll_timer: float = 0.0
+var _last_detected_screens: int = -1
+var _test_screen_count_override: int = -1
+
 
 func _ready() -> void:
 	load_game()
 	if not ResourceLoader.exists(save_path):
 		save_game()
+	call_deferred("evaluate_spectator_display")
+
+
+func _process(delta: float) -> void:
+	_screen_poll_timer += delta
+	if _screen_poll_timer >= SCREEN_POLL_INTERVAL:
+		_screen_poll_timer = 0.0
+		var count: int = get_available_screen_count()
+		if count != _last_detected_screens:
+			evaluate_spectator_display()
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if event is InputEventKey:
+		var key_event: InputEventKey = event as InputEventKey
+		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_F10:
+			toggle_spectator_window()
+			get_viewport().set_input_as_handled()
+
+
+func get_available_screen_count() -> int:
+	if _test_screen_count_override >= 0:
+		return _test_screen_count_override
+	return maxi(1, DisplayServer.get_screen_count())
+
+
+func set_test_screen_count_override(count: int) -> void:
+	_test_screen_count_override = count
+	evaluate_spectator_display()
+
+
+func get_secondary_screen_index() -> int:
+	var count: int = get_available_screen_count()
+	if count < 2:
+		return -1
+	if _test_screen_count_override >= 2:
+		return 1
+	var main_screen: int = DisplayServer.window_get_current_screen(DisplayServer.MAIN_WINDOW_ID)
+	for idx: int in range(count):
+		if idx != main_screen:
+			return idx
+	return 1
+
+
+func is_spectator_window_active() -> bool:
+	return spectator_window != null and is_instance_valid(spectator_window) and spectator_window.visible
+
+
+func evaluate_spectator_display() -> void:
+	var count: int = get_available_screen_count()
+	_last_detected_screens = count
+	var should_show: bool = false
+	if spectator_override_mode == 1:
+		should_show = true
+	elif spectator_override_mode == -1:
+		should_show = false
+	else:
+		should_show = count >= 2 and DisplayServer.get_name() != "headless"
+		if _test_screen_count_override >= 2:
+			should_show = true
+
+	if should_show:
+		_open_or_place_spectator_window()
+	else:
+		_close_spectator_window()
+
+
+func toggle_spectator_window() -> bool:
+	if is_spectator_window_active():
+		spectator_override_mode = -1
+	else:
+		spectator_override_mode = 1
+	evaluate_spectator_display()
+	return is_spectator_window_active()
+
+
+func _open_or_place_spectator_window() -> void:
+	var root_win: Window = get_tree().root
+	if DisplayServer.get_name() != "headless":
+		root_win.gui_embed_subwindows = false
+
+	var created: bool = false
+	if spectator_window == null or not is_instance_valid(spectator_window):
+		spectator_window = Window.new()
+		spectator_window.name = "SpectatorRankingWindow"
+		spectator_window.title = "Shapes & Beams — Live Ranking"
+		spectator_window.close_requested.connect(func() -> void:
+			spectator_override_mode = -1
+			_close_spectator_window()
+		)
+		spectator_view = SPECTATOR_VIEW_SCRIPT.new() as Control
+		spectator_window.add_child(spectator_view)
+		root_win.add_child(spectator_window)
+		created = true
+
+	var secondary_screen: int = get_secondary_screen_index()
+	if secondary_screen >= 0 and DisplayServer.get_name() != "headless":
+		spectator_window.unfocusable = true
+		spectator_window.borderless = true
+		spectator_window.current_screen = secondary_screen
+		spectator_window.mode = Window.MODE_FULLSCREEN
+	else:
+		spectator_window.unfocusable = false
+		spectator_window.borderless = false
+		if created:
+			spectator_window.size = Vector2i(960, 540)
+
+	spectator_window.visible = true
+	if spectator_view != null and spectator_view.has_method("refresh_all"):
+		spectator_view.call("refresh_all")
+
+
+func _close_spectator_window() -> void:
+	if spectator_window != null and is_instance_valid(spectator_window):
+		spectator_window.visible = false
+		if spectator_window.get_parent() != null:
+			spectator_window.get_parent().remove_child(spectator_window)
+		spectator_window.free()
+	spectator_window = null
+	spectator_view = null
 
 
 func get_absolute_save_path() -> String:
@@ -78,7 +211,11 @@ func set_state(new_state: int) -> void:
 
 
 func set_difficulty(mode: int) -> void:
-	selected_difficulty = clampi(mode, Difficulty.EASY, Difficulty.HARD)
+	var clamped: int = clampi(mode, Difficulty.EASY, Difficulty.HARD)
+	if clamped == selected_difficulty:
+		return
+	selected_difficulty = clamped
+	difficulty_changed.emit(selected_difficulty)
 
 
 func get_player_name() -> String:
@@ -93,6 +230,14 @@ func set_player_name(new_name: String) -> void:
 	player_name_changed.emit(save_data.player_name)
 
 
+func notify_preview_player_name(raw_name: String) -> void:
+	preview_name_changed.emit(SaveData.clean_player_name(raw_name, MAX_NAME_LENGTH))
+
+
+func report_live_telemetry(elapsed: float, duration: float, hp: int, max_hp: int) -> void:
+	live_telemetry_updated.emit(elapsed, duration, hp, max_hp)
+
+
 func get_difficulty_name(difficulty: int = selected_difficulty) -> String:
 	return DIFFICULTY_NAMES[clampi(difficulty, 0, DIFFICULTY_NAMES.size() - 1)]
 
@@ -102,9 +247,11 @@ func report_result(difficulty: int, time_survived: float, completed: bool) -> bo
 		return false
 	var improved: bool = save_data.submit_result(difficulty, time_survived, completed)
 	save_game()
+	set_state(State.COMPLETE if completed else State.GAME_OVER)
 	if improved:
 		record_updated.emit(difficulty, time_survived, completed)
-	set_state(State.COMPLETE if completed else State.GAME_OVER)
+	elif spectator_view != null and is_instance_valid(spectator_view):
+		spectator_view.call("refresh_all")
 	return improved
 
 

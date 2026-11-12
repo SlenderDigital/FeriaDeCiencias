@@ -200,6 +200,7 @@ func simulate_physics(delta: float) -> void:
 
 	elapsed_time += delta
 	hud.update_timer(elapsed_time, level_duration)
+	GameManager.report_live_telemetry(elapsed_time, level_duration, player.current_hp, player.MAX_HP)
 	_update_music_reactivity()
 
 	if elapsed_time >= level_duration:
@@ -233,6 +234,8 @@ func restart_level() -> void:
 	player.reset_player(_arena_size * 0.5)
 	hud.reset(level_duration)
 	hud.update_shield(player.get_shield_energy_ratio(), player.is_shielding, player.shield_exhausted)
+	GameManager.set_state(GameManager.State.PLAYING)
+	GameManager.report_live_telemetry(0.0, level_duration, player.current_hp, player.MAX_HP)
 	_sync_hand_tracking_to_gameplay(0.0)
 	SoundManager.play_music(_get_music_pitch_for_difficulty())
 	_update_music_reactivity()
@@ -569,6 +572,7 @@ func _on_player_shield_broken() -> void:
 
 
 func _on_player_damaged(_amount: int) -> void:
+	GameManager.report_live_telemetry(elapsed_time, level_duration, player.current_hp, player.MAX_HP)
 	arena_fx.spawn_burst(player.global_position, 12, 240.0, Color(0.95, 0.95, 0.95, 1.0), 0.36, 10.0, 2.0)
 	arena_fx.spawn_ring(player.global_position, 8.0, 48.0, 0.34, Color(0.82, 0.82, 0.82, 1.0), 2.0)
 	arena_grid.pulse(0.55)
@@ -605,6 +609,7 @@ func trigger_level_complete() -> void:
 	arena_grid.set_music_state(0.0, 0.0, 0)
 	elapsed_time = level_duration
 	hud.update_timer(elapsed_time, level_duration)
+	GameManager.report_live_telemetry(elapsed_time, level_duration, player.current_hp, player.MAX_HP)
 	_clear_beams()
 	_shake_time = 0.0
 	_shake_strength = 0.0
@@ -626,6 +631,7 @@ func _on_player_died() -> void:
 	is_level_running = false
 	SoundManager.stop_music()
 	arena_grid.set_music_state(0.0, 0.0, 0)
+	GameManager.report_live_telemetry(elapsed_time, level_duration, 0, player.MAX_HP)
 	_clear_beams()
 
 	var is_record: bool = GameManager.report_result(difficulty_mode, elapsed_time, false)
