@@ -524,6 +524,10 @@ func test_hand_tracking_udp_decoding_socket_draining_and_mirrored_palm_target() 
 		level.simulate_physics(0.05)
 	assert_false(player.is_shielding, "Sustained fist must exhaust the shield")
 	assert_true(player.shield_exhausted, "Shield must report the exhausted state")
+	var hand_shadow_node: Node2D = level.get_node("HandShadow") as Node2D
+	var hull_border_node: Line2D = level.get_node("HandShadow/ShieldHullBorder") as Line2D
+	assert_false(bool(hand_shadow_node.is_shield_visual_active), "Exhausted shield must deactivate hand hologram shield state")
+	assert_false(hull_border_node.visible, "Exhausted shield must hide hand hologram shield hull border")
 
 	level.ingest_hand_packet(open_pkt)
 	player._physics_process(0.016)
@@ -579,13 +583,21 @@ func test_hand_tracking_hud_status_pill_and_constellation_shadow() -> void:
 	var beam_container: Node2D = level.get_node("BeamContainer") as Node2D
 	var player: CharacterBody2D = level.get_node("Player") as CharacterBody2D
 	var palm_poly: Polygon2D = level.get_node("HandShadow/PalmPolygon") as Polygon2D
+	var hull_poly: Polygon2D = level.get_node("HandShadow/ShieldHullPolygon") as Polygon2D
+	var hull_border: Line2D = level.get_node("HandShadow/ShieldHullBorder") as Line2D
 	var index_bone: Line2D = level.get_node("HandShadow/IndexBone") as Line2D
+	var tip_4: Polygon2D = level.get_node("HandShadow/Fingertip4") as Polygon2D
 	var tip_8: Polygon2D = level.get_node("HandShadow/Fingertip8") as Polygon2D
+	var tip_12: Polygon2D = level.get_node("HandShadow/Fingertip12") as Polygon2D
+	var tip_16: Polygon2D = level.get_node("HandShadow/Fingertip16") as Polygon2D
+	var tip_20: Polygon2D = level.get_node("HandShadow/Fingertip20") as Polygon2D
+	var player_shield_ring: Line2D = level.get_node("Player/ShieldRing") as Line2D
 	var status_pill: ColorRect = level.get_node("HUD/HUDRoot/HandStatusPill") as ColorRect
 	var status_icon: Polygon2D = level.get_node("HUD/HUDRoot/HandStatusPill/HandStatusIcon") as Polygon2D
 	var status_label: Label = level.get_node("HUD/HUDRoot/HandStatusPill/HandStatusLabel") as Label
 
 	assert_true(hand_shadow != null, "HandShadow node must exist in level.tscn")
+	assert_true(hull_poly != null and hull_border != null, "HandShadow must include ShieldHullPolygon and ShieldHullBorder")
 	assert_true(status_pill != null and status_icon != null and status_label != null, "HUD HandStatusPill, icon, and label must exist")
 	assert_gt(hand_shadow.get_index(), bg.get_index(), "Background must be drawn behind HandShadow")
 	assert_gt(beam_container.get_index(), hand_shadow.get_index(), "HandShadow must be drawn behind BeamContainer hazards")
@@ -600,17 +612,29 @@ func test_hand_tracking_hud_status_pill_and_constellation_shadow() -> void:
 	level.ingest_hand_packet(open_pkt)
 	assert_eq(status_label.text, "HAND: TRACKING", "HUD status must display HAND: TRACKING when 21 landmarks are received")
 	assert_true(hand_shadow.visible, "HandShadow must become visible when hand is tracked")
+	assert_false(hull_poly.visible, "ShieldHullPolygon must be hidden when hand is open")
+	assert_false(hull_border.visible, "ShieldHullBorder must be hidden when hand is open")
 	assert_eq(palm_poly.polygon.size(), 6, "PalmPolygon must have 6 vertices (#0, #1, #5, #9, #13, #17)")
 	assert_eq(index_bone.points.size(), 5, "IndexBone Line2D must connect 5 landmarks (#0, #5, #6, #7, #8)")
 	var open_tip8_pos: Vector2 = tip_8.position
 	var open_tip8_scale: Vector2 = tip_8.scale
+	var open_bone_width: float = index_bone.width
 
 	var fist_pkt: PackedByteArray = HAND_TRACKING_CLIENT_SCRIPT.encode_landmarks_packet(
 		_build_hand_landmarks(Vector2(0.40, 0.50), true)
 	)
 	level.ingest_hand_packet(fist_pkt)
+	player._physics_process(0.016)
 	assert_gt(tip_8.scale.x, open_tip8_scale.x, "Fingertip node must pulse larger on closed-fist input")
 	assert_true(tip_8.position != open_tip8_pos, "Fingertip node must contract toward palm on closed fist")
+	assert_true(bool(hand_shadow.is_shield_visual_active), "HandShadow must activate shield visual state on closed fist")
+	assert_true(hull_poly.visible and hull_border.visible, "HandShadow shield hull barrier must appear when fist is closed")
+	assert_gt(index_bone.width, open_bone_width, "HandShadow bone conduits must thicken when acting as the shield")
+	assert_true(absf(tip_4.position.y - tip_20.position.y) < 4.0, "Thumb and pinky tips must align horizontally as shield shoulders")
+	assert_true(absf(tip_8.position.y - tip_16.position.y) < 4.0, "Index and ring tips must align horizontally as shield crown peaks")
+	assert_true(tip_12.position.y < tip_8.position.y, "Middle tip must form the top-center apex of the crest shield")
+	assert_gt(palm_poly.polygon[0].y, tip_4.position.y + 40.0, "Wrist landmark must form the bottom point of the crest shield")
+	assert_false(player_shield_ring.visible, "Player circular ShieldRing must be hidden while hand hologram acts as the shield")
 
 	var empty_pkt: PackedByteArray = HAND_TRACKING_CLIENT_SCRIPT.encode_empty_packet()
 	level.ingest_hand_packet(empty_pkt)
@@ -644,6 +668,7 @@ func test_shield_hud_reflects_energy_state() -> void:
 	level.simulate_physics(0.016)
 	assert_eq(shield_label.text, "SHIELD: ACTIVE", "Shield HUD must report active state")
 	assert_true(shield_fill.size.x < shield_bg.size.x, "Shield HUD must shrink while draining")
+	assert_true((player.get_node("ShieldRing") as Line2D).visible, "Player circular ShieldRing must remain visible when shielding via keyboard/mouse")
 
 	for _i: int in range(40):
 		player._physics_process(0.05)

@@ -61,6 +61,20 @@ script = ExtResource("3_grid")
 light_mask = 2
 script = ExtResource("5_shadow")
 
+[node name="ShieldHullPolygon" type="Polygon2D" parent="HandShadow" unique_id=1427960651]
+visible = false
+light_mask = 0
+color = Color(0.72, 0.72, 0.72, 0)
+
+[node name="ShieldHullBorder" type="Line2D" parent="HandShadow" unique_id=1427960652]
+visible = false
+light_mask = 0
+closed = true
+width = 4.0
+default_color = Color(0.95, 0.95, 0.95, 0)
+joint_mode = 2
+antialiased = true
+
 [node name="PalmPolygon" type="Polygon2D" parent="HandShadow" unique_id=1427960650]
 light_mask = 2
 color = Color(0.18, 0.18, 0.18, 0.42)

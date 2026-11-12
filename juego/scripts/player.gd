@@ -268,14 +268,15 @@ func _update_visuals(_delta: float) -> void:
 	player_light.energy = (0.85 + shield_boost + flash_boost * 1.4) * dim_factor
 	player_light.texture_scale = 2.5 + (0.35 if is_shielding else 0.0) + 0.40 * shield_block_flash + 0.25 * shield_activation_flash
 
-	shield_glow.visible = is_shielding or shield_block_flash > 0.0 or shield_activation_flash > 0.0
+	var show_circular_shield: bool = not external_tracking_active and (is_shielding or shield_block_flash > 0.0 or shield_activation_flash > 0.0)
+	shield_glow.visible = show_circular_shield
 	if shield_glow.visible:
 		var low_energy: float = 0.0 if shield_energy > 0.25 else (1.0 - shield_energy / 0.25)
 		var flicker: float = 1.0 - 0.25 * low_energy * (0.5 + 0.5 * sin(shield_energy * 90.0))
 		shield_glow.color = Color(0.72, 0.72, 0.72, (0.10 + 0.10 * shield_block_flash + 0.08 * shield_activation_flash) * flicker)
 		shield_glow.scale = Vector2.ONE * (1.0 + 0.18 * shield_block_flash + 0.10 * shield_activation_flash)
 
-	shield_ring.visible = is_shielding or shield_block_flash > 0.0 or shield_activation_flash > 0.0
+	shield_ring.visible = show_circular_shield
 	if shield_ring.visible:
 		var ring_scale: float = 1.0 + 0.08 * shield_activation_flash - 0.05 * (1.0 - get_shield_energy_ratio()) + 0.10 * shield_block_flash
 		shield_ring.scale = Vector2.ONE * ring_scale

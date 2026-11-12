@@ -482,7 +482,7 @@ func _sync_hand_tracking_to_gameplay(delta: float) -> void:
 		elif player.external_tracking_active:
 			release_hand_tracking_target()
 
-	hand_shadow.update_from_tracker(hand_tracker, delta, _arena_size)
+	hand_shadow.update_from_tracker(hand_tracker, delta, _arena_size, player)
 	var state: int = int(hand_tracker.tracking_state) if hand_tracker != null else 0
 	var label_str: String = hand_tracker.get_status_label_text() if hand_tracker != null else "HAND: OFFLINE"
 	hud.update_hand_status(state, label_str, hand_shadow.pulse)
