@@ -114,12 +114,30 @@ func clear_player_records(for_player: String = "") -> void:
 
 
 ## Returns the highest difficulty with a recorded run for `for_player`, or -1 when nothing is stored.
+## Protects completed standard runs (0..2) from being overshadowed by an incomplete Boss run (3).
 func get_highest_difficulty(for_player: String = "") -> int:
 	var rec_map: Dictionary = get_player_records(for_player)
-	var highest: int = -1
+	return _select_best_global_difficulty(rec_map)
+
+
+static func _global_tier_rank(difficulty: int, completed: bool) -> int:
+	if difficulty >= 3:
+		return 100 if completed else 15
+	var clamped_std: int = clampi(difficulty, 0, 2)
+	return (clamped_std + 1) * 20 + (0 if completed else -10)
+
+
+static func _select_best_global_difficulty(rec_map: Dictionary) -> int:
+	var best_diff: int = -1
+	var best_rank: int = -1
 	for key: Variant in rec_map.keys():
-		highest = maxi(highest, int(key))
-	return highest
+		var diff: int = int(key)
+		var rec: Dictionary = rec_map[key] as Dictionary
+		var tier_rank: int = _global_tier_rank(diff, bool(rec.get("completed", false)))
+		if tier_rank > best_rank or (tier_rank == best_rank and diff > best_diff):
+			best_rank = tier_rank
+			best_diff = diff
+	return best_diff
 
 
 ## Returns the record of a difficulty for `for_player` ({} when never played).
@@ -185,9 +203,11 @@ func submit_result(difficulty: int, time_survived: float, completed: bool, for_p
 
 
 ## Returns a ranked leaderboard array across all saved players.
-## When `difficulty_filter == -1`, ranks players by their highest difficulty record.
-## When `difficulty_filter` is 0 (Easy), 1 (Normal), or 2 (Hard), ranks only players
-## who have recorded a run on that specific difficulty.
+## When `difficulty_filter == -1`, ranks players by their best overall record
+## (with completed Boss runs crowning #1, while protecting completed standard runs
+## from being overshadowed by incomplete Boss runs).
+## When `difficulty_filter` is 0 (Easy), 1 (Normal), 2 (Hard), or 3 (Boss), ranks
+## only players who have recorded a run on that specific difficulty.
 func get_leaderboard(difficulty_filter: int = -1, current_player_override: String = "") -> Array[Dictionary]:
 	sync_active_profile()
 	var active_key: String = normalize_player_key(
@@ -204,9 +224,7 @@ func get_leaderboard(difficulty_filter: int = -1, current_player_override: Strin
 			continue
 
 		if difficulty_filter < 0:
-			var highest_diff: int = -1
-			for d_key: Variant in rec_map.keys():
-				highest_diff = maxi(highest_diff, int(d_key))
+			var highest_diff: int = _select_best_global_difficulty(rec_map)
 			if highest_diff < 0:
 				continue
 			var best_rec: Dictionary = rec_map.get(highest_diff, {}) as Dictionary
@@ -236,10 +254,13 @@ func get_leaderboard(difficulty_filter: int = -1, current_player_override: Strin
 	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		var diff_a: int = int(a.get("difficulty", 0))
 		var diff_b: int = int(b.get("difficulty", 0))
-		if difficulty_filter < 0 and diff_a != diff_b:
-			return diff_a > diff_b
 		var comp_a: bool = bool(a.get("completed", false))
 		var comp_b: bool = bool(b.get("completed", false))
+		if difficulty_filter < 0:
+			var rank_a: int = _global_tier_rank(diff_a, comp_a)
+			var rank_b: int = _global_tier_rank(diff_b, comp_b)
+			if rank_a != rank_b:
+				return rank_a > rank_b
 		if comp_a != comp_b:
 			return comp_a
 		var time_a: float = float(a.get("time", 0.0))

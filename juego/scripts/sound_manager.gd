@@ -11,6 +11,14 @@ const BEAT_DURATION: float = 60.0 / MUSIC_BPM
 const BAR_SAMPLES: int = 2584 * 16
 const BAR_DURATION: float = float(BAR_SAMPLES) / float(MIX_RATE)
 const TOTAL_MUSIC_BARS: int = 24
+const BOSS_TOTAL_BARS: int = 64
+const BOSS_TOTAL_PHASES: int = 8
+const BOSS_PHASE_DURATION: float = 15.0
+const BOSS_TOTAL_DURATION: float = 120.0
+const BOSS_SILENCE_START: float = 156.0 * BEAT_DURATION  # 73.125s (Bar 39 Beat 0)
+const BOSS_SILENCE_END: float = 158.0 * BEAT_DURATION    # 74.0625s (Bar 39 Beat 2)
+const BOSS_SHATTER_START: float = 252.0 * BEAT_DURATION  # 118.125s (Bar 63 Beat 0)
+const BOSS_TAIL_SILENCE_START: float = 119.95
 
 enum MusicSection {
 	INTRO = 0,
@@ -35,9 +43,12 @@ const SFX_STREAMS: Dictionary = {
 	&"saw_bounce": preload("res://assets/audio/saw_bounce.wav"),
 	&"victory": preload("res://assets/audio/victory.wav"),
 	&"game_over": preload("res://assets/audio/game_over.wav"),
+	&"boss_roar": preload("res://assets/audio/boss_roar.wav"),
+	&"boss_phase": preload("res://assets/audio/boss_phase.wav"),
 }
 
 const MUSIC_STREAM: AudioStreamWAV = preload("res://assets/audio/music.wav")
+const BOSS_MUSIC_STREAM: AudioStreamWAV = preload("res://assets/audio/boss_music.wav")
 
 var music_player: AudioStreamPlayer = null
 var _music_playing: bool = false
@@ -110,6 +121,16 @@ func play_music(pitch_scale: float = 1.0) -> void:
 		return
 	music_player.pitch_scale = pitch_scale
 	music_player.stream = MUSIC_STREAM
+	music_player.stop()
+	music_player.play(0.0)
+
+
+func play_boss_music(pitch_scale: float = 1.0) -> void:
+	_music_playing = true
+	if music_player == null:
+		return
+	music_player.pitch_scale = pitch_scale
+	music_player.stream = BOSS_MUSIC_STREAM
 	music_player.stop()
 	music_player.play(0.0)
 
@@ -203,4 +224,51 @@ static func get_beat_intensity(elapsed_seconds: float) -> float:
 			base_energy = 0.92
 		MusicSection.FINALE:
 			base_energy = 1.0
+	return clampf(base_energy * (0.62 + 0.38 * kick_env), 0.15, 1.0)
+
+
+static func get_boss_section(elapsed_seconds: float) -> int:
+	var clamped: float = clampf(elapsed_seconds, 0.0, BOSS_TOTAL_DURATION - 0.0001)
+	return clampi(int(floor(clamped / BOSS_PHASE_DURATION)), 0, BOSS_TOTAL_PHASES - 1)
+
+
+static func get_boss_beat_intensity(elapsed_seconds: float) -> float:
+	var t: float = maxf(elapsed_seconds, 0.0)
+	if t >= BOSS_SILENCE_START and t < BOSS_SILENCE_END:
+		return 0.0
+	if t >= BOSS_TAIL_SILENCE_START:
+		return 0.0
+
+	var section: int = get_boss_section(t)
+	var kick_env: float = pow(1.0 - get_beat_phase(t), 2.2)
+
+	if section == 4:
+		if t < BOSS_SILENCE_START:
+			return clampf(0.32 * (0.85 + 0.15 * kick_env), 0.25, 0.35)
+		return clampf(0.98 * (0.68 + 0.32 * kick_env), 0.20, 1.0)
+
+	var base_energy: float = 0.56
+	match section:
+		0:
+			base_energy = 0.56
+		1:
+			base_energy = 0.68
+		2:
+			base_energy = 0.80
+		3:
+			base_energy = 0.88
+		5:
+			base_energy = 0.94
+		6:
+			base_energy = 0.62
+		7:
+			base_energy = 1.0
+			if t >= BOSS_SHATTER_START:
+				var fade_u: float = clampf(
+					(BOSS_TAIL_SILENCE_START - t) / (BOSS_TAIL_SILENCE_START - BOSS_SHATTER_START),
+					0.0,
+					1.0
+				)
+				return clampf(0.90 * fade_u, 0.0, 1.0)
+
 	return clampf(base_energy * (0.62 + 0.38 * kick_env), 0.15, 1.0)

@@ -67,7 +67,7 @@ func _ready() -> void:
 	rng.randomize()
 	_shake_rng.randomize()
 	hand_tracker = HandTrackingClient
-	difficulty_mode = clampi(GameManager.selected_difficulty, Difficulty.EASY, Difficulty.HARD)
+	difficulty_mode = _resolve_difficulty()
 
 	get_viewport().size_changed.connect(_on_viewport_resized)
 	player.hp_changed.connect(hud.update_hp)
@@ -110,6 +110,38 @@ func ingest_hand_packet_batch(packets: Array[PackedByteArray]) -> bool:
 	var ok: bool = hand_tracker.ingest_packet_batch(packets)
 	_sync_hand_tracking_to_gameplay(0.016)
 	return ok
+
+
+func _resolve_difficulty() -> int:
+	return clampi(GameManager.selected_difficulty, Difficulty.EASY, Difficulty.HARD)
+
+
+func _start_music() -> void:
+	SoundManager.play_music(_get_music_pitch_for_difficulty())
+
+
+func _update_spawning(delta: float) -> void:
+	spawn_timer -= delta
+	if spawn_timer <= 0.0:
+		_spawn_next_wave()
+		var progress_ratio: float = clampf(elapsed_time / maxf(level_duration, 0.001), 0.0, 1.0)
+		spawn_timer = get_spawn_interval_for_progress(progress_ratio)
+
+
+func _clear_hazards() -> void:
+	_clear_beams()
+
+
+func _build_victory_subtitle(is_record: bool, rank: int) -> String:
+	var badge: String = " ★ NEW RECORD! ★" if is_record else ""
+	var rank_str: String = " [Rank #%d]" % rank if rank > 0 else ""
+	return "%s: Survived %.1fs on %s%s%s" % [GameManager.get_player_name(), level_duration, get_difficulty_name(), badge, rank_str]
+
+
+func _build_game_over_subtitle(is_record: bool, rank: int) -> String:
+	var badge: String = " ★ NEW RECORD! ★" if is_record else ""
+	var rank_str: String = " [Rank #%d]" % rank if rank > 0 else ""
+	return "%s: Survived %.1fs on %s%s%s" % [GameManager.get_player_name(), elapsed_time, get_difficulty_name(), badge, rank_str]
 
 
 func set_difficulty(mode: int) -> void:
@@ -207,15 +239,11 @@ func simulate_physics(delta: float) -> void:
 		trigger_level_complete()
 		return
 
-	spawn_timer -= delta
-	if spawn_timer <= 0.0:
-		_spawn_next_wave()
-		var progress_ratio: float = clampf(elapsed_time / maxf(level_duration, 0.001), 0.0, 1.0)
-		spawn_timer = get_spawn_interval_for_progress(progress_ratio)
+	_update_spawning(delta)
 
 
 func restart_level() -> void:
-	_clear_beams()
+	_clear_hazards()
 	arena_fx.clear()
 	_shake_time = 0.0
 	_shake_strength = 0.0
@@ -237,7 +265,7 @@ func restart_level() -> void:
 	GameManager.set_state(GameManager.State.PLAYING)
 	GameManager.report_live_telemetry(0.0, level_duration, player.current_hp, player.MAX_HP)
 	_sync_hand_tracking_to_gameplay(0.0)
-	SoundManager.play_music(_get_music_pitch_for_difficulty())
+	_start_music()
 	_update_music_reactivity()
 
 
@@ -325,7 +353,9 @@ func spawn_closing_wall(
 	axis: int = -1,
 	gap_center: float = -1.0,
 	gap_size: float = MIN_WALL_GAP,
-	warning: float = 1.25
+	warning: float = 1.25,
+	close_time_override: float = -1.0,
+	hold_time_override: float = -1.0
 ) -> Node2D:
 	var wall: Node2D = CLOSING_WALL_SCENE.instantiate() as Node2D
 	beam_container.add_child(wall)
@@ -334,8 +364,8 @@ func spawn_closing_wall(
 	var player_axis_pos: float = player.global_position.x if chosen_axis == 0 else player.global_position.y
 	var chosen_center: float = gap_center if gap_center >= 0.0 else player_axis_pos + rng.randf_range(-92.0, 92.0)
 	chosen_center = clampf(chosen_center, gap_size * 0.5 + 40.0, axis_span - gap_size * 0.5 - 40.0)
-	var close_time: float = 0.76 - 0.06 * float(difficulty_mode)
-	var hold_time: float = 1.25 - 0.05 * float(difficulty_mode)
+	var close_time: float = close_time_override if close_time_override > 0.0 else 0.76 - 0.06 * float(difficulty_mode)
+	var hold_time: float = hold_time_override if hold_time_override > 0.0 else 1.25 - 0.05 * float(difficulty_mode)
 	wall.configure(chosen_axis, chosen_center, gap_size, 46.0, warning, close_time, hold_time, 0.55)
 	wall.wall_slammed.connect(_on_wall_slammed)
 	walls_spawned += 1
@@ -610,7 +640,7 @@ func trigger_level_complete() -> void:
 	elapsed_time = level_duration
 	hud.update_timer(elapsed_time, level_duration)
 	GameManager.report_live_telemetry(elapsed_time, level_duration, player.current_hp, player.MAX_HP)
-	_clear_beams()
+	_clear_hazards()
 	_shake_time = 0.0
 	_shake_strength = 0.0
 	game_camera.offset = Vector2.ZERO
@@ -618,9 +648,7 @@ func trigger_level_complete() -> void:
 
 	var is_record: bool = GameManager.report_result(difficulty_mode, level_duration, true)
 	var rank: int = GameManager.get_player_rank(difficulty_mode)
-	var badge: String = " ★ NEW RECORD! ★" if is_record else ""
-	var rank_str: String = " [Rank #%d]" % rank if rank > 0 else ""
-	hud.show_level_complete("%s: Survived 45.0s on %s%s%s" % [GameManager.get_player_name(), get_difficulty_name(), badge, rank_str])
+	hud.show_level_complete(_build_victory_subtitle(is_record, rank))
 	SoundManager.play_sfx(&"victory", -1.5)
 	level_completed.emit()
 
@@ -632,13 +660,11 @@ func _on_player_died() -> void:
 	SoundManager.stop_music()
 	arena_grid.set_music_state(0.0, 0.0, 0)
 	GameManager.report_live_telemetry(elapsed_time, level_duration, 0, player.MAX_HP)
-	_clear_beams()
+	_clear_hazards()
 
 	var is_record: bool = GameManager.report_result(difficulty_mode, elapsed_time, false)
 	var rank: int = GameManager.get_player_rank(difficulty_mode)
-	var badge: String = " ★ NEW RECORD! ★" if is_record else ""
-	var rank_str: String = " [Rank #%d]" % rank if rank > 0 else ""
-	hud.show_game_over("%s: Survived %.1fs on %s%s%s" % [GameManager.get_player_name(), elapsed_time, get_difficulty_name(), badge, rank_str])
+	hud.show_game_over(_build_game_over_subtitle(is_record, rank))
 	arena_grid.pulse(0.8)
 	trigger_screen_shake(6.0, 0.35)
 	SoundManager.play_sfx(&"game_over", -1.5)

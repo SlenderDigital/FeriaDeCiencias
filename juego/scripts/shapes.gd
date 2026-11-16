@@ -131,4 +131,3 @@ static func apply_radial_glow(
 	poly.polygon = verts
 	poly.polygons = polys
 	poly.vertex_colors = colors
-

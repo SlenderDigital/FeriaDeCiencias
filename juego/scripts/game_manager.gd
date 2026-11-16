@@ -19,20 +19,26 @@ enum Difficulty {
 	EASY = 0,
 	NORMAL = 1,
 	HARD = 2,
+	BOSS = 3,
 }
 
 const SAVE_PATH: String = "user://save_data.tres"
 const DEV_SAVE_PATH: String = "res://data/save_data.tres"
 const MAIN_MENU_SCENE: String = "res://scenes/main_menu.tscn"
 const LEVEL_SCENE: String = "res://scenes/level.tscn"
+const BOSS_LEVEL_SCENE: String = "res://scenes/boss_level.tscn"
 const CREDITS_SCENE: String = "res://scenes/credits.tscn"
 const SPECTATOR_VIEW_SCRIPT: GDScript = preload("res://scripts/spectator_ranking_view.gd")
-const DIFFICULTY_NAMES: Array[String] = ["Easy", "Normal", "Hard"]
+const DIFFICULTY_NAMES: Array[String] = ["Easy", "Normal", "Hard", "Boss"]
+const BOSS_TOTAL_PHASES: int = 8
+const BOSS_PHASE_DURATION: float = 15.0
+const BOSS_LEVEL_DURATION: float = 120.0
 const MAX_NAME_LENGTH: int = 12
 const SCREEN_POLL_INTERVAL: float = 1.0
 
 var state: int = State.MENU
 var selected_difficulty: int = Difficulty.NORMAL
+var active_run_difficulty: int = Difficulty.NORMAL
 var save_data: SaveData = null
 var save_path: String = SAVE_PATH
 
@@ -212,6 +218,8 @@ func set_state(new_state: int) -> void:
 
 func set_difficulty(mode: int) -> void:
 	var clamped: int = clampi(mode, Difficulty.EASY, Difficulty.HARD)
+	if state == State.MENU:
+		active_run_difficulty = clamped
 	if clamped == selected_difficulty:
 		return
 	selected_difficulty = clamped
@@ -242,9 +250,27 @@ func get_difficulty_name(difficulty: int = selected_difficulty) -> String:
 	return DIFFICULTY_NAMES[clampi(difficulty, 0, DIFFICULTY_NAMES.size() - 1)]
 
 
+static func get_boss_phase_for_time(time_survived: float, completed: bool = false) -> int:
+	if completed:
+		return BOSS_TOTAL_PHASES
+	return clampi(int(floor(maxf(time_survived, 0.0) / BOSS_PHASE_DURATION)) + 1, 1, BOSS_TOTAL_PHASES)
+
+
+func format_run_score(difficulty: int, time_survived: float, completed: bool, compact: bool = false) -> String:
+	if difficulty == Difficulty.BOSS:
+		if completed:
+			return "8/8 PHASES ★" if compact else "COMPLETED (8/8) ★"
+		var phase: int = get_boss_phase_for_time(time_survived, false)
+		return "P%d/8 (%.1fs)" % [phase, time_survived] if compact else "Phase %d/8 (%.1fs)" % [phase, time_survived]
+	if completed:
+		return "COMPLETED ★" if compact else "COMPLETED (45.0s) ★"
+	return "%.1fs" % time_survived if compact else "Survived %.1fs" % time_survived
+
+
 func report_result(difficulty: int, time_survived: float, completed: bool) -> bool:
 	if save_data == null:
 		return false
+	active_run_difficulty = clampi(difficulty, Difficulty.EASY, Difficulty.BOSS)
 	var improved: bool = save_data.submit_result(difficulty, time_survived, completed)
 	save_game()
 	set_state(State.COMPLETE if completed else State.GAME_OVER)
@@ -261,8 +287,19 @@ func get_best_summary(for_player: String = "") -> String:
 	var record: Dictionary = save_data.get_highest_record(for_player)
 	if record.is_empty():
 		return "No runs yet"
-	var status: String = "COMPLETED" if bool(record.get("completed", false)) else "%.1fs" % float(record.get("time", 0.0))
-	return "BEST  %s  -  %s" % [get_difficulty_name(int(record.get("difficulty", 0))).to_upper(), status]
+	var diff: int = int(record.get("difficulty", 0))
+	var completed: bool = bool(record.get("completed", false))
+	var time_val: float = float(record.get("time", 0.0))
+	var status: String
+	if diff == Difficulty.BOSS:
+		if completed:
+			status = "COMPLETED (8/8)"
+		else:
+			var phase: int = get_boss_phase_for_time(time_val, false)
+			status = "PHASE %d/8 (%.1fs)" % [phase, time_val]
+	else:
+		status = "COMPLETED" if completed else "%.1fs" % time_val
+	return "BEST  %s  -  %s" % [get_difficulty_name(diff).to_upper(), status]
 
 
 func get_leaderboard(difficulty_filter: int = -1, current_player_override: String = "") -> Array[Dictionary]:
@@ -278,14 +315,18 @@ func get_player_rank(difficulty_filter: int = -1, for_player: String = "") -> in
 
 
 func go_to_menu() -> void:
+	active_run_difficulty = selected_difficulty
 	set_state(State.MENU)
 	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
 
 
 func start_level(difficulty: int = selected_difficulty) -> void:
-	set_difficulty(difficulty)
+	active_run_difficulty = clampi(difficulty, Difficulty.EASY, Difficulty.BOSS)
+	if active_run_difficulty <= Difficulty.HARD:
+		set_difficulty(active_run_difficulty)
 	set_state(State.PLAYING)
-	get_tree().change_scene_to_file(LEVEL_SCENE)
+	var target_scene: String = BOSS_LEVEL_SCENE if active_run_difficulty == Difficulty.BOSS else LEVEL_SCENE
+	get_tree().change_scene_to_file(target_scene)
 
 
 func go_to_credits() -> void:

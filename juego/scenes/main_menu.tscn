@@ -252,6 +252,20 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
 theme_override_styles/focus = SubResource("StyleBoxFlat_play_normal")
 text = "Play"
 
+[node name="BossButton" type="Button" parent="CenterContainer/MenuBox" unique_id=1689884315]
+custom_minimum_size = Vector2(240, 46)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_focus_color = Color(0, 0, 0, 1)
+theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 19
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn_hover")
+text = "★ Boss Mode ★"
+
 [node name="RecordsButton" type="Button" parent="CenterContainer/MenuBox" unique_id=1689884314]
 custom_minimum_size = Vector2(240, 46)
 layout_mode = 2
@@ -408,6 +422,14 @@ theme_override_font_sizes/font_size = 13
 text = "HARD: No runs"
 horizontal_alignment = 1
 
+[node name="RecordsBossLabel" type="Label" parent="RecordsPanel/RecordsCenter/RecordsBox/Content/PersonalStatsBox" unique_id=849707498]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.88, 0.88, 0.88, 1)
+theme_override_font_sizes/font_size = 13
+text = "BOSS: No runs"
+horizontal_alignment = 1
+
 [node name="Sep1" type="HSeparator" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=1621544469]
 layout_mode = 2
 theme_override_styles/separator = SubResource("StyleBoxLine_sep")
@@ -425,7 +447,7 @@ alignment = 1
 theme_override_constants/separation = 8
 
 [node name="FilterAllButton" type="Button" parent="RecordsPanel/RecordsCenter/RecordsBox/Content/FilterRow" unique_id=1621544472]
-custom_minimum_size = Vector2(88, 34)
+custom_minimum_size = Vector2(44, 34)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -440,7 +462,7 @@ theme_override_styles/focus = SubResource("StyleBoxFlat_btn_hover")
 text = "GLOBAL"
 
 [node name="FilterEasyButton" type="Button" parent="RecordsPanel/RecordsCenter/RecordsBox/Content/FilterRow" unique_id=1621544473]
-custom_minimum_size = Vector2(88, 34)
+custom_minimum_size = Vector2(44, 34)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -455,7 +477,7 @@ theme_override_styles/focus = SubResource("StyleBoxFlat_btn_hover")
 text = "EASY"
 
 [node name="FilterNormalButton" type="Button" parent="RecordsPanel/RecordsCenter/RecordsBox/Content/FilterRow" unique_id=1621544474]
-custom_minimum_size = Vector2(88, 34)
+custom_minimum_size = Vector2(44, 34)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -470,7 +492,7 @@ theme_override_styles/focus = SubResource("StyleBoxFlat_btn_hover")
 text = "NORMAL"
 
 [node name="FilterHardButton" type="Button" parent="RecordsPanel/RecordsCenter/RecordsBox/Content/FilterRow" unique_id=1621544475]
-custom_minimum_size = Vector2(88, 34)
+custom_minimum_size = Vector2(44, 34)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -483,6 +505,21 @@ theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
 theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
 theme_override_styles/focus = SubResource("StyleBoxFlat_btn_hover")
 text = "HARD"
+
+[node name="FilterBossButton" type="Button" parent="RecordsPanel/RecordsCenter/RecordsBox/Content/FilterRow" unique_id=1621544478]
+custom_minimum_size = Vector2(44, 34)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_focus_color = Color(0, 0, 0, 1)
+theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 13
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn_hover")
+text = "BOSS"
 
 [node name="LeaderboardScroll" type="ScrollContainer" parent="RecordsPanel/RecordsCenter/RecordsBox/Content" unique_id=1621544476]
 custom_minimum_size = Vector2(0, 160)

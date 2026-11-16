@@ -13,6 +13,7 @@ const DIFFICULTY_NAMES: Array[String] = ["Easy", "Normal", "Hard"]
 @onready var name_edit: LineEdit = $CenterContainer/MenuBox/NameEdit
 @onready var difficulty_button: Button = $CenterContainer/MenuBox/DifficultyButton
 @onready var play_button: Button = $CenterContainer/MenuBox/PlayButton
+@onready var boss_button: Button = $CenterContainer/MenuBox/BossButton
 @onready var records_button: Button = $CenterContainer/MenuBox/RecordsButton
 @onready var credits_button: Button = $CenterContainer/MenuBox/CreditsButton
 @onready var quit_button: Button = $CenterContainer/MenuBox/QuitButton
@@ -30,11 +31,13 @@ const DIFFICULTY_NAMES: Array[String] = ["Easy", "Normal", "Hard"]
 @onready var records_easy_label: Label = $RecordsPanel/RecordsCenter/RecordsBox/Content/PersonalStatsBox/RecordsEasyLabel
 @onready var records_normal_label: Label = $RecordsPanel/RecordsCenter/RecordsBox/Content/PersonalStatsBox/RecordsNormalLabel
 @onready var records_hard_label: Label = $RecordsPanel/RecordsCenter/RecordsBox/Content/PersonalStatsBox/RecordsHardLabel
+@onready var records_boss_label: Label = $RecordsPanel/RecordsCenter/RecordsBox/Content/PersonalStatsBox/RecordsBossLabel
 @onready var filter_row: HBoxContainer = $RecordsPanel/RecordsCenter/RecordsBox/Content/FilterRow
 @onready var filter_all_button: Button = $RecordsPanel/RecordsCenter/RecordsBox/Content/FilterRow/FilterAllButton
 @onready var filter_easy_button: Button = $RecordsPanel/RecordsCenter/RecordsBox/Content/FilterRow/FilterEasyButton
 @onready var filter_normal_button: Button = $RecordsPanel/RecordsCenter/RecordsBox/Content/FilterRow/FilterNormalButton
 @onready var filter_hard_button: Button = $RecordsPanel/RecordsCenter/RecordsBox/Content/FilterRow/FilterHardButton
+@onready var filter_boss_button: Button = $RecordsPanel/RecordsCenter/RecordsBox/Content/FilterRow/FilterBossButton
 @onready var leaderboard_scroll: ScrollContainer = $RecordsPanel/RecordsCenter/RecordsBox/Content/LeaderboardScroll
 @onready var leaderboard_list: VBoxContainer = $RecordsPanel/RecordsCenter/RecordsBox/Content/LeaderboardScroll/LeaderboardList
 @onready var records_close_button: Button = $RecordsPanel/RecordsCenter/RecordsBox/Content/RecordsCloseButton
@@ -62,6 +65,7 @@ func _ready() -> void:
 	name_edit.focus_exited.connect(_commit_player_name)
 	difficulty_button.pressed.connect(_on_difficulty_pressed)
 	play_button.pressed.connect(_on_play_pressed)
+	boss_button.pressed.connect(_on_boss_pressed)
 	records_button.pressed.connect(_on_records_pressed)
 	credits_button.pressed.connect(_on_credits_pressed)
 	quit_button.pressed.connect(_on_quit_pressed)
@@ -71,9 +75,11 @@ func _ready() -> void:
 	filter_easy_button.pressed.connect(func() -> void: set_leaderboard_filter(0))
 	filter_normal_button.pressed.connect(func() -> void: set_leaderboard_filter(1))
 	filter_hard_button.pressed.connect(func() -> void: set_leaderboard_filter(2))
+	filter_boss_button.pressed.connect(func() -> void: set_leaderboard_filter(GameManager.Difficulty.BOSS))
 
 	for btn: Button in [
 		difficulty_button,
+		boss_button,
 		records_button,
 		credits_button,
 		quit_button,
@@ -82,6 +88,7 @@ func _ready() -> void:
 		filter_easy_button,
 		filter_normal_button,
 		filter_hard_button,
+		filter_boss_button,
 	]:
 		UiStyle.add_hover_pop(btn)
 	play_button.mouse_entered.connect(func() -> void: SoundManager.play_ui_hover())
@@ -149,6 +156,12 @@ func _on_play_pressed() -> void:
 	GameManager.start_level(selected_difficulty)
 
 
+func _on_boss_pressed() -> void:
+	SoundManager.play_ui_click()
+	_commit_player_name()
+	GameManager.start_level(GameManager.Difficulty.BOSS)
+
+
 func _on_quit_pressed() -> void:
 	SoundManager.play_ui_click()
 	HandTrackingClient.stop_tracker_process()
@@ -203,7 +216,7 @@ func _refresh_menu_best_label(for_name: String) -> void:
 
 func set_leaderboard_filter(filter_mode: int) -> void:
 	SoundManager.play_ui_click()
-	leaderboard_filter = clampi(filter_mode, -1, 2)
+	leaderboard_filter = clampi(filter_mode, -1, GameManager.Difficulty.BOSS)
 	_update_filter_buttons_style()
 	_refresh_records_display()
 
@@ -214,6 +227,7 @@ func _update_filter_buttons_style() -> void:
 		[0, filter_easy_button],
 		[1, filter_normal_button],
 		[2, filter_hard_button],
+		[GameManager.Difficulty.BOSS, filter_boss_button],
 	]
 	for pair: Array in filter_map:
 		var mode: int = int(pair[0])
@@ -222,9 +236,9 @@ func _update_filter_buttons_style() -> void:
 			continue
 		var is_selected: bool = (leaderboard_filter == mode)
 		var style: StyleBoxFlat = StyleBoxFlat.new()
-		style.content_margin_left = 8.0
+		style.content_margin_left = 6.0
 		style.content_margin_top = 6.0
-		style.content_margin_right = 8.0
+		style.content_margin_right = 6.0
 		style.content_margin_bottom = 6.0
 		style.bg_color = Color(0.92, 0.92, 0.92, 1.0) if is_selected else Color(0.08, 0.08, 0.08, 1.0)
 		style.border_width_left = 2
@@ -250,6 +264,7 @@ func _refresh_records_display() -> void:
 	records_easy_label.text = _format_record_line(0, "EASY")
 	records_normal_label.text = _format_record_line(1, "NORMAL")
 	records_hard_label.text = _format_record_line(2, "HARD")
+	records_boss_label.text = _format_record_line(GameManager.Difficulty.BOSS, "BOSS")
 	_rebuild_leaderboard_rows()
 
 
@@ -259,25 +274,25 @@ func _format_record_line(diff_idx: int, diff_name: String) -> String:
 	var rec: Dictionary = GameManager.save_data.get_record(diff_idx)
 	if rec.is_empty():
 		return "%s:  No runs recorded" % diff_name
-	if bool(rec.get("completed", false)):
-		return "%s:  COMPLETED (45.0s) ★" % diff_name
-	return "%s:  Survived %.1fs" % [diff_name, float(rec.get("time", 0.0))]
+	var completed: bool = bool(rec.get("completed", false))
+	var time_val: float = float(rec.get("time", 0.0))
+	return "%s:  %s" % [diff_name, GameManager.format_run_score(diff_idx, time_val, completed, false)]
 
 
-func _rebuild_leaderboard_rows() -> void:
+func _rebuild_leaderboard_rows(viewport_override: Vector2 = Vector2.ZERO) -> void:
 	for child: Node in leaderboard_list.get_children():
 		leaderboard_list.remove_child(child)
 		child.free()
 
 	var entries: Array[Dictionary] = GameManager.get_leaderboard(leaderboard_filter)
-	var view: Vector2 = get_viewport_rect().size
+	var view: Vector2 = viewport_override if (viewport_override.x > 0.0 and viewport_override.y > 0.0) else get_viewport_rect().size
 	if view.x <= 0.0 or view.y <= 0.0:
 		view = Vector2(1152.0, 648.0)
 	var compact: bool = view.x < 560.0
 	var ui_scale: float = clampf(minf(view.x / 1152.0, view.y / 648.0), 0.78, 1.45)
-	var row_font_size: int = clampi(int(round((15.0 if compact else 21.0) * ui_scale)), 14, 30)
-	var top_row_font_size: int = clampi(int(round((16.0 if compact else 23.0) * ui_scale)), 15, 32)
-	var tier_font_size: int = clampi(int(round((13.0 if compact else 18.0) * ui_scale)), 12, 26)
+	var row_font_size: int = clampi(int(round((14.0 if compact else 21.0) * ui_scale)), 13, 30)
+	var top_row_font_size: int = clampi(int(round((15.0 if compact else 23.0) * ui_scale)), 14, 32)
+	var tier_font_size: int = clampi(int(round((12.0 if compact else 18.0) * ui_scale)), 11, 26)
 
 	if entries.is_empty():
 		var empty_lbl: Label = Label.new()
@@ -294,7 +309,7 @@ func _rebuild_leaderboard_rows() -> void:
 		var rank: int = int(entry.get("rank", 1))
 		var p_name: String = str(entry.get("player_name", "PLAYER")).to_upper()
 		var diff_idx: int = int(entry.get("difficulty", 0))
-		var diff_str: String = DIFFICULTY_NAMES[clampi(diff_idx, 0, DIFFICULTY_NAMES.size() - 1)].to_upper()
+		var diff_str: String = GameManager.get_difficulty_name(diff_idx).to_upper()
 		var completed: bool = bool(entry.get("completed", false))
 		var time_val: float = float(entry.get("time", 0.0))
 		var is_current: bool = bool(entry.get("is_current", false))
@@ -306,10 +321,12 @@ func _rebuild_leaderboard_rows() -> void:
 		row_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 		var row_style: StyleBoxFlat = StyleBoxFlat.new()
-		row_style.content_margin_left = 14.0
-		row_style.content_margin_top = 9.0
-		row_style.content_margin_right = 14.0
-		row_style.content_margin_bottom = 9.0
+		var pad_x: float = 8.0 if compact else 14.0
+		var pad_y: float = 6.0 if compact else 9.0
+		row_style.content_margin_left = pad_x
+		row_style.content_margin_top = pad_y
+		row_style.content_margin_right = pad_x
+		row_style.content_margin_bottom = pad_y
 		var bg_gray: float = 0.22 if is_current else (0.14 if rank == 1 else (0.10 if is_podium else 0.07))
 		row_style.bg_color = Color(bg_gray, bg_gray, bg_gray, 1.0)
 		var border_w: int = 3 if (is_current or rank == 1) else 2
@@ -327,11 +344,11 @@ func _rebuild_leaderboard_rows() -> void:
 
 		var row_hbox: HBoxContainer = HBoxContainer.new()
 		row_hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row_hbox.add_theme_constant_override("separation", 14)
+		row_hbox.add_theme_constant_override("separation", 6 if compact else 14)
 		row_panel.add_child(row_hbox)
 
 		var rank_lbl: Label = Label.new()
-		rank_lbl.custom_minimum_size = Vector2(44.0 if compact else 68.0, 0.0)
+		rank_lbl.custom_minimum_size = Vector2(34.0 if compact else 68.0, 0.0)
 		rank_lbl.text = "#%d" % rank
 		var rank_gray: float = 1.0 if (is_podium or is_current) else 0.85
 		rank_lbl.add_theme_color_override("font_color", Color(rank_gray, rank_gray, rank_gray, 1.0))
@@ -349,7 +366,7 @@ func _rebuild_leaderboard_rows() -> void:
 
 		if leaderboard_filter < 0:
 			var tier_lbl: Label = Label.new()
-			tier_lbl.custom_minimum_size = Vector2(72.0 if compact else 110.0, 0.0)
+			tier_lbl.custom_minimum_size = Vector2(58.0 if compact else 110.0, 0.0)
 			tier_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			tier_lbl.text = "[%s]" % diff_str
 			tier_lbl.add_theme_color_override("font_color", Color(0.84, 0.84, 0.84, 1.0))
@@ -358,7 +375,7 @@ func _rebuild_leaderboard_rows() -> void:
 
 		var score_lbl: Label = Label.new()
 		score_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		score_lbl.text = "COMPLETED (45.0s) ★" if completed else ("%.1fs" % time_val if compact else "Survived %.1fs" % time_val)
+		score_lbl.text = GameManager.format_run_score(diff_idx, time_val, completed, compact)
 		var score_gray: float = 1.0 if (completed or is_current) else 0.90
 		score_lbl.add_theme_color_override("font_color", Color(score_gray, score_gray, score_gray, 1.0))
 		score_lbl.add_theme_font_size_override("font_size", f_size)
@@ -393,36 +410,43 @@ func _on_resized(viewport_override: Vector2 = Vector2.ZERO) -> void:
 	ambient_particles.position = Vector2(view.x * 0.5, view.y + 12.0)
 	ambient_particles.emission_rect_extents = Vector2(view.x * 0.5, 4.0)
 
-	var compact_h: bool = view.y < 540.0
+	var compact_h: bool = view.y < 620.0
+	var ultra_compact_h: bool = view.y < 460.0
 	var compact_w: bool = view.x < 560.0
 	var menu_w: float = clampf(view.x - 48.0, 240.0, 340.0)
 	menu_box.custom_minimum_size.x = menu_w
-	menu_box.add_theme_constant_override("separation", 8 if compact_h else 12)
-	title_label.add_theme_font_size_override("font_size", 28 if (compact_w or compact_h) else 40)
-	subtitle_label.add_theme_font_size_override("font_size", 13 if (compact_w or compact_h) else 16)
+	menu_box.add_theme_constant_override("separation", 4 if ultra_compact_h else (8 if compact_h else 12))
+	title_label.add_theme_font_size_override("font_size", 22 if ultra_compact_h else (28 if (compact_w or compact_h) else 40))
+	subtitle_label.add_theme_font_size_override("font_size", 11 if ultra_compact_h else (13 if (compact_w or compact_h) else 16))
+	best_label.add_theme_font_size_override("font_size", 12 if ultra_compact_h else (14 if (compact_w or compact_h) else 15))
 
-	var btn_h: float = 36.0 if compact_h else 46.0
-	name_edit.custom_minimum_size = Vector2(minf(240.0, menu_w), 36.0 if compact_h else 42.0)
-	for btn: Button in [difficulty_button, play_button, records_button, credits_button, quit_button]:
+	var btn_h: float = 28.0 if ultra_compact_h else (36.0 if compact_h else 46.0)
+	var btn_font_size: int = 14 if ultra_compact_h else (16 if compact_h else 19)
+	name_edit.custom_minimum_size = Vector2(minf(240.0, menu_w), 30.0 if ultra_compact_h else (36.0 if compact_h else 42.0))
+	name_edit.add_theme_font_size_override("font_size", 14 if ultra_compact_h else (16 if compact_h else 18))
+	for btn: Button in [difficulty_button, play_button, boss_button, records_button, credits_button, quit_button]:
 		btn.custom_minimum_size = Vector2(minf(240.0, menu_w), btn_h)
-		btn.add_theme_font_size_override("font_size", 16 if compact_h else 19)
+		btn.add_theme_font_size_override("font_size", btn_font_size)
 
-	var rec_w: float = clampf(view.x - 36.0, 290.0, 920.0)
+	var rec_w: float = clampf(view.x - 36.0, 290.0, 1000.0)
 	var rec_h: float = clampf(view.y - 36.0, 300.0, 740.0)
 	records_box.custom_minimum_size = Vector2(rec_w, rec_h)
-	records_content.add_theme_constant_override("separation", 6 if compact_h else 10)
-	records_title_label.add_theme_font_size_override("font_size", 20 if compact_w else 30)
-	records_player_label.add_theme_font_size_override("font_size", 15 if compact_w else 20)
-	records_highest_label.add_theme_font_size_override("font_size", 14 if compact_w else 18)
-	for stat_lbl: Label in [records_easy_label, records_normal_label, records_hard_label]:
-		stat_lbl.add_theme_font_size_override("font_size", 13 if compact_w else 16)
-	for f_btn: Button in [filter_all_button, filter_easy_button, filter_normal_button, filter_hard_button]:
-		f_btn.add_theme_font_size_override("font_size", 13 if compact_w else 16)
-		f_btn.custom_minimum_size.y = 32.0 if compact_h else 40.0
-	personal_stats_box.vertical = rec_w < 540.0
-	personal_stats_box.add_theme_constant_override("separation", 4 if personal_stats_box.vertical else 14)
-	leaderboard_scroll.custom_minimum_size.y = clampf(rec_h - (280.0 if personal_stats_box.vertical else 245.0), 90.0, 420.0)
-	records_close_button.custom_minimum_size = Vector2(minf(240.0, rec_w - 44.0), 36.0 if compact_h else 46.0)
+	records_content.add_theme_constant_override("separation", 3 if ultra_compact_h else (6 if compact_h else 10))
+	records_title_label.add_theme_font_size_override("font_size", 18 if ultra_compact_h else (20 if compact_w else 30))
+	records_player_label.add_theme_font_size_override("font_size", 13 if ultra_compact_h else (15 if compact_w else 20))
+	records_highest_label.add_theme_font_size_override("font_size", 12 if ultra_compact_h else (14 if compact_w else 18))
+	var stat_font_size: int = 12 if ultra_compact_h else (13 if compact_w else (14 if rec_w < 980.0 else 16))
+	for stat_lbl: Label in [records_easy_label, records_normal_label, records_hard_label, records_boss_label]:
+		stat_lbl.add_theme_font_size_override("font_size", stat_font_size)
+	for f_btn: Button in [filter_all_button, filter_easy_button, filter_normal_button, filter_hard_button, filter_boss_button]:
+		f_btn.add_theme_font_size_override("font_size", 12 if compact_w else 16)
+		f_btn.custom_minimum_size = Vector2(0.0 if compact_w else 72.0, 30.0 if ultra_compact_h else (32.0 if compact_h else 40.0))
+	filter_row.add_theme_constant_override("separation", 4 if compact_w else 8)
+	personal_stats_box.vertical = rec_w < 760.0
+	personal_stats_box.add_theme_constant_override("separation", (2 if ultra_compact_h else 4) if personal_stats_box.vertical else 12)
+	leaderboard_scroll.custom_minimum_size.y = clampf(rec_h - (330.0 if personal_stats_box.vertical else 375.0), 48.0 if ultra_compact_h else 90.0, 320.0)
+	records_close_button.custom_minimum_size = Vector2(minf(240.0, rec_w - 44.0), 30.0 if ultra_compact_h else (36.0 if compact_h else 46.0))
+	records_box.reset_size()
 
 	var tracker_w: float = clampf(view.x - 40.0, 180.0, 260.0)
 	tracker_bar_bg.custom_minimum_size.x = tracker_w
@@ -430,7 +454,8 @@ func _on_resized(viewport_override: Vector2 = Vector2.ZERO) -> void:
 	tracker_progress_box.offset_right = tracker_w * 0.5
 
 	if records_panel.visible:
-		_rebuild_leaderboard_rows()
+		_rebuild_leaderboard_rows(viewport_override)
+	records_box.reset_size()
 
 
 func _update_tracker_progress(delta: float) -> void:

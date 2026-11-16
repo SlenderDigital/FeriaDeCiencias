@@ -6,7 +6,7 @@ extends Control
 ## Featured/Active Difficulty Tier) that automatically scales font sizes to the
 ## monitor resolution so spectators can read every rank, name, and time from far away.
 
-const DIFFICULTY_NAMES: Array[String] = ["Easy", "Normal", "Hard"]
+const DIFFICULTY_NAMES: Array[String] = ["Easy", "Normal", "Hard", "Boss"]
 const TOP_LIMIT: int = 8
 const TIER_CYCLE_INTERVAL: float = 6.0
 
@@ -54,7 +54,7 @@ func _init() -> void:
 
 func _ready() -> void:
 	_preview_player_name = GameManager.get_player_name()
-	_cycled_difficulty = GameManager.selected_difficulty
+	_cycled_difficulty = _get_run_or_selected_difficulty()
 	GameManager.player_name_changed.connect(_on_player_name_changed)
 	GameManager.preview_name_changed.connect(_on_preview_name_changed)
 	GameManager.difficulty_changed.connect(_on_difficulty_changed)
@@ -81,12 +81,12 @@ func _process(delta: float) -> void:
 				now_playing_style.border_color = Color(0.90, 0.90, 0.90, 1.0)
 
 	# When in Menu/Credits, gently cycle the right-hand tier board so spectators from
-	# afar can see Easy, Normal, and Hard leaderboards in giant text.
+	# afar can see Boss, Hard, Normal, and Easy leaderboards in giant text.
 	if GameManager.state != GameManager.State.PLAYING:
 		_tier_cycle_timer += delta
 		if _tier_cycle_timer >= TIER_CYCLE_INTERVAL:
 			_tier_cycle_timer = 0.0
-			_cycled_difficulty = posmod(_cycled_difficulty - 1, 3)
+			_cycled_difficulty = posmod(_cycled_difficulty - 1, 4)
 			_update_visible_tier_columns()
 
 
@@ -227,6 +227,7 @@ func _build_ui() -> void:
 
 	var col_configs: Array = [
 		[-1, "GLOBAL TOP RANKING"],
+		[3, "BOSS MODE RANKING"],
 		[2, "HARD TIER RANKING"],
 		[1, "NORMAL TIER RANKING"],
 		[0, "EASY TIER RANKING"],
@@ -281,15 +282,21 @@ func _build_ui() -> void:
 		_column_styles[filter_id] = col_style
 
 
+func _get_run_or_selected_difficulty() -> int:
+	if GameManager.state in [GameManager.State.PLAYING, GameManager.State.COMPLETE, GameManager.State.GAME_OVER]:
+		return GameManager.active_run_difficulty
+	return GameManager.selected_difficulty
+
+
 func _get_featured_difficulty() -> int:
 	if GameManager.state == GameManager.State.PLAYING:
-		return GameManager.selected_difficulty
+		return GameManager.active_run_difficulty
 	return _cycled_difficulty
 
 
 func _update_visible_tier_columns() -> void:
 	var featured: int = _get_featured_difficulty()
-	for filter_id: int in [-1, 2, 1, 0]:
+	for filter_id: int in [-1, 3, 2, 1, 0]:
 		var panel: PanelContainer = _column_panels.get(filter_id) as PanelContainer
 		if panel == null:
 			continue
@@ -305,7 +312,7 @@ func refresh_all() -> void:
 func _refresh_header() -> void:
 	var active_name: String = _preview_player_name if not _preview_player_name.is_empty() else GameManager.get_player_name()
 	var cleaned_name: String = SaveData.clean_player_name(active_name, GameManager.MAX_NAME_LENGTH)
-	var diff_name: String = GameManager.get_difficulty_name(GameManager.selected_difficulty).to_upper()
+	var diff_name: String = GameManager.get_difficulty_name(_get_run_or_selected_difficulty()).to_upper()
 	player_label.text = "PLAYER: %s   [%s]" % [cleaned_name.to_upper(), diff_name]
 
 	var best_str: String = GameManager.get_best_summary(cleaned_name)
@@ -320,25 +327,38 @@ func _refresh_header() -> void:
 
 func _update_live_run_widgets() -> void:
 	var st: int = GameManager.state
+	var is_boss: bool = (_get_run_or_selected_difficulty() == GameManager.Difficulty.BOSS)
+	var dur: float = GameManager.BOSS_LEVEL_DURATION if (is_boss and _live_duration < 60.0) else _live_duration
 	var ratio: float = 0.0
 	match st:
 		GameManager.State.PLAYING:
-			var remaining: float = maxf(0.0, _live_duration - _live_elapsed)
-			status_label.text = "LIVE RUN: %.1fs / %.0fs   (%.1fs LEFT)" % [_live_elapsed, _live_duration, remaining]
+			if is_boss:
+				var phase: int = GameManager.get_boss_phase_for_time(_live_elapsed, false)
+				status_label.text = "LIVE BOSS: PHASE %d/%d   •   %.1fs / %.0fs" % [phase, GameManager.BOSS_TOTAL_PHASES, _live_elapsed, dur]
+			else:
+				var remaining: float = maxf(0.0, dur - _live_elapsed)
+				status_label.text = "LIVE RUN: %.1fs / %.0fs   (%.1fs LEFT)" % [_live_elapsed, dur, remaining]
 			hp_label.visible = true
 			var blocks: String = ""
 			for i: int in range(_live_max_hp):
 				blocks += "■ " if i < _live_hp else "□ "
 			hp_label.text = "HP: %s(%d/%d)" % [blocks, _live_hp, _live_max_hp]
-			ratio = clampf(_live_elapsed / maxf(_live_duration, 0.001), 0.0, 1.0)
+			ratio = clampf(_live_elapsed / maxf(dur, 0.001), 0.0, 1.0)
 		GameManager.State.COMPLETE:
-			status_label.text = "★ LEVEL COMPLETE — SURVIVED FULL 45.0s! ★"
+			if is_boss:
+				status_label.text = "★ BOSS DEFEATED — ALL 8/8 PHASES COMPLETED! ★"
+			else:
+				status_label.text = "★ LEVEL COMPLETE — SURVIVED FULL 45.0s! ★"
 			hp_label.visible = false
 			ratio = 1.0
 		GameManager.State.GAME_OVER:
-			status_label.text = "LAST RUN: %.1fs   •   NEXT PLAYER STEP UP!" % _live_elapsed
+			if is_boss:
+				var phase: int = GameManager.get_boss_phase_for_time(_live_elapsed, false)
+				status_label.text = "BOSS RUN: PHASE %d/%d (%.1fs)   •   NEXT PLAYER STEP UP!" % [phase, GameManager.BOSS_TOTAL_PHASES, _live_elapsed]
+			else:
+				status_label.text = "LAST RUN: %.1fs   •   NEXT PLAYER STEP UP!" % _live_elapsed
 			hp_label.visible = false
-			ratio = clampf(_live_elapsed / maxf(_live_duration, 0.001), 0.0, 1.0)
+			ratio = clampf(_live_elapsed / maxf(dur, 0.001), 0.0, 1.0)
 		_:
 			status_label.text = "ENTER YOUR NAME TO COMPETE FOR #1"
 			hp_label.visible = false
@@ -352,13 +372,13 @@ func _update_live_run_widgets() -> void:
 func _refresh_columns() -> void:
 	var active_name: String = _preview_player_name if not _preview_player_name.is_empty() else GameManager.get_player_name()
 	var cleaned_name: String = SaveData.clean_player_name(active_name, GameManager.MAX_NAME_LENGTH)
-	var active_diff: int = GameManager.selected_difficulty
+	var active_diff: int = _get_run_or_selected_difficulty()
 
 	var row_font_size: int = clampi(int(round(24.0 * _ui_scale)), 20, 36)
 	var top_row_font_size: int = clampi(int(round(27.0 * _ui_scale)), 22, 40)
 	var badge_font_size: int = clampi(int(round(20.0 * _ui_scale)), 17, 30)
 
-	for filter_id: int in [-1, 2, 1, 0]:
+	for filter_id: int in [-1, 3, 2, 1, 0]:
 		var style: StyleBoxFlat = _column_styles.get(filter_id) as StyleBoxFlat
 		if style != null:
 			var border_g: float = 1.0 if (filter_id == -1 or filter_id == active_diff) else 0.72
@@ -421,7 +441,7 @@ func _create_entry_row(
 	var rank: int = int(entry.get("rank", 1))
 	var p_name: String = str(entry.get("player_name", "PLAYER")).to_upper()
 	var diff_idx: int = int(entry.get("difficulty", 0))
-	var diff_str: String = DIFFICULTY_NAMES[clampi(diff_idx, 0, DIFFICULTY_NAMES.size() - 1)].to_upper()
+	var diff_str: String = GameManager.get_difficulty_name(diff_idx).to_upper()
 	var completed: bool = bool(entry.get("completed", false))
 	var time_val: float = float(entry.get("time", 0.0))
 	var is_current: bool = bool(entry.get("is_current", false))
@@ -471,7 +491,7 @@ func _create_entry_row(
 
 	var score_lbl: Label = Label.new()
 	score_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	score_lbl.text = "COMPLETED ★" if completed else "%.1fs" % time_val
+	score_lbl.text = GameManager.format_run_score(diff_idx, time_val, completed, true)
 	var score_g: float = 1.0 if (completed or is_current) else 0.90
 	score_lbl.add_theme_color_override("font_color", Color(score_g, score_g, score_g, 1.0))
 	score_lbl.add_theme_font_size_override("font_size", f_size)
@@ -516,7 +536,7 @@ func _on_difficulty_changed(new_diff: int) -> void:
 
 
 func _on_state_changed(_new_state: int) -> void:
-	_cycled_difficulty = GameManager.selected_difficulty
+	_cycled_difficulty = _get_run_or_selected_difficulty()
 	_tier_cycle_timer = 0.0
 	refresh_all()
 
@@ -524,8 +544,18 @@ func _on_state_changed(_new_state: int) -> void:
 func _on_record_updated(difficulty: int, time_survived: float, completed: bool) -> void:
 	_record_flash_timer = 4.5
 	_cycled_difficulty = difficulty
+	if GameManager.state != GameManager.State.PLAYING:
+		_live_elapsed = time_survived
+		_live_duration = GameManager.BOSS_LEVEL_DURATION if difficulty == GameManager.Difficulty.BOSS else 45.0
 	var diff_str: String = GameManager.get_difficulty_name(difficulty).to_upper()
-	var score_str: String = "COMPLETED (45.0s)" if completed else "%.1fs" % time_survived
+	var score_str: String
+	if difficulty == GameManager.Difficulty.BOSS:
+		if completed:
+			score_str = "COMPLETED (8/8)"
+		else:
+			score_str = "PHASE %d/%d (%.1fs)" % [GameManager.get_boss_phase_for_time(time_survived, false), GameManager.BOSS_TOTAL_PHASES, time_survived]
+	else:
+		score_str = "COMPLETED (45.0s)" if completed else "%.1fs" % time_survived
 	record_banner_label.text = "★ NEW RECORD BY %s ON %s: %s! ★" % [GameManager.get_player_name().to_upper(), diff_str, score_str]
 	record_banner_label.visible = true
 	refresh_all()

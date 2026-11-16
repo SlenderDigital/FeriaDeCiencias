@@ -220,6 +220,20 @@ func take_damage(amount: int = 1) -> void:
 	_update_visuals(0.0)
 
 
+func heal(amount: int = 1, recharge_shield: bool = true) -> void:
+	if not is_active or current_hp <= 0:
+		return
+	if amount > 0:
+		current_hp = clampi(current_hp + amount, 1, MAX_HP)
+		hp_changed.emit(current_hp, MAX_HP)
+	if recharge_shield:
+		shield_energy = SHIELD_MAX_ENERGY
+		shield_exhausted = false
+		shield_recharge_timer = 0.0
+		shield_changed.emit(is_shielding)
+	_update_visuals(0.0)
+
+
 func reset_player(spawn_position: Vector2) -> void:
 	global_position = spawn_position
 	target_position = spawn_position

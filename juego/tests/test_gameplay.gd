@@ -3,6 +3,8 @@ extends McpTestSuite
 const MAIN_MENU_SCENE: PackedScene = preload("res://scenes/main_menu.tscn")
 const CREDITS_SCENE: PackedScene = preload("res://scenes/credits.tscn")
 const LEVEL_SCENE: PackedScene = preload("res://scenes/level.tscn")
+const BOSS_LEVEL_SCENE: PackedScene = preload("res://scenes/boss_level.tscn")
+const BOSS_SCENE: PackedScene = preload("res://scenes/boss.tscn")
 const PLAYER_SCENE: PackedScene = preload("res://scenes/player.tscn")
 const LIGHT_BEAM_SCENE: PackedScene = preload("res://scenes/light_beam.tscn")
 const FILLING_CIRCLE_SCENE: PackedScene = preload("res://scenes/filling_circle.tscn")
@@ -246,6 +248,8 @@ func test_ac11_monochrome_primitives_only() -> void:
 		MAIN_MENU_SCENE,
 		CREDITS_SCENE,
 		LEVEL_SCENE,
+		BOSS_LEVEL_SCENE,
+		BOSS_SCENE,
 		PLAYER_SCENE,
 		LIGHT_BEAM_SCENE,
 		FILLING_CIRCLE_SCENE,
@@ -976,6 +980,342 @@ func test_dual_monitor_spectator_ranking_window_and_pinned_rank() -> void:
 	assert_false(GameManager.toggle_spectator_window(), "Second F10 toggle must close preview window")
 	GameManager.spectator_override_mode = 0
 	GameManager.set_test_screen_count_override(-1)
+
+
+func test_boss_mode_menu_and_phase_leaderboard_integration() -> void:
+	var backup_save: SaveData = GameManager.save_data
+	var backup_diff: int = GameManager.selected_difficulty
+	GameManager.save_data = SaveData.new()
+	GameManager.set_state(GameManager.State.MENU)
+	GameManager.set_difficulty(GameManager.Difficulty.NORMAL)
+
+	var menu: Control = _spawn(MAIN_MENU_SCENE) as Control
+	var diff_btn: Button = menu.get_node_or_null("CenterContainer/MenuBox/DifficultyButton") as Button
+	var boss_btn: Button = menu.get_node_or_null("CenterContainer/MenuBox/BossButton") as Button
+	assert_true(diff_btn != null and boss_btn != null, "DifficultyButton and BossButton must exist in MainMenu")
+	assert_true(boss_btn.pressed.is_connected(menu._on_boss_pressed), "BossButton must connect to _on_boss_pressed")
+
+	# Verify DifficultyButton still cycles Normal -> Hard -> Easy -> Normal
+	assert_eq(menu.selected_difficulty, GameManager.Difficulty.NORMAL, "Menu must start on Normal")
+	assert_eq(diff_btn.text, "Difficulty: Normal", "DifficultyButton must display Normal")
+	menu._on_difficulty_pressed()
+	assert_eq(menu.selected_difficulty, GameManager.Difficulty.HARD, "First press must cycle to Hard")
+	menu._on_difficulty_pressed()
+	assert_eq(menu.selected_difficulty, GameManager.Difficulty.EASY, "Second press must cycle to Easy")
+	menu._on_difficulty_pressed()
+	assert_eq(menu.selected_difficulty, GameManager.Difficulty.NORMAL, "Third press must cycle back to Normal")
+
+	# Select Hard, launch Boss Mode, and verify selected_difficulty is NOT overwritten
+	menu.set_difficulty(GameManager.Difficulty.HARD)
+	assert_eq(GameManager.selected_difficulty, GameManager.Difficulty.HARD, "Standard difficulty must be Hard")
+	GameManager.start_level(GameManager.Difficulty.BOSS)
+	assert_eq(GameManager.active_run_difficulty, GameManager.Difficulty.BOSS, "active_run_difficulty must become BOSS (3)")
+	assert_eq(GameManager.selected_difficulty, GameManager.Difficulty.HARD, "Playing Boss Mode must NOT overwrite GameManager.selected_difficulty")
+
+	GameManager.go_to_menu()
+	var menu_after_boss: Control = _spawn(MAIN_MENU_SCENE) as Control
+	assert_eq(menu_after_boss.selected_difficulty, GameManager.Difficulty.HARD, "Returning to menu after Boss must preserve Hard selection")
+	assert_eq(menu_after_boss.difficulty_button.text, "Difficulty: Hard", "DifficultyButton after Boss must still read Hard")
+	assert_eq(GameManager.active_run_difficulty, GameManager.Difficulty.HARD, "go_to_menu must restore active_run_difficulty to selected_difficulty")
+
+	# Global leaderboard (-1) protection: incomplete 3s Boss Phase 1 death must NOT outrank Hard COMPLETED
+	GameManager.set_player_name("HardWinner")
+	assert_true(GameManager.report_result(GameManager.Difficulty.HARD, 45.0, true), "HardWinner Hard completion must save")
+	assert_true(GameManager.report_result(GameManager.Difficulty.BOSS, 3.0, false), "HardWinner 3s Boss death must save under key 3")
+	assert_eq(GameManager.get_best_summary("HardWinner"), "BEST  HARD  -  COMPLETED", "Incomplete 3s Boss death must NOT overwrite Hard COMPLETED best summary")
+
+	GameManager.set_player_name("BossRookie")
+	assert_true(GameManager.report_result(GameManager.Difficulty.BOSS, 3.0, false), "BossRookie 3s Boss Phase 1 run must save")
+	assert_eq(GameManager.get_best_summary("BossRookie"), "BEST  BOSS  -  PHASE 1/8 (3.0s)", "BossRookie summary must format Phase 1/8 (3.0s)")
+
+	GameManager.set_player_name("BossChamp")
+	assert_true(GameManager.report_result(GameManager.Difficulty.BOSS, 120.0, true), "BossChamp 120s Boss completion must save")
+	assert_eq(GameManager.get_best_summary("BossChamp"), "BEST  BOSS  -  COMPLETED (8/8)", "BossChamp summary must format COMPLETED (8/8)")
+
+	var global_board: Array[Dictionary] = GameManager.get_leaderboard(-1)
+	assert_eq(global_board.size(), 3, "Global leaderboard must list all 3 players")
+	assert_eq(str(global_board[0].get("key", "")), "bosschamp", "Completed Boss (8/8) must rank #1 globally")
+	assert_eq(str(global_board[1].get("key", "")), "hardwinner", "Completed Hard must rank #2 above incomplete 3s Boss Phase 1")
+	assert_eq(str(global_board[2].get("key", "")), "bossrookie", "Incomplete 3s Boss Phase 1 must rank #3 below Completed Hard")
+
+	# FilterBossButton (3) in RecordsPanel
+	GameManager.set_player_name("HardWinner")
+	GameManager.set_state(GameManager.State.MENU)
+	menu_after_boss.name_edit.text = "HardWinner"
+	menu_after_boss._on_records_pressed()
+	assert_true(menu_after_boss.records_panel.visible, "RecordsPanel must open")
+	assert_true(menu_after_boss.filter_boss_button != null, "FilterBossButton must exist")
+	assert_true(menu_after_boss.records_boss_label != null, "RecordsBossLabel must exist")
+	assert_true(menu_after_boss.records_boss_label.text.find("Phase 1/8 (3.0s)") != -1, "RecordsBossLabel must display HardWinner's Boss phase score")
+
+	menu_after_boss.filter_boss_button.pressed.emit()
+	assert_eq(menu_after_boss.leaderboard_filter, GameManager.Difficulty.BOSS, "FilterBossButton must set filter to BOSS (3)")
+	var boss_board: Array[Dictionary] = GameManager.get_leaderboard(GameManager.Difficulty.BOSS)
+	assert_eq(boss_board.size(), 3, "Boss leaderboard must list all 3 Boss players")
+	assert_eq(str(boss_board[0].get("key", "")), "bosschamp", "Boss filter #1 must be BossChamp")
+	assert_eq(menu_after_boss.leaderboard_list.get_child_count(), 3, "RecordsPanel Boss filter must render 3 Boss rows")
+	_assert_subtree_monochrome_and_primitive(menu_after_boss.records_panel)
+
+	# Column_3 (BOSS MODE RANKING) in SpectatorRankingView
+	GameManager.set_test_screen_count_override(2)
+	assert_true(GameManager.is_spectator_window_active(), "Spectator window must open on 2 screens")
+	var spec_view: Control = GameManager.spectator_view
+	assert_true(spec_view != null, "SpectatorRankingView must exist")
+	var boss_col_panel: PanelContainer = spec_view.columns_grid.get_node_or_null("Column_3") as PanelContainer
+	assert_true(boss_col_panel != null, "SpectatorRankingView must contain Column_3")
+	var boss_col_header: Label = spec_view._column_headers.get(3) as Label
+	assert_true(boss_col_header != null, "Column_3 header must exist")
+	assert_eq(boss_col_header.text, "BOSS MODE RANKING", "Column_3 header must be BOSS MODE RANKING")
+	var boss_col_list: VBoxContainer = spec_view._column_lists.get(3) as VBoxContainer
+	assert_true(boss_col_list != null and boss_col_list.get_child_count() == 3, "Column_3 must list 3 Boss players")
+
+	GameManager.start_level(GameManager.Difficulty.BOSS)
+	GameManager.report_live_telemetry(62.5, 120.0, 2, 3)
+	assert_true(boss_col_panel.visible, "Column_3 must be visible while playing Boss Mode")
+	assert_true(spec_view.status_label.text.find("LIVE BOSS: PHASE 5/8") != -1, "Spectator status must display LIVE BOSS: PHASE 5/8")
+
+	GameManager.spectator_override_mode = 0
+	GameManager.set_test_screen_count_override(-1)
+	GameManager.set_state(GameManager.State.MENU)
+	GameManager.set_difficulty(backup_diff)
+	GameManager.save_data = backup_save
+	GameManager.save_game()
+
+
+func test_boss_level_8_phases_jsab_acting_healing_and_monochrome_visuals() -> void:
+	var backup_save: SaveData = GameManager.save_data
+	var backup_diff: int = GameManager.selected_difficulty
+	GameManager.save_data = SaveData.new()
+	GameManager.set_player_name("BossTester")
+
+	var boss_level: Node2D = _spawn(BOSS_LEVEL_SCENE) as Node2D
+	var boss_container: Node2D = boss_level.get_node_or_null("BossContainer") as Node2D
+	var beam_container: Node2D = boss_level.get_node_or_null("BeamContainer") as Node2D
+	var boss: Area2D = boss_level.get_node_or_null("BossContainer/Boss") as Area2D
+	var player: CharacterBody2D = boss_level.get_node_or_null("Player") as CharacterBody2D
+	var complete_panel: Control = boss_level.get_node_or_null("HUD/HUDRoot/LevelCompletePanel") as Control
+	var hud: CanvasLayer = boss_level.get_node_or_null("HUD") as CanvasLayer
+
+	assert_true(boss_container != null and beam_container != null and boss != null and player != null, "BossLevel nodes must exist")
+	assert_gt(beam_container.get_index(), boss_container.get_index(), "BossContainer must precede BeamContainer so _clear_hazards never frees Boss")
+	assert_eq(boss_level.difficulty_mode, GameManager.Difficulty.BOSS, "BossLevel difficulty_mode must be BOSS (3)")
+	assert_eq(boss_level.level_duration, 120.0, "BossLevel duration must be 120.0s")
+	assert_true(hud.boss_phase_label != null and hud.boss_phase_label.visible, "Boss HUD phase label must be visible")
+	assert_eq(hud.boss_phase_label.text, "PHASE 1 / 8", "Boss HUD must start at PHASE 1 / 8")
+
+	_assert_subtree_monochrome_and_primitive(boss_level)
+	_assert_no_text_nodes(boss)
+
+	# Keep player in bottom-left safe corner so Boss lunges/slams do not accidentally hit during phase sweep
+	player.global_position = Vector2(100.0, 580.0)
+
+	# Phase 1 acting state, always-active hitboxes & live micro-reactions (shield_blocked -> flinch, damaged -> laugh)
+	assert_eq(boss.current_phase, 1, "Boss must start in Phase 1")
+	assert_eq(int(boss.acting_state), int(boss.ActingState.COCKY_CONDUCTOR), "Phase 1 acting_state must be COCKY_CONDUCTOR")
+	assert_false(bool(boss._lunge_active), "Boss must not be lunging at spawn")
+	assert_false(bool(boss._hand_dashes[0]["active"]) or bool(boss._hand_dashes[1]["active"]), "Hands must not be dashing at spawn")
+	assert_true(bool(boss.is_body_hazardous), "Boss body must be hazardous in active Phase 1 even when idle")
+	assert_true(bool(boss.is_left_hand_hazardous), "Boss left hand must be hazardous in active Phase 1 even when idle")
+	assert_true(bool(boss.is_right_hand_hazardous), "Boss right hand must be hazardous in active Phase 1 even when idle")
+	assert_true(bool(boss.is_hand_hazardous), "Boss is_hand_hazardous must be true in active Phase 1")
+	assert_false(boss.body_collision.disabled, "Boss body CollisionShape2D must be enabled in active Phase 1")
+	assert_false(boss.left_hand_collision.disabled, "Boss left hand CollisionShape2D must be enabled in active Phase 1")
+	assert_false(boss.right_hand_collision.disabled, "Boss right hand CollisionShape2D must be enabled in active Phase 1")
+
+	# Verify placing player onto Boss body, left_hand, and right_hand triggers shield_blocked when shielding and take_damage(1) when unshielded
+	var shield_block_count: Array[int] = [0]
+	player.shield_blocked.connect(func() -> void: shield_block_count[0] += 1)
+	var contact_targets: Array[Dictionary] = [
+		{"label": "body", "pos": boss.global_position},
+		{"label": "left_hand", "pos": boss.left_hand.global_position},
+		{"label": "right_hand", "pos": boss.right_hand.global_position},
+	]
+	for idx_c: int in range(contact_targets.size()):
+		var c_info: Dictionary = contact_targets[idx_c]
+		var c_label: String = String(c_info["label"])
+		var c_pos: Vector2 = Vector2(c_info["pos"])
+
+		player.set_shield_held(true)
+		player.shield_energy = player.SHIELD_MAX_ENERGY
+		player.shield_exhausted = false
+		player.shield_block_feedback_timer = 0.0
+		player._physics_process(0.016)
+		boss._flinch_timer = 0.0
+		player.global_position = c_pos
+		boss.simulate_boss(0.0, boss_level.elapsed_time, Vector2(1152.0, 648.0), player)
+		assert_eq(shield_block_count[0], idx_c + 1, "Shielded contact with Boss %s must emit shield_blocked" % c_label)
+		assert_gt(float(boss._flinch_timer), 0.0, "Shielded contact with Boss %s must trigger Boss flinch reaction" % c_label)
+
+		player.set_shield_held(false)
+		player._physics_process(0.016)
+		player.current_hp = 3
+		player.hit_invincibility_timer = 0.0
+		boss._laugh_timer = 0.0
+		player.global_position = c_pos
+		boss.simulate_boss(0.0, boss_level.elapsed_time, Vector2(1152.0, 648.0), player)
+		assert_eq(player.current_hp, 2, "Unshielded contact with Boss %s must deal 1 contact damage" % c_label)
+		assert_gt(float(boss._laugh_timer), 0.0, "Unshielded contact with Boss %s must trigger Boss laugh reaction" % c_label)
+
+	player.global_position = Vector2(100.0, 580.0)
+	player.hit_invincibility_timer = 0.0
+
+	# Step 0s -> 120s in 0.5s outer steps (4x 0.125s substeps so short physical dashes & thrown seeds are captured)
+	var seen_states: Dictionary = {int(boss.acting_state): true}
+	var phase_transitions_checked: Dictionary = {1: true}
+	var seen_dash_styles: Dictionary = {}
+	var seen_seed_payloads: Dictionary = {}
+	var seen_pincer: bool = false
+	var seen_claw_orbit: bool = false
+	var seen_hand_slam: bool = false
+	var seen_wall_push: bool = false
+	var seen_thrown_seeds: bool = false
+
+	for step: int in range(1, 241):
+		if step == 119:
+			# Right before Phase 5 (t = 59.5s -> 60.0s): set HP=1 and exhaust shield to test Phase 5 heal(1, true)
+			player.current_hp = 1
+			player.shield_energy = 10.0
+			player.shield_exhausted = true
+
+		for _sub: int in range(4):
+			boss_level.simulate_physics(0.125)
+			if boss_level.is_level_running:
+				for h_idx: int in range(2):
+					var hd: Dictionary = boss._hand_dashes[h_idx]
+					if bool(hd["active"]):
+						seen_dash_styles[int(hd["style"])] = true
+					if float(boss._hand_slams[h_idx]["active"]) > 0.0:
+						seen_hand_slam = true
+				if float(boss._pincer_timer) > 0.0:
+					seen_pincer = true
+				if float(boss._claw_orbit_timer) > 0.0:
+					seen_claw_orbit = true
+				if float(boss._wall_push_timer) > 0.0:
+					seen_wall_push = true
+				if not boss._thrown_seeds.is_empty():
+					seen_thrown_seeds = true
+					for sd: Dictionary in boss._thrown_seeds:
+						seen_seed_payloads[StringName(sd["payload_type"])] = true
+
+		if boss_level.is_level_running:
+			seen_states[int(boss.acting_state)] = true
+			phase_transitions_checked[int(boss.current_phase)] = true
+
+		# Phase boundaries at 0.5s grid: 15s (30), 30s (60), 45s (90), 60s (120), 64s (128), 75s (150), 90s (180), 105s (210), 118.5s (237)
+		if step == 30:
+			assert_eq(boss.current_phase, 2, "t=15s must be Phase 2")
+			assert_eq(int(boss.acting_state), int(boss.ActingState.FROZEN_DOUBLE_TAKE), "Phase 2 must enter FROZEN_DOUBLE_TAKE")
+			assert_true(bool(boss.is_body_hazardous) and bool(boss.is_left_hand_hazardous) and bool(boss.is_right_hand_hazardous), "Boss body and hands must remain hazardous in Phase 2")
+		elif step == 60:
+			assert_eq(boss.current_phase, 3, "t=30s must be Phase 3")
+			assert_eq(int(boss.acting_state), int(boss.ActingState.FLOOR_SLAM_TANTRUM), "Phase 3 must enter FLOOR_SLAM_TANTRUM")
+		elif step == 90:
+			assert_eq(boss.current_phase, 4, "t=45s must be Phase 4")
+			assert_eq(int(boss.acting_state), int(boss.ActingState.ACCUSING_POINT), "Phase 4 must enter ACCUSING_POINT")
+		elif step == 120:
+			assert_eq(boss.current_phase, 5, "t=60s must be Phase 5")
+			assert_eq(int(boss.acting_state), int(boss.ActingState.FAKE_OUT_COLLAPSE), "Phase 5 must enter FAKE_OUT_COLLAPSE")
+			assert_false(bool(boss.is_body_hazardous), "Collapsed Boss head must have is_body_hazardous == false during FAKE_OUT_COLLAPSE")
+			assert_true(boss.body_collision.disabled, "Collapsed Boss body CollisionShape2D must be disabled during FAKE_OUT_COLLAPSE")
+			assert_false(bool(boss.is_left_hand_hazardous) or bool(boss.is_right_hand_hazardous), "Hands must stay dormant before beat 8 of FAKE_OUT_COLLAPSE")
+			assert_eq(player.current_hp, 2, "Phase 5 must heal player from 1 HP to 2 HP")
+			assert_eq(player.shield_energy, player.SHIELD_MAX_ENERGY, "Phase 5 heal must recharge shield to 100%")
+			assert_false(player.shield_exhausted, "Phase 5 heal must clear shield_exhausted")
+			assert_eq(hud.boss_phase_label.text, "PHASE 5 / 8", "HUD must display PHASE 5 / 8")
+		elif step == 121:
+			# Verify live Boss micro-reactions are suppressed during FAKE_OUT_COLLAPSE
+			assert_eq(float(boss._flinch_timer), 0.0, "Boss flinch timer must be 0 during FAKE_OUT_COLLAPSE")
+			assert_eq(float(boss._laugh_timer), 0.0, "Boss laugh timer must be 0 during FAKE_OUT_COLLAPSE")
+			player.shield_blocked.emit()
+			player.damaged.emit(1)
+			assert_eq(float(boss._flinch_timer), 0.0, "shield_blocked must be suppressed during FAKE_OUT_COLLAPSE")
+			assert_eq(float(boss._laugh_timer), 0.0, "damaged must be suppressed during FAKE_OUT_COLLAPSE")
+		elif step == 128:
+			assert_false(bool(boss.is_body_hazardous), "Collapsed Boss head must remain non-hazardous at beat >= 8 of Phase 5")
+			assert_true(bool(boss.is_left_hand_hazardous) and bool(boss.is_right_hand_hazardous), "Possessed hands must wake up hazardous by beat 8 of Phase 5")
+			assert_false(boss.left_hand_collision.disabled or boss.right_hand_collision.disabled, "Possessed hand CollisionShape2Ds must be enabled by beat 8 of Phase 5")
+		elif step == 150:
+			assert_eq(boss.current_phase, 6, "t=75s must be Phase 6")
+			assert_eq(int(boss.acting_state), int(boss.ActingState.HOLLOW_REBIRTH), "Phase 6 must enter HOLLOW_REBIRTH")
+			assert_true(bool(boss.is_body_hazardous) and bool(boss.is_left_hand_hazardous) and bool(boss.is_right_hand_hazardous), "Boss body and hands must be hazardous in Phase 6")
+			assert_false(boss.body_collision.disabled or boss.left_hand_collision.disabled or boss.right_hand_collision.disabled, "Boss CollisionShape2Ds must be enabled in Phase 6")
+		elif step == 180:
+			assert_eq(boss.current_phase, 7, "t=90s must be Phase 7")
+			assert_eq(int(boss.acting_state), int(boss.ActingState.EXHAUSTED_PANTING), "Phase 7 must enter EXHAUSTED_PANTING")
+			assert_eq(player.current_hp, 3, "Phase 7 must heal player from 2 HP to 3 HP")
+			player.heal(1, true)
+			assert_eq(player.current_hp, 3, "player.heal must clamp at MAX_HP (3)")
+		elif step == 210:
+			assert_eq(boss.current_phase, 8, "t=105s must be Phase 8")
+			assert_eq(int(boss.acting_state), int(boss.ActingState.TEMPLE_CLUTCH_PANIC), "Phase 8 must enter TEMPLE_CLUTCH_PANIC")
+		elif step == 237:
+			assert_eq(int(boss.acting_state), int(boss.ActingState.SILENT_SHATTER), "Beat 252 (>=118.125s) must enter SILENT_SHATTER")
+			assert_false(bool(boss.is_body_hazardous) or bool(boss.is_left_hand_hazardous) or bool(boss.is_right_hand_hazardous), "SILENT_SHATTER must disable Boss and hand hazard flags")
+
+	assert_true(seen_dash_styles.has(int(boss.HandDashStyle.FIST_ROCKET)), "Rocket fist dash (FIST_ROCKET) must trigger during Boss phases")
+	assert_true(seen_dash_styles.has(int(boss.HandDashStyle.CLAW_SWIPE)), "Claw sweep (CLAW_SWIPE) must trigger during Boss phases")
+	assert_true(seen_dash_styles.has(int(boss.HandDashStyle.FLOOR_RAKE)), "Floor rake (FLOOR_RAKE) must trigger during Boss phases")
+	assert_true(seen_pincer, "Double-fist pincer attack must trigger during Boss phases")
+	assert_true(seen_claw_orbit, "Spinning claw orbit must trigger during Boss phases")
+	assert_true(seen_hand_slam, "Hand slam pounce must trigger during Boss phases")
+	assert_true(seen_wall_push, "Hand-pushed closing wall must trigger during Boss phases")
+	assert_true(seen_thrown_seeds, "Thrown hazard seeds must launch during Boss phases")
+	for expected_payload: StringName in [&"circle", &"exploder", &"saw", &"enemy"]:
+		assert_true(seen_seed_payloads.has(expected_payload), "Thrown seed payload '%s' must launch during Boss phases" % String(expected_payload))
+
+	for p: int in range(1, 9):
+		assert_true(phase_transitions_checked.has(p), "Boss must visit Phase %d/8" % p)
+	for st: int in [
+		int(boss.ActingState.COCKY_CONDUCTOR),
+		int(boss.ActingState.FROZEN_DOUBLE_TAKE),
+		int(boss.ActingState.FLOOR_SLAM_TANTRUM),
+		int(boss.ActingState.ACCUSING_POINT),
+		int(boss.ActingState.FAKE_OUT_COLLAPSE),
+		int(boss.ActingState.HOLLOW_REBIRTH),
+		int(boss.ActingState.EXHAUSTED_PANTING),
+		int(boss.ActingState.TEMPLE_CLUTCH_PANIC),
+		int(boss.ActingState.SILENT_SHATTER),
+	]:
+		assert_true(seen_states.has(st), "Boss must transition through ActingState %d" % st)
+
+	assert_false(boss_level.is_level_running, "BossLevel must complete at 120.0s")
+	assert_true(complete_panel.visible, "LevelCompletePanel must display at 120.0s")
+	assert_true(bool(boss._shattered), "Boss must shatter on level completion")
+
+	var boss_rec: Dictionary = GameManager.save_data.get_record(GameManager.Difficulty.BOSS)
+	assert_false(boss_rec.is_empty(), "Boss completion must save a record under difficulty key 3")
+	assert_true(bool(boss_rec.get("completed", false)), "Boss record key 3 must be marked completed=true")
+	assert_true(float(boss_rec.get("time", 0.0)) >= 120.0, "Boss record key 3 time must be >= 120.0s")
+
+	# Retry must reset Boss and re-arm Phase 5 & Phase 7 heals
+	boss_level._on_retry_pressed()
+	assert_true(boss_level.is_level_running, "Retry must restart BossLevel")
+	assert_eq(boss_level.elapsed_time, 0.0, "Retry must reset elapsed_time")
+	assert_eq(boss.current_phase, 1, "Retry must reset Boss to Phase 1")
+	assert_eq(int(boss.acting_state), int(boss.ActingState.COCKY_CONDUCTOR), "Retry must reset Boss ActingState to COCKY_CONDUCTOR")
+	assert_false(bool(boss._shattered), "Retry must clear Boss shattered state")
+	assert_false(bool(boss_level._healed_phase_5), "Retry must re-arm Phase 5 heal")
+	assert_false(bool(boss_level._healed_phase_7), "Retry must re-arm Phase 7 heal")
+	assert_eq(player.current_hp, 3, "Retry must restore player to 3 HP")
+
+	player.global_position = Vector2(100.0, 580.0)
+	for step_retry: int in range(1, 121):
+		if step_retry == 119:
+			player.current_hp = 1
+		boss_level.simulate_physics(0.5)
+	assert_eq(player.current_hp, 2, "Re-armed Phase 5 heal must trigger again after Retry")
+
+	GameManager.set_state(GameManager.State.MENU)
+	GameManager.set_difficulty(backup_diff)
+	GameManager.save_data = backup_save
+	GameManager.save_game()
+
+
+func _assert_no_text_nodes(node: Node) -> void:
+	assert_false(node is Label, "Boss must contain zero Label nodes: " + node.name)
+	assert_false(node is RichTextLabel, "Boss must contain zero RichTextLabel nodes: " + node.name)
+	for child: Node in node.get_children():
+		_assert_no_text_nodes(child)
 
 
 func _build_hand_landmarks(palm_target: Vector2, closed_fist: bool) -> Array[Vector3]:

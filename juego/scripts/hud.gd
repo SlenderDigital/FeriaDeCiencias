@@ -9,7 +9,12 @@ var _last_shield_state: String = ""
 var _last_hand_state: int = -1
 var _last_hand_label: String = ""
 var _last_hand_pulse_bucket: int = -1
+var _boss_hud_enabled: bool = false
+var _boss_total_phases: int = 8
+var _boss_ticks: Array[ColorRect] = []
+var boss_phase_label: Label = null
 
+@onready var hud_root: Control = $HUDRoot
 @onready var progress_bg: ColorRect = $HUDRoot/ProgressBg
 @onready var progress_fill: ColorRect = $HUDRoot/ProgressFill
 @onready var hp_label: Label = $HUDRoot/HPLabel
@@ -138,6 +143,7 @@ func show_level_complete(subtitle_text: String) -> void:
 func sync_layout(viewport_size: Vector2) -> void:
 	if viewport_size.x > 48.0:
 		progress_bg.size.x = viewport_size.x - 48.0
+	_layout_boss_ticks()
 	if viewport_size.x > 160.0:
 		timer_label.position.x = viewport_size.x - 150.0
 	if viewport_size.x > 240.0:
@@ -153,3 +159,63 @@ func sync_layout(viewport_size: Vector2) -> void:
 			box.custom_minimum_size.x = modal_half_w * 2.0
 			box.offset_left = -modal_half_w
 			box.offset_right = modal_half_w
+
+
+func configure_boss_hud(enabled: bool, total_phases: int = 8) -> void:
+	_boss_hud_enabled = enabled
+	_boss_total_phases = maxi(total_phases, 1)
+	var desired_ticks: int = maxi(_boss_total_phases - 1, 0)
+	if _boss_ticks.size() != desired_ticks:
+		for old_tick: ColorRect in _boss_ticks:
+			if old_tick != null and is_instance_valid(old_tick):
+				old_tick.queue_free()
+		_boss_ticks.clear()
+		for i: int in range(desired_ticks):
+			var tick: ColorRect = ColorRect.new()
+			tick.name = "BossPhaseTick%d" % (i + 1)
+			tick.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			tick.color = Color(0.05, 0.05, 0.05, 1.0)
+			tick.z_index = 1
+			progress_bg.add_child(tick)
+			_boss_ticks.append(tick)
+
+	for tick: ColorRect in _boss_ticks:
+		if tick != null and is_instance_valid(tick):
+			tick.visible = enabled
+
+	if boss_phase_label == null or not is_instance_valid(boss_phase_label):
+		boss_phase_label = Label.new()
+		boss_phase_label.name = "BossPhaseLabel"
+		boss_phase_label.position = Vector2(24.0, 90.0)
+		boss_phase_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		boss_phase_label.add_theme_font_size_override("font_size", 14)
+		boss_phase_label.add_theme_color_override("font_color", Color(0.88, 0.88, 0.88, 1.0))
+		hud_root.add_child(boss_phase_label)
+
+	boss_phase_label.visible = enabled
+	_layout_boss_ticks()
+	if enabled and boss_phase_label.text.is_empty():
+		update_boss_phase(1, _boss_total_phases)
+
+
+func update_boss_phase(phase: int, total_phases: int = 8, status_suffix: String = "") -> void:
+	if boss_phase_label == null or not is_instance_valid(boss_phase_label):
+		configure_boss_hud(true, total_phases)
+	var safe_total: int = maxi(total_phases, 1)
+	var clamped_phase: int = clampi(phase, 1, safe_total)
+	boss_phase_label.text = "PHASE %d / %d%s" % [clamped_phase, safe_total, status_suffix]
+
+
+func _layout_boss_ticks() -> void:
+	if _boss_ticks.is_empty() or progress_bg == null:
+		return
+	var bar_w: float = progress_bg.size.x
+	var bar_h: float = progress_bg.size.y
+	var total: float = float(maxi(_boss_total_phases, 1))
+	for i: int in range(_boss_ticks.size()):
+		var tick: ColorRect = _boss_ticks[i]
+		if tick == null or not is_instance_valid(tick):
+			continue
+		var frac: float = float(i + 1) / total
+		tick.position = Vector2(roundf(bar_w * frac) - 1.0, -1.0)
+		tick.size = Vector2(2.0, bar_h + 2.0)
