@@ -18,6 +18,11 @@ echo "============================================================"
 echo " Shapes & Beams — Offline Release Builder ($TARGET)"
 echo "============================================================"
 
+if [[ ! -d juego/.godot ]]; then
+	echo "[0/5] Importing Godot project resources (.godot/ not found)..."
+	godot --headless --path juego --import >/dev/null
+fi
+
 echo "[1/5] Running automated headless test suite..."
 godot --headless --path juego -s res://tests/cli_test_runner.gd
 

@@ -4,12 +4,16 @@ extends SceneTree
 func _process(_delta: float) -> bool:
 	root.size = Vector2i(1152, 648)
 	var suite_script: GDScript = load("res://tests/test_gameplay.gd")
-	if suite_script == null:
-		print("ERROR: Failed to load test_gameplay.gd")
+	if suite_script == null or not suite_script.can_instantiate():
+		print("ERROR: Failed to load test_gameplay.gd (did you run `godot --headless --path juego --import`?)")
 		quit(1)
 		return true
 	var suite: Object = suite_script.new()
 	var runner_class: GDScript = load("res://addons/godot_ai/testing/test_runner.gd")
+	if runner_class == null or not runner_class.can_instantiate():
+		print("ERROR: Failed to load test_runner.gd")
+		quit(1)
+		return true
 	var runner: Object = runner_class.new()
 	var res: Dictionary = runner.run_suites([suite], "", "", {}, true)
 	print("--- TEST RESULTS ---")

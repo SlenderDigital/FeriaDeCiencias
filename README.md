@@ -69,9 +69,10 @@ uv sync
 
 ### 2. Ejecutar el juego
 
-Abrí `juego/project.godot` en **Godot 4.7** y presioná **Run** (`F5`), o ejecutalo desde la terminal:
+Abrí `juego/project.godot` en **Godot 4.7** y presioná **Run** (`F5`), o ejecutalo desde la terminal (en un clon nuevo, importá los recursos una sola vez con `--import` antes de correrlo):
 
 ```bash
+godot --headless --path juego --import
 godot --path juego
 ```
 
