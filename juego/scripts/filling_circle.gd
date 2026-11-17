@@ -17,7 +17,7 @@ const CIRCLE_SEGMENTS: int = 32
 const PLAYER_HIT_RADIUS: float = 12.0
 
 const SHADOW_COLOR: Color = Color(0.28, 0.28, 0.28, 0.45)
-const FILL_COLOR: Color = Color(0.88, 0.88, 0.88, 0.85)
+const FILL_COLOR: Color = Color(0.84, 0.84, 0.84, 0.36)
 const ACTIVE_COLOR: Color = Color(1.0, 1.0, 1.0, 1.0)
 const FADE_COLOR: Color = Color(0.75, 0.75, 0.75, 0.6)
 

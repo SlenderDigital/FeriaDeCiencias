@@ -9,6 +9,7 @@ signal request_closing_wall(axis: int, gap_center: float, gap_size: float, warni
 signal request_enemy(type: int, spawn_position: Vector2, speed_scale: float, warning: float, max_lifetime: float)
 signal request_clear_hazards()
 signal boss_slammed(at_position: Vector2, strength: float)
+signal boss_wall_slammed(wall_pos: Vector2, inward_normal: Vector2, strength: float)
 signal phase_changed(new_phase: int)
 
 enum ActingState {
@@ -34,6 +35,18 @@ enum HandDashStyle {
 	FIST_ROCKET,
 	CLAW_SWIPE,
 	FLOOR_RAKE,
+}
+
+enum RitualStyle {
+	CROWN_FORGE = 0,
+	DIMENSIONAL_RIFT = 1,
+}
+
+enum WallSlamPhase {
+	NONE = 0,
+	WINDUP = 1,
+	STRIKE = 2,
+	RECOVER = 3,
 }
 
 const MUSIC_BPM: float = 128.0
@@ -123,8 +136,18 @@ var _wall_push_gap_center: float = 576.0
 var _wall_push_gap_size: float = 156.0
 
 var _tether_beam_timer: float = 0.0
+var _tether_telegraph_timer: float = 0.0
+var _tether_duration: float = 1.0
+var _tether_sweep_active: bool = false
+var _tether_active: bool = false
 var _tether_left: Vector2 = Vector2.ZERO
 var _tether_right: Vector2 = Vector2.ZERO
+
+var total_wall_slams: int = 0
+var total_spawn_rituals: int = 0
+var _wall_cracks: Array[Dictionary] = []
+var _spawn_rituals: Array[Dictionary] = []
+var _hand_wall_slams: Array[Dictionary] = [_make_wall_slam_state(), _make_wall_slam_state()]
 
 var _mouth_charge_timer: float = 0.0
 var _mouth_beam_flash: float = 0.0
@@ -218,6 +241,26 @@ static func _make_aim_state() -> Dictionary:
 	return {"timer": 0.0, "pos": Vector2.ZERO, "angle": 0.0}
 
 
+static func _make_wall_slam_state() -> Dictionary:
+	return {
+		"phase": WallSlamPhase.NONE,
+		"wall_side": &"left",
+		"wall_pos": Vector2.ZERO,
+		"contact_pos": Vector2.ZERO,
+		"stage_pos": Vector2.ZERO,
+		"start_pos": Vector2.ZERO,
+		"normal": Vector2.RIGHT,
+		"rot": 0.0,
+		"timer": 0.0,
+		"duration": 0.20,
+		"windup_duration": 0.50,
+		"strength": 0.72,
+		"spawn_spall": false,
+		"impact_emitted": false,
+		"pending_emit": false,
+	}
+
+
 func _ready() -> void:
 	Shapes.apply_radial_glow(
 		boss_glow,
@@ -283,6 +326,10 @@ func reset_boss(arena_size: Vector2) -> void:
 	_sweat_shards.clear()
 	_sweat_spawn_timer = 0.0
 	_shatter_shards.clear()
+	_wall_cracks.clear()
+	_spawn_rituals.clear()
+	total_wall_slams = 0
+	total_spawn_rituals = 0
 	_was_laughing = false
 
 	_sync_hazard_flags()
@@ -328,13 +375,22 @@ func _clear_active_attacks() -> void:
 	_claw_orbit_angle = 0.0
 	_wall_push_timer = 0.0
 	_tether_beam_timer = 0.0
+	_tether_telegraph_timer = 0.0
+	_tether_duration = 1.0
+	_tether_sweep_active = false
+	_tether_active = false
 	_mouth_charge_timer = 0.0
 	_mouth_beam_flash = 0.0
+
+	for idx_ws: int in range(2):
+		_hand_wall_slams[idx_ws] = _make_wall_slam_state()
 
 	_thrown_seeds.clear()
 	_afterimages.clear()
 	_slash_arcs.clear()
 	_rake_grooves.clear()
+	_wall_cracks.clear()
+	_spawn_rituals.clear()
 
 
 func simulate_boss(delta: float, elapsed_time: float, arena_size: Vector2, player_node: Node2D) -> void:
@@ -361,6 +417,8 @@ func simulate_boss(delta: float, elapsed_time: float, arena_size: Vector2, playe
 	_update_timed_fx(_afterimages, safe_delta)
 	_update_timed_fx(_slash_arcs, safe_delta)
 	_update_timed_fx(_rake_grooves, safe_delta)
+	_update_timed_fx(_wall_cracks, safe_delta)
+	_update_spawn_rituals(safe_delta)
 	_update_motion(safe_delta)
 	_update_sweat_shards(safe_delta)
 	_sync_hazard_flags()
@@ -402,10 +460,10 @@ func shatter() -> void:
 	telegraph_line.visible = false
 
 	_shatter_shards.clear()
-	for i: int in range(20):
-		var ang: float = TAU * float(i) / 20.0 + float(i % 3) * 0.14
-		var dist: float = 24.0 + float((i * 19) % 46)
-		var sz: float = 7.0 + float(i % 4) * 3.5
+	for i: int in range(28):
+		var ang: float = TAU * float(i) / 28.0 + float(i % 3) * 0.11
+		var dist: float = 22.0 + float((i * 19) % 52)
+		var sz: float = 6.5 + float(i % 4) * 3.5
 		var gray: float = 0.72 + float(i % 3) * 0.14
 		_shatter_shards.append({
 			"offset": Vector2.from_angle(ang) * dist,
@@ -528,146 +586,168 @@ func _enter_phase(new_phase: int) -> void:
 
 
 # ------------------------------------------------------------------------------
-# PHASE 1: COCKY CONDUCTOR — Fingertip Beams, 1-2 Rocket Fists & Claw Backhand
+# PHASE 1: COCKY CONDUCTOR — Theatrical Intro, Single Beams, Hook & Ring
 # ------------------------------------------------------------------------------
 func _choreograph_phase_1(beat_in_phase: int) -> void:
+	if beat_in_phase <= 3:
+		if beat_in_phase in [1, 2, 3]:
+			_hand_throw_flash[0] = 0.22
+			_hand_throw_flash[1] = 0.22
+		return
 	var s: Vector2 = _scale_vec()
 	var aim_pos: Vector2 = _clamp_hazard_target(_player_pos, s)
-	if beat_in_phase in [2, 6, 14, 18]:
-		var use_left: bool = beat_in_phase in [2, 14]
-		var shooter_x: float = 125.0 * s.x if use_left else 1027.0 * s.x
-		var shooter_pos: Vector2 = Vector2(shooter_x, clampf(aim_pos.y, 135.0 * s.y, 505.0 * s.y))
-		_aim_hand_pointer(use_left, shooter_pos, (aim_pos - shooter_pos).angle(), BEAT_DURATION * 2.05)
-	elif beat_in_phase in [4, 8, 16, 20]:
-		var use_left: bool = beat_in_phase in [4, 16]
-		var idx: int = 0 if use_left else 1
-		var origin: Vector2 = Vector2(_hand_aims[idx]["pos"])
-		var ang: float = float(_hand_aims[idx]["angle"])
-		_fire_hand_beam(use_left, origin, ang, 44.0, 0.98, 0.34)
-		var ring_target: Vector2 = _clamp_hazard_target(_player_pos + Vector2(90.0 * s.x if use_left else -90.0 * s.x, 0.0), s)
-		_launch_seed(not use_left, "hand", ring_target, 0.36, &"circle", [ring_target, 78.0, beat_in_phase % 3, 1.05, 0.35])
-	elif beat_in_phase == 9:
-		# 1-2 Rocket Fist Combo windup (>= 0.55s telegraph)
-		var end_l: Vector2 = _clamp_combat_bounds(_player_pos + Vector2(-45.0 * s.x, 0.0), s)
-		var end_r: Vector2 = _clamp_combat_bounds(_player_pos + Vector2(45.0 * s.x, 0.0), s)
-		_start_hand_telegraph(true, _clamp_combat_bounds(_body_pos + Vector2(-115.0 * s.x, 12.0 * s.y), s), end_l, BEAT_DURATION * 1.95, HandDashStyle.FIST_ROCKET)
-		_start_hand_telegraph(false, _clamp_combat_bounds(_body_pos + Vector2(115.0 * s.x, 12.0 * s.y), s), end_r, BEAT_DURATION * 2.95, HandDashStyle.FIST_ROCKET)
-	elif beat_in_phase == 11:
-		_start_hand_dash(true, 0.26, true, HandDashStyle.FIST_ROCKET)
+	if beat_in_phase == 4:
+		var shooter_pos_l: Vector2 = Vector2(125.0 * s.x, clampf(aim_pos.y, 135.0 * s.y, 495.0 * s.y))
+		_aim_hand_pointer(true, shooter_pos_l, (aim_pos - shooter_pos_l).angle(), BEAT_DURATION * 2.1)
+		var center_c0: Vector2 = _clamp_hazard_target(Vector2(576.0 * s.x, 324.0 * s.y), s)
+		_launch_seed(false, "hand", center_c0, 0.34, &"circle", [center_c0, 78.0, 0, 1.00, 0.34])
+	elif beat_in_phase == 6:
+		var origin_l: Vector2 = Vector2(_hand_aims[0]["pos"])
+		var ang_l: float = float(_hand_aims[0]["angle"])
+		_fire_hand_beam(true, origin_l, ang_l, 44.0, 0.95, 0.34)
+	elif beat_in_phase == 7:
+		var target_c1: Vector2 = _clamp_hazard_target(_player_pos, s)
+		_launch_seed(false, "hand", target_c1, 0.34, &"circle", [target_c1, 78.0, 0, 1.00, 0.34])
+	elif beat_in_phase == 8:
+		var end_r: Vector2 = _clamp_combat_bounds(_player_pos, s)
+		_start_hand_telegraph(false, _clamp_combat_bounds(Vector2(977.0 * s.x, end_r.y), s), end_r, BEAT_DURATION * 2.0, HandDashStyle.FIST_ROCKET)
+	elif beat_in_phase == 10:
+		_start_hand_dash(false, 0.26, false, HandDashStyle.FIST_ROCKET)
+		var target_c_bridge: Vector2 = _clamp_hazard_target(_player_pos + Vector2(140.0 * s.x, -40.0 * s.y), s)
+		_launch_seed(true, "hand", target_c_bridge, 0.34, &"circle", [target_c_bridge, 76.0, 1, 1.00, 0.34])
 	elif beat_in_phase == 12:
-		_start_hand_dash(false, 0.26, true, HandDashStyle.FIST_ROCKET)
-	elif beat_in_phase in [22, 24]:
-		var target_c: Vector2 = _clamp_hazard_target(_player_pos, s)
-		_launch_seed(beat_in_phase == 22, "hand", target_c, 0.34, &"circle", [target_c, 84.0, 1, 0.95, 0.35])
+		var shooter_pos_r: Vector2 = Vector2(1027.0 * s.x, clampf(aim_pos.y, 135.0 * s.y, 495.0 * s.y))
+		_aim_hand_pointer(false, shooter_pos_r, (aim_pos - shooter_pos_r).angle(), BEAT_DURATION * 2.1)
+	elif beat_in_phase == 14:
+		var origin_r: Vector2 = Vector2(_hand_aims[1]["pos"])
+		var ang_r: float = float(_hand_aims[1]["angle"])
+		_fire_hand_beam(false, origin_r, ang_r, 44.0, 0.95, 0.34)
+	elif beat_in_phase == 16:
+		var target_c2: Vector2 = _clamp_hazard_target(_player_pos + Vector2(-105.0 * s.x, 0.0), s)
+		_launch_seed(true, "hand", target_c2, 0.34, &"circle", [target_c2, 78.0, 0, 1.00, 0.34])
+	elif beat_in_phase == 18:
+		var target_c3: Vector2 = _clamp_hazard_target(_player_pos + Vector2(105.0 * s.x, 0.0), s)
+		_launch_seed(false, "hand", target_c3, 0.34, &"circle", [target_c3, 82.0, 1, 1.00, 0.34])
+	elif beat_in_phase == 20:
+		var end_l: Vector2 = _clamp_combat_bounds(_player_pos, s)
+		_start_hand_telegraph(true, _clamp_combat_bounds(Vector2(175.0 * s.x, end_l.y), s), end_l, BEAT_DURATION * 2.0, HandDashStyle.FIST_ROCKET)
+	elif beat_in_phase == 22:
+		_start_hand_dash(true, 0.45, false, HandDashStyle.FIST_ROCKET)
+		_locked_aim_pos = _player_pos
+		_aim_telegraph_timer = 0.42
+		_mouth_charge_timer = 0.42
+	elif beat_in_phase == 23:
+		_fire_downward_arc_ring(5, 265.0)
 	elif beat_in_phase == 25:
-		# Full-Arena Claw Backhand Sweep telegraph (>= 0.55s)
-		var lane_y: float = clampf(_player_pos.y, 135.0 * s.y, 505.0 * s.y)
-		_start_hand_telegraph(false, Vector2(987.0 * s.x, lane_y), Vector2(165.0 * s.x, lane_y), BEAT_DURATION * 1.95, HandDashStyle.CLAW_SWIPE)
+		var shooter_pos_l2: Vector2 = Vector2(125.0 * s.x, clampf(aim_pos.y, 135.0 * s.y, 495.0 * s.y))
+		_aim_hand_pointer(true, shooter_pos_l2, (aim_pos - shooter_pos_l2).angle(), BEAT_DURATION * 2.1)
 	elif beat_in_phase == 27:
-		_start_hand_dash(false, 0.32, false, HandDashStyle.CLAW_SWIPE)
+		var origin_l2: Vector2 = Vector2(_hand_aims[0]["pos"])
+		var ang_l2: float = float(_hand_aims[0]["angle"])
+		_fire_hand_beam(true, origin_l2, ang_l2, 44.0, 0.95, 0.34)
+	elif beat_in_phase == 28:
+		var target_c4: Vector2 = _clamp_hazard_target(_player_pos, s)
+		_launch_seed(false, "hand", target_c4, 0.34, &"circle", [target_c4, 80.0, 2, 1.00, 0.34])
 
 
 # ------------------------------------------------------------------------------
-# PHASE 2: FROZEN DOUBLE-TAKE — Tether Beams, 1-2 Fists, Claw Swipe & Mouth Fans
+# PHASE 2: FROZEN DOUBLE-TAKE — 4 True Wall Slams, Tether Beam & 1-2 Fists
 # ------------------------------------------------------------------------------
 func _choreograph_phase_2(beat_in_phase: int) -> void:
 	var s: Vector2 = _scale_vec()
-	if beat_in_phase in [2, 6, 10, 14]:
-		var lane_y: float = clampf(_player_pos.y, 135.0 * s.y, 505.0 * s.y)
+	if beat_in_phase == 1:
+		_start_wall_slam(true, &"left", 220.0 * s.y, 0.54, 0.72, false)
+		var drop_early: Vector2 = _clamp_hazard_target(_player_pos, s)
+		_launch_seed(false, "hand", drop_early, 0.34, &"circle", [drop_early, 80.0, 0, 1.05, 0.34])
+	elif beat_in_phase == 5:
+		_start_wall_slam(false, &"right", 420.0 * s.y, 0.54, 0.72, false)
+	elif beat_in_phase == 6:
+		_locked_aim_pos = _player_pos
+		_aim_telegraph_timer = 0.40
+		_mouth_charge_timer = 0.40
+	elif beat_in_phase == 7:
+		_fire_mouth_fan(_locked_aim_pos, 3, deg_to_rad(15.0), 310.0)
+	elif beat_in_phase == 9:
+		var lane_y: float = 320.0 * s.y
 		_tether_left = Vector2(125.0 * s.x, lane_y)
 		_tether_right = Vector2(1027.0 * s.x, lane_y)
+		_tether_sweep_active = false
+		_tether_active = false
+		_tether_telegraph_timer = 0.0
 		_tether_beam_timer = BEAT_DURATION * 2.05
 		_aim_hand_pointer(true, _tether_left, 0.0, BEAT_DURATION * 2.05)
 		_aim_hand_pointer(false, _tether_right, PI, BEAT_DURATION * 2.05)
-	elif beat_in_phase in [4, 8, 12, 16]:
+	elif beat_in_phase == 11:
 		var mid: Vector2 = (_tether_left + _tether_right) * 0.5
-		request_beam.emit(mid, (_tether_right - _tether_left).angle(), 48.0, 0.92, 0.34)
+		request_beam.emit(mid, (_tether_right - _tether_left).angle(), 48.0, 0.95, 0.34)
 		boss_slammed.emit(mid, 0.36)
-		if beat_in_phase in [8, 16]:
-			var drop_pos: Vector2 = _clamp_hazard_target(_player_pos, s)
-			_launch_seed(beat_in_phase == 8, "hand", drop_pos, 0.32, &"circle", [drop_pos, 82.0, 0, 0.95, 0.35])
-	elif beat_in_phase == 17:
+	elif beat_in_phase == 13:
 		var end_l: Vector2 = _clamp_combat_bounds(_player_pos, s)
 		var end_r: Vector2 = _clamp_combat_bounds(_player_pos + Vector2(60.0 * s.x, -40.0 * s.y), s)
 		_start_hand_telegraph(true, Vector2(175.0 * s.x, end_l.y), end_l, BEAT_DURATION * 1.95, HandDashStyle.FIST_ROCKET)
 		_start_hand_telegraph(false, Vector2(977.0 * s.x, end_r.y), end_r, BEAT_DURATION * 2.95, HandDashStyle.FIST_ROCKET)
-	elif beat_in_phase == 18:
+	elif beat_in_phase == 14:
 		_locked_aim_pos = _player_pos
 		_aim_telegraph_timer = 0.42
 		_mouth_charge_timer = 0.45
+	elif beat_in_phase == 15:
+		_start_hand_dash(true, 0.26, false, HandDashStyle.FIST_ROCKET)
+		_fire_mouth_fan(_locked_aim_pos, 5, deg_to_rad(15.0), 345.0)
+	elif beat_in_phase == 16:
+		_start_hand_dash(false, 0.26, false, HandDashStyle.FIST_ROCKET)
 	elif beat_in_phase == 19:
-		_start_hand_dash(true, 0.25, true, HandDashStyle.FIST_ROCKET)
-		_fire_mouth_fan(_locked_aim_pos, 5, deg_to_rad(15.0), 370.0)
-	elif beat_in_phase == 20:
-		_start_hand_dash(false, 0.25, true, HandDashStyle.FIST_ROCKET)
+		_start_wall_slam(true, &"left", 380.0 * s.y, 0.54, 0.74, true)
 	elif beat_in_phase == 21:
-		var sweep_y: float = clampf(_player_pos.y, 135.0 * s.y, 505.0 * s.y)
-		_start_hand_telegraph(true, Vector2(165.0 * s.x, sweep_y), Vector2(987.0 * s.x, sweep_y), BEAT_DURATION * 1.95, HandDashStyle.CLAW_SWIPE)
-	elif beat_in_phase == 23:
-		_start_hand_dash(true, 0.30, true, HandDashStyle.CLAW_SWIPE)
-	elif beat_in_phase in [25, 29]:
-		var use_left: bool = beat_in_phase == 25
-		var side_x: float = (280.0 if use_left else 872.0) * s.x
-		var hand_top: Vector2 = Vector2(side_x, 135.0 * s.y)
-		_aim_hand_pointer(use_left, hand_top, PI * 0.5, BEAT_DURATION * 1.15)
-	elif beat_in_phase in [26, 30]:
-		var use_left: bool = beat_in_phase == 26
-		var idx: int = 0 if use_left else 1
-		var hand_top: Vector2 = Vector2(_hand_aims[idx]["pos"])
-		_fire_hand_beam(use_left, hand_top, PI * 0.5, 44.0, 0.95, 0.32)
-		if beat_in_phase == 26:
-			var end_p: Vector2 = _clamp_combat_bounds(_player_pos, s)
-			_start_hand_telegraph(false, Vector2(977.0 * s.x, end_p.y), end_p, BEAT_DURATION * 1.95, HandDashStyle.FIST_ROCKET)
+		_start_wall_slam(false, &"right", 220.0 * s.y, 0.54, 0.74, true)
+	elif beat_in_phase == 24:
+		_aim_hand_pointer(true, Vector2(280.0 * s.x, 135.0 * s.y), PI * 0.5, BEAT_DURATION * 1.15)
+	elif beat_in_phase == 25:
+		_fire_hand_beam(true, Vector2(_hand_aims[0]["pos"]), PI * 0.5, 44.0, 0.95, 0.32)
 	elif beat_in_phase == 27:
-		_locked_aim_pos = _player_pos
-		_aim_telegraph_timer = 0.40
-		_mouth_charge_timer = 0.42
+		_aim_hand_pointer(false, Vector2(872.0 * s.x, 135.0 * s.y), PI * 0.5, BEAT_DURATION * 1.15)
 	elif beat_in_phase == 28:
-		_start_hand_dash(false, 0.25, true, HandDashStyle.FIST_ROCKET)
-		_fire_mouth_fan(_locked_aim_pos, 5, deg_to_rad(15.0), 370.0)
+		_fire_hand_beam(false, Vector2(_hand_aims[1]["pos"]), PI * 0.5, 44.0, 0.95, 0.32)
+		var drop_pos: Vector2 = _clamp_hazard_target(_player_pos, s)
+		_launch_seed(true, "hand", drop_pos, 0.34, &"circle", [drop_pos, 82.0, 1, 0.95, 0.34])
 
 
 # ------------------------------------------------------------------------------
-# PHASE 3: FLOOR-SLAM TANTRUM — Ground-Slam Pounces, Hand-Pushed Walls & Chaser
+# PHASE 3: FLOOR-SLAM TANTRUM — Ground-Slam Pounces, Closing Walls & Crown-Forge
 # ------------------------------------------------------------------------------
 func _choreograph_phase_3(beat_in_phase: int) -> void:
 	var s: Vector2 = _scale_vec()
 	var center: Vector2 = _arena_size * 0.5
-	if beat_in_phase in [1, 9, 17, 25]:
-		var is_left: bool = beat_in_phase in [1, 17]
-		_start_hand_slam_telegraph(is_left, _player_pos, BEAT_DURATION * 1.95)
-
-	if beat_in_phase in [3, 11, 19, 27]:
-		var is_left: bool = beat_in_phase in [3, 19]
-		_start_hand_slam_active(is_left, 0.16, 1)
-
-	if beat_in_phase == 4:
+	if beat_in_phase in [1, 15]:
+		_start_hand_slam_telegraph(beat_in_phase == 1, _player_pos, BEAT_DURATION * 1.95)
+	elif beat_in_phase in [3, 17]:
+		_start_hand_slam_active(beat_in_phase == 3, 0.18, 1)
+	elif beat_in_phase == 4:
 		var gap_x: float = clampf(_player_pos.x, 220.0 * s.x, _arena_size.x - 220.0 * s.x)
-		_start_wall_push(0, gap_x, 168.0, 1.25, 0.60, 0.85)
-		var exp_pos: Vector2 = _clamp_hazard_target(Vector2(220.0 * s.x, 450.0 * s.y), s)
-		_launch_seed(true, "hand", exp_pos, 0.38, &"exploder", [exp_pos, 1.05, 8, 340.0])
-	elif beat_in_phase == 12:
-		var enemy_pos: Vector2 = _clamp_hazard_target(Vector2(900.0 * s.x, 180.0 * s.y) if _player_pos.x < center.x else Vector2(250.0 * s.x, 180.0 * s.y), s)
-		_launch_seed(false, "mouth", enemy_pos, 0.42, &"enemy", [0, enemy_pos, 1.0, 0.80, 7.5])
+		_start_wall_push(0, gap_x, 168.0, 1.05, 0.50, 0.75)
+	elif beat_in_phase == 10:
+		var chaser_pos: Vector2 = _clamp_hazard_target(Vector2(900.0 * s.x, 180.0 * s.y) if _player_pos.x < center.x else Vector2(250.0 * s.x, 180.0 * s.y), s)
+		_start_spawn_ritual(RitualStyle.CROWN_FORGE, 0, chaser_pos, 0.75, 0.95)
 	elif beat_in_phase == 14:
-		var exp_pos_r: Vector2 = _clamp_hazard_target(Vector2(932.0 * s.x, 180.0 * s.y), s)
-		_launch_seed(false, "hand", exp_pos_r, 0.38, &"exploder", [exp_pos_r, 1.05, 8, 340.0])
-	elif beat_in_phase == 20:
+		var exp_pos: Vector2 = _clamp_hazard_target(Vector2(240.0 * s.x, 420.0 * s.y) if _player_pos.x > center.x else Vector2(912.0 * s.x, 190.0 * s.y), s)
+		_launch_seed(true, "hand", exp_pos, 0.36, &"exploder", [exp_pos, 1.05, 8, 330.0])
+	elif beat_in_phase == 19:
+		var turret_pos: Vector2 = _clamp_hazard_target(Vector2(250.0 * s.x, 190.0 * s.y) if _player_pos.x < center.x else Vector2(900.0 * s.x, 190.0 * s.y), s)
+		_start_spawn_ritual(RitualStyle.CROWN_FORGE, 1, turret_pos, 0.75, 1.00)
+	elif beat_in_phase == 21:
+		_fire_downward_arc_ring(3, 295.0)
+	elif beat_in_phase == 24:
 		var gap_y: float = clampf(_player_pos.y, 175.0 * s.y, _arena_size.y - 175.0 * s.y)
-		_start_wall_push(1, gap_y, 164.0, 1.20, 0.58, 0.85)
+		_start_wall_push(1, gap_y, 164.0, 1.00, 0.50, 0.70)
+	elif beat_in_phase == 27:
 		_mouth_beam_flash = 0.35
 		request_beam.emit(_body_pos, PI * 0.25, 46.0, 0.95, 0.32)
 		request_beam.emit(_body_pos, PI * 0.75, 46.0, 0.95, 0.32)
-		boss_slammed.emit(_body_pos, 0.44)
-	elif beat_in_phase in [8, 28, 30]:
-		_mouth_beam_flash = 0.35
-		request_beam.emit(_body_pos, PI * 0.25, 46.0, 0.95, 0.32)
-		request_beam.emit(_body_pos, PI * 0.75, 46.0, 0.95, 0.32)
+		_fire_downward_arc_ring(5, 305.0)
 		boss_slammed.emit(_body_pos, 0.44)
 
 
 # ------------------------------------------------------------------------------
-# PHASE 4: ACCUSING POINT — Rotisserie + Snipes + Nutcracker + Jaw-Chomp Lunges
+# PHASE 4: ACCUSING POINT — Lethal Clothesline + Rotisserie + Pincer + Lunges
 # ------------------------------------------------------------------------------
 func _choreograph_phase_4(beat_in_phase: int) -> void:
 	var s: Vector2 = _scale_vec()
@@ -675,26 +755,49 @@ func _choreograph_phase_4(beat_in_phase: int) -> void:
 	if beat_in_phase <= 18:
 		_body_target = center
 		_body_move_speed = 7.0
-		if beat_in_phase >= 2 and beat_in_phase % 2 == 0 and beat_in_phase != 18:
-			_rotisserie_angle += PI / 6.0
-			_mouth_beam_flash = 0.28
-			request_beam.emit(_body_pos, _rotisserie_angle, 44.0, 0.92, 0.28)
-		if beat_in_phase in [4, 8, 12]:
-			var use_left: bool = beat_in_phase == 8
-			var side_x: float = 125.0 * s.x if use_left else 1027.0 * s.x
-			var hand_origin: Vector2 = Vector2(side_x, clampf(_player_pos.y, 135.0 * s.y, 495.0 * s.y))
-			var ang: float = (_player_pos - hand_origin).angle()
-			_aim_hand_pointer(use_left, hand_origin, ang, BEAT_DURATION * 2.05)
-		elif beat_in_phase in [6, 10, 14]:
-			var use_left: bool = beat_in_phase == 10
-			var idx: int = 0 if use_left else 1
-			var hand_origin: Vector2 = Vector2(_hand_aims[idx]["pos"])
-			var ang: float = float(_hand_aims[idx]["angle"])
-			_fire_hand_beam(use_left, hand_origin, ang, 40.0, 0.96, 0.30)
-		elif beat_in_phase == 16:
+		if beat_in_phase == 1:
+			_tether_sweep_active = true
+			_tether_active = false
+			_tether_telegraph_timer = BEAT_DURATION * 2.0
+			_tether_beam_timer = _tether_telegraph_timer
+			_tether_left = Vector2(125.0 * s.x, 165.0 * s.y)
+			_tether_right = Vector2(1027.0 * s.x, 165.0 * s.y)
+		elif beat_in_phase == 3:
+			_tether_telegraph_timer = 0.0
+			_tether_sweep_active = true
+			_tether_active = true
+			_tether_duration = BEAT_DURATION * 8.2
+			_tether_beam_timer = _tether_duration
+			_tether_left = Vector2(125.0 * s.x, 165.0 * s.y)
+			_tether_right = Vector2(1027.0 * s.x, 165.0 * s.y)
+		elif beat_in_phase == 8:
+			# Upper-side circle behind the already-swept wire so dodging below y=465 stays uncramped
+			var upper_pos: Vector2 = Vector2(576.0 * s.x, 145.0 * s.y)
+			_launch_seed(true, "mouth", upper_pos, 0.34, &"circle", [upper_pos, 80.0, 0, 0.95, 0.34])
+		elif beat_in_phase == 12:
+			_tether_active = false
+			_tether_sweep_active = false
+			_tether_telegraph_timer = 0.0
+			_tether_beam_timer = 0.0
+			var turret_pos: Vector2 = _clamp_hazard_target(Vector2(900.0 * s.x, 185.0 * s.y) if _player_pos.x < center.x else Vector2(250.0 * s.x, 185.0 * s.y), s)
+			_launch_seed(false, "hand", turret_pos, 0.34, &"enemy", [1, turret_pos, 1.10, 0.80, 7.5])
+		elif beat_in_phase == 13:
+			var ring_pos: Vector2 = _clamp_hazard_target(_player_pos, s)
+			_launch_seed(true, "hand", ring_pos, 0.34, &"circle", [ring_pos, 82.0, 1, 0.95, 0.34])
+		elif beat_in_phase == 14:
+			var exp_pos: Vector2 = _clamp_hazard_target(Vector2(260.0 * s.x, 220.0 * s.y) if _player_pos.x > center.x else Vector2(892.0 * s.x, 220.0 * s.y), s)
+			_launch_seed(true, "hand", exp_pos, 0.34, &"exploder", [exp_pos, 0.92, 8, 320.0])
+		elif beat_in_phase == 15:
 			_start_pincer_telegraph(_player_pos, BEAT_DURATION * 1.95)
-		elif beat_in_phase == 18:
+		elif beat_in_phase == 17:
 			_execute_pincer_clap()
+
+		if beat_in_phase in [2, 4, 6, 8, 10]:
+			var step_dir: float = -1.0 if beat_in_phase >= 8 else 1.0
+			_rotisserie_angle += step_dir * (PI / 6.0)
+			_mouth_beam_flash = 0.28
+			var beam_origin: Vector2 = _body_pos + Vector2.from_angle(_rotisserie_angle) * 52.0
+			request_beam.emit(beam_origin, _rotisserie_angle, 44.0, 0.92, 0.28)
 		return
 
 	match beat_in_phase:
@@ -705,22 +808,24 @@ func _choreograph_phase_4(beat_in_phase: int) -> void:
 			_start_lunge_telegraph(Vector2(200.0 * s.x, 195.0 * s.y), Vector2(952.0 * s.x, 195.0 * s.y))
 		22:
 			SoundManager.play_sfx(&"boss_roar", -3.0)
-			_start_lunge_dash(Vector2(200.0 * s.x, 195.0 * s.y), Vector2(952.0 * s.x, 195.0 * s.y), 0.38, true)
+			_start_lunge_dash(Vector2(200.0 * s.x, 195.0 * s.y), Vector2(952.0 * s.x, 195.0 * s.y), 0.36, true)
 		23:
+			_fire_downward_arc_ring(4, 305.0)
 			_body_target = Vector2(952.0 * s.x, 445.0 * s.y)
 			_body_move_speed = 9.5
 		24:
 			_start_lunge_telegraph(Vector2(952.0 * s.x, 445.0 * s.y), Vector2(200.0 * s.x, 445.0 * s.y))
 		26:
-			_start_lunge_dash(Vector2(952.0 * s.x, 445.0 * s.y), Vector2(200.0 * s.x, 445.0 * s.y), 0.38, true)
+			_start_lunge_dash(Vector2(952.0 * s.x, 445.0 * s.y), Vector2(200.0 * s.x, 445.0 * s.y), 0.36, true)
 		27:
+			_fire_downward_arc_ring(5, 305.0)
 			var lane_y: float = _pick_phase_4_lunge_3_y(s)
 			_body_target = Vector2(200.0 * s.x, lane_y)
 			_body_move_speed = 9.5
 		28:
 			_start_lunge_telegraph(Vector2(200.0 * s.x, _body_target.y), Vector2(952.0 * s.x, _body_target.y))
 		30:
-			_start_lunge_dash(Vector2(200.0 * s.x, _body_target.y), Vector2(952.0 * s.x, _body_target.y), 0.38, true)
+			_start_lunge_dash(Vector2(200.0 * s.x, _body_target.y), Vector2(952.0 * s.x, _body_target.y), 0.36, true)
 		31:
 			_lunge_telegraphing = false
 			_lunge_active = false
@@ -735,11 +840,16 @@ func _pick_phase_4_lunge_3_y(s: Vector2) -> float:
 
 
 # ------------------------------------------------------------------------------
-# PHASE 5: FAKE-OUT COLLAPSE — Limp Head + Possessed Hands (Beat >= 8) + Supernova
+# PHASE 5: FAKE-OUT COLLAPSE — Limp Head + Puppet Top-Wall Scrapes + Supernova
 # ------------------------------------------------------------------------------
 func _choreograph_phase_5(beat_in_phase: int) -> void:
 	var s: Vector2 = _scale_vec()
 	var center: Vector2 = _arena_size * 0.5
+	if beat_in_phase in [6, 7]:
+		_hand_throw_flash[0] = 0.25
+		_hand_throw_flash[1] = 0.25
+		return
+
 	if beat_in_phase >= 8 and not _phase5_hands_awake:
 		_phase5_hands_awake = true
 		_hand_throw_flash[0] = 0.45
@@ -747,22 +857,25 @@ func _choreograph_phase_5(beat_in_phase: int) -> void:
 		_sync_hazard_flags()
 
 	if beat_in_phase == 8:
+		_start_wall_slam(true, &"top", 240.0 * s.x, 0.50, 0.58, false)
 		var saw_a: Vector2 = Vector2(180.0 * s.x, 165.0 * s.y)
 		var saw_b: Vector2 = Vector2(972.0 * s.x, 165.0 * s.y)
-		_launch_seed(true, "hand", saw_a, 0.36, &"saw", [0, saw_a, Vector2(0.84, 0.54).normalized(), 215.0, 28.0, 0.85, 9.5])
-		_launch_seed(false, "hand", saw_b, 0.36, &"saw", [0, saw_b, Vector2(-0.84, 0.54).normalized(), 215.0, 28.0, 0.85, 9.5])
+		_launch_seed(true, "hand", saw_a, 0.36, &"saw", [0, saw_a, Vector2(0.84, 0.54).normalized(), 230.0, 28.0, 0.85, 9.5])
+		_launch_seed(false, "hand", saw_b, 0.36, &"saw", [0, saw_b, Vector2(-0.84, 0.54).normalized(), 230.0, 28.0, 0.85, 9.5])
 	elif beat_in_phase == 9:
-		var lane_y: float = clampf(_player_pos.y, 140.0 * s.y, 505.0 * s.y)
+		_start_wall_slam(false, &"top", 912.0 * s.x, 0.50, 0.58, false)
+	elif beat_in_phase == 10:
+		var lane_y: float = 265.0 * s.y
 		_start_hand_telegraph(true, Vector2(165.0 * s.x, lane_y), Vector2(987.0 * s.x, lane_y), BEAT_DURATION * 1.95, HandDashStyle.CLAW_SWIPE)
-	elif beat_in_phase == 11:
+	elif beat_in_phase == 12:
 		_start_hand_dash(true, 0.30, false, HandDashStyle.CLAW_SWIPE)
 	elif beat_in_phase in [14, 21]:
-		var use_left: bool = beat_in_phase == 14
+		var use_left: bool = beat_in_phase == 21
 		var target_c: Vector2 = _clamp_hazard_target(_player_pos, s)
 		_launch_seed(use_left, "hand", target_c, 0.34, &"circle", [target_c, 76.0, 2, 0.95, 0.32])
 	elif beat_in_phase == 17:
-		var lane_y: float = clampf(_player_pos.y, 140.0 * s.y, 505.0 * s.y)
-		_start_hand_telegraph(false, Vector2(987.0 * s.x, lane_y), Vector2(165.0 * s.x, lane_y), BEAT_DURATION * 1.95, HandDashStyle.CLAW_SWIPE)
+		var lane_y2: float = clampf(_player_pos.y, 220.0 * s.y, 480.0 * s.y)
+		_start_hand_telegraph(false, Vector2(987.0 * s.x, lane_y2), Vector2(165.0 * s.x, lane_y2), BEAT_DURATION * 1.95, HandDashStyle.CLAW_SWIPE)
 	elif beat_in_phase == 19:
 		_start_hand_dash(false, 0.30, false, HandDashStyle.CLAW_SWIPE)
 	elif beat_in_phase >= 24 and beat_in_phase <= 26:
@@ -787,93 +900,121 @@ func _choreograph_phase_5(beat_in_phase: int) -> void:
 
 
 # ------------------------------------------------------------------------------
-# PHASE 6: HOLLOW-EYED REBIRTH — Quadrant Lunges, Spinning Claw Orbit & Pincers
+# PHASE 6: HOLLOW-EYED REBIRTH — Quadrant Lunges, Claw Orbits & Dimensional Rifts
 # ------------------------------------------------------------------------------
 func _choreograph_phase_6(beat_in_phase: int) -> void:
 	var s: Vector2 = _scale_vec()
 	var anchors: Array[Vector2] = [
-		Vector2(260.0 * s.x, 190.0 * s.y),
-		Vector2(892.0 * s.x, 190.0 * s.y),
-		Vector2(892.0 * s.x, 458.0 * s.y),
-		Vector2(260.0 * s.x, 458.0 * s.y),
+		Vector2(315.0 * s.x, 220.0 * s.y),
+		Vector2(837.0 * s.x, 220.0 * s.y),
+		Vector2(837.0 * s.x, 455.0 * s.y),
+		Vector2(315.0 * s.x, 455.0 * s.y),
 	]
-	if beat_in_phase in [3, 9, 15, 21]:
+	if beat_in_phase == 1:
+		var orbiter_pos: Vector2 = _clamp_hazard_target(Vector2(880.0 * s.x, 220.0 * s.y) if _player_pos.x < _arena_size.x * 0.5 else Vector2(272.0 * s.x, 220.0 * s.y), s)
+		_start_spawn_ritual(RitualStyle.DIMENSIONAL_RIFT, 2, orbiter_pos, 0.75, 1.20)
+	elif beat_in_phase in [3, 9, 15, 27]:
 		var next_anchor: Vector2 = anchors[_anchor_index % 4]
 		_start_lunge_telegraph(_body_pos, next_anchor)
-	elif beat_in_phase in [4, 10, 16, 22]:
+	elif beat_in_phase in [4, 10, 16, 28]:
 		var target_anchor: Vector2 = anchors[_anchor_index % 4]
 		if beat_in_phase == 4:
 			SoundManager.play_sfx(&"boss_roar", -3.0)
 		_start_lunge_dash(_body_pos, target_anchor, 0.26, true)
 		_mouth_beam_flash = 0.30
-		request_beam.emit(target_anchor, PI * 0.25, 46.0, 0.92, 0.32)
-		request_beam.emit(target_anchor, PI * 0.75, 46.0, 0.92, 0.32)
+		var is_odd_lunge: bool = (_anchor_index % 2) == 0
+		var b_ang: float = PI * 0.25 if is_odd_lunge else 0.0
+		request_beam.emit(target_anchor, b_ang, 46.0, 0.92, 0.32)
+		request_beam.emit(target_anchor, b_ang + PI * 0.5, 46.0, 0.92, 0.32)
 		_anchor_index += 1
 	elif beat_in_phase == 5 or beat_in_phase == 17:
-		# Spinning Claw Orbit (buzzsaw arms expanding 115px -> 195px)
 		_claw_orbit_duration = BEAT_DURATION * 2.8
 		_claw_orbit_timer = _claw_orbit_duration
+	elif beat_in_phase in [8, 18]:
+		_fire_downward_arc_ring(4, 330.0)
 	elif beat_in_phase == 11:
 		_start_pincer_telegraph(_player_pos, BEAT_DURATION * 1.95)
 	elif beat_in_phase == 13:
 		_execute_pincer_clap()
-	elif beat_in_phase == 23:
-		var gap_x: float = clampf(_player_pos.x, 220.0 * s.x, _arena_size.x - 220.0 * s.x)
-		_start_wall_push(0, gap_x, 162.0, 1.05, 0.50, 0.85)
+	elif beat_in_phase == 19:
 		var pulsar_pos: Vector2 = _clamp_hazard_target(Vector2(220.0 * s.x, 200.0 * s.y) if _player_pos.x > _arena_size.x * 0.5 else Vector2(932.0 * s.x, 200.0 * s.y), s)
-		_launch_seed(false, "mouth", pulsar_pos, 0.38, &"enemy", [3, pulsar_pos, 1.05, 0.80, 7.5])
-	elif beat_in_phase == 27:
-		var gap_y: float = clampf(_player_pos.y, 175.0 * s.y, _arena_size.y - 175.0 * s.y)
-		_start_wall_push(1, gap_y, 160.0, 1.05, 0.50, 0.85)
+		_start_spawn_ritual(RitualStyle.DIMENSIONAL_RIFT, 3, pulsar_pos, 0.75, 1.24)
+	elif beat_in_phase == 22:
+		var gap_x: float = clampf(_player_pos.x, 220.0 * s.x, _arena_size.x - 220.0 * s.x)
+		_start_wall_push(0, gap_x, 162.0, 1.00, 0.48, 0.65)
+	elif beat_in_phase == 24:
+		var exp_pos: Vector2 = _clamp_hazard_target(Vector2(210.0 * s.x, 450.0 * s.y) if _player_pos.x > _arena_size.x * 0.5 else Vector2(942.0 * s.x, 450.0 * s.y), s)
+		_launch_seed(true, "mouth", exp_pos, 0.34, &"exploder", [exp_pos, 0.95, 8, 335.0])
+	elif beat_in_phase == 29:
 		_fire_mouth_fan(_player_pos, 5, deg_to_rad(14.0), 380.0)
 
 
 # ------------------------------------------------------------------------------
-# PHASE 7: EXHAUSTED PANTING — Double Ground Pounds & Heavy Floor-Dragging Rakes
+# PHASE 7: EXHAUSTED PANTING — Ceiling/Floor Slams, Floor Rakes & High-Speed Pulsar
 # ------------------------------------------------------------------------------
 func _choreograph_phase_7(beat_in_phase: int) -> void:
 	var s: Vector2 = _scale_vec()
-	if beat_in_phase in [2, 10]:
-		var target_c: Vector2 = _clamp_combat_bounds(_player_pos, s)
-		_start_hand_slam_telegraph(true, target_c + Vector2(-120.0 * s.x, 0.0), BEAT_DURATION * 1.95)
-		_start_hand_slam_telegraph(false, target_c + Vector2(120.0 * s.x, 0.0), BEAT_DURATION * 1.95)
-	elif beat_in_phase in [4, 12]:
-		_start_hand_slam_active(true, 0.16, 2)
-		_start_hand_slam_active(false, 0.16, 2)
-		_fire_radial_mouth_ring(6, 315.0, 0.22 * float(beat_in_phase / 4))
-	elif beat_in_phase in [5, 13]:
-		# Heavy Floor-Dragging Hand Rakes telegraph (>= 0.55s)
+	if beat_in_phase == 1:
+		_start_wall_slam(true, &"top", 340.0 * s.x, 0.56, 0.78, true)
+		_start_wall_slam(false, &"top", 812.0 * s.x, 0.56, 0.78, true)
+	elif beat_in_phase == 5:
 		var lane_a: float = clampf(_player_pos.y, 175.0 * s.y, 495.0 * s.y)
 		var lane_b: float = clampf(485.0 * s.y if lane_a < 360.0 * s.y else 240.0 * s.y, 175.0 * s.y, 495.0 * s.y)
 		_start_hand_telegraph(true, Vector2(175.0 * s.x, lane_a), Vector2(977.0 * s.x, lane_a), BEAT_DURATION * 1.95, HandDashStyle.FLOOR_RAKE)
 		_start_hand_telegraph(false, Vector2(977.0 * s.x, lane_b), Vector2(175.0 * s.x, lane_b), BEAT_DURATION * 1.95, HandDashStyle.FLOOR_RAKE)
-	elif beat_in_phase in [7, 15]:
-		_start_hand_dash(true, 0.44, false, HandDashStyle.FLOOR_RAKE)
-		_start_hand_dash(false, 0.44, false, HandDashStyle.FLOOR_RAKE)
+	elif beat_in_phase == 7:
+		_start_hand_dash(true, 0.42, false, HandDashStyle.FLOOR_RAKE)
+		_start_hand_dash(false, 0.42, false, HandDashStyle.FLOOR_RAKE)
 		boss_slammed.emit(_arena_size * 0.5, 0.48)
+	elif beat_in_phase == 10:
+		var target_c: Vector2 = _clamp_combat_bounds(_player_pos, s)
+		_start_hand_slam_telegraph(true, target_c + Vector2(-120.0 * s.x, 0.0), BEAT_DURATION * 1.95)
+		_start_hand_slam_telegraph(false, target_c + Vector2(120.0 * s.x, 0.0), BEAT_DURATION * 1.95)
+	elif beat_in_phase == 11:
+		var pulsar_pos: Vector2 = _clamp_hazard_target(Vector2(920.0 * s.x, 195.0 * s.y) if _player_pos.x < _arena_size.x * 0.5 else Vector2(232.0 * s.x, 195.0 * s.y), s)
+		_start_spawn_ritual(RitualStyle.DIMENSIONAL_RIFT, 3, pulsar_pos, 0.75, 1.32)
+	elif beat_in_phase == 12:
+		_start_hand_slam_active(true, 0.18, 2)
+		_start_hand_slam_active(false, 0.18, 2)
+		_fire_downward_arc_ring(6, 315.0)
+	elif beat_in_phase == 15:
+		_start_wall_slam(true, &"bottom", 360.0 * s.x, 0.56, 0.78, true)
+		_start_wall_slam(false, &"bottom", 792.0 * s.x, 0.56, 0.78, true)
 	elif beat_in_phase == 18:
 		var s1: Vector2 = Vector2(170.0 * s.x, 145.0 * s.y)
 		var s2: Vector2 = Vector2(982.0 * s.x, 490.0 * s.y)
 		_launch_seed(true, "hand", s1, 0.34, &"saw", [0, s1, Vector2(0.82, 0.57).normalized(), 225.0, 28.0, 0.85, 7.5])
 		_launch_seed(false, "hand", s2, 0.34, &"saw", [0, s2, Vector2(-0.82, -0.57).normalized(), 225.0, 28.0, 0.85, 7.5])
+	elif beat_in_phase == 20:
+		var lane_a2: float = clampf(_player_pos.y, 175.0 * s.y, 495.0 * s.y)
+		var lane_b2: float = clampf(485.0 * s.y if lane_a2 < 360.0 * s.y else 240.0 * s.y, 175.0 * s.y, 495.0 * s.y)
+		_start_hand_telegraph(true, Vector2(175.0 * s.x, lane_a2), Vector2(977.0 * s.x, lane_a2), BEAT_DURATION * 1.95, HandDashStyle.FLOOR_RAKE)
+		_start_hand_telegraph(false, Vector2(977.0 * s.x, lane_b2), Vector2(175.0 * s.x, lane_b2), BEAT_DURATION * 1.95, HandDashStyle.FLOOR_RAKE)
+		_fire_mouth_fan(_player_pos, 5, deg_to_rad(14.0), 335.0)
 	elif beat_in_phase == 22:
+		_start_hand_dash(true, 0.42, false, HandDashStyle.FLOOR_RAKE)
+		_start_hand_dash(false, 0.42, false, HandDashStyle.FLOOR_RAKE)
+		_fire_downward_arc_ring(6, 325.0)
+		boss_slammed.emit(_arena_size * 0.5, 0.48)
+	elif beat_in_phase == 24:
 		var shooter_p: Vector2 = Vector2(125.0 * s.x, clampf(_player_pos.y, 135.0 * s.y, 495.0 * s.y))
-		_aim_hand_pointer(true, shooter_p, (_player_pos - shooter_p).angle(), BEAT_DURATION * 2.05)
-	elif beat_in_phase in [20, 24, 28]:
-		_fire_radial_mouth_ring(6, 330.0, (PI / 6.0) if beat_in_phase == 24 else 0.0)
-		if beat_in_phase == 24:
-			var shooter_p: Vector2 = Vector2(_hand_aims[0]["pos"])
-			var aim_ang: float = float(_hand_aims[0]["angle"])
-			_fire_hand_beam(true, shooter_p, aim_ang, 44.0, 0.95, 0.32)
+		_aim_hand_pointer(true, shooter_p, (_player_pos - shooter_p).angle(), BEAT_DURATION * 1.95)
+		_fire_downward_arc_ring(8, 330.0)
+	elif beat_in_phase == 26:
+		var shooter_p: Vector2 = Vector2(_hand_aims[0]["pos"])
+		var aim_ang: float = float(_hand_aims[0]["angle"])
+		_fire_hand_beam(true, shooter_p, aim_ang, 44.0, 0.95, 0.32)
 	elif beat_in_phase == 27:
-		var sweep_y: float = clampf(_player_pos.y, 145.0 * s.y, 505.0 * s.y)
+		var sweep_y: float = clampf(_player_pos.y, 145.0 * s.y, 495.0 * s.y)
 		_start_hand_telegraph(false, Vector2(987.0 * s.x, sweep_y), Vector2(165.0 * s.x, sweep_y), BEAT_DURATION * 1.95, HandDashStyle.CLAW_SWIPE)
+	elif beat_in_phase == 28:
+		_fire_downward_arc_ring(8, 335.0)
 	elif beat_in_phase == 29:
-		_start_hand_dash(false, 0.30, true, HandDashStyle.CLAW_SWIPE)
+		_start_hand_dash(false, 0.36, true, HandDashStyle.CLAW_SWIPE)
 
 
 # ------------------------------------------------------------------------------
-# PHASE 8: TEMPLE-CLUTCH PANIC & SILENT SHATTER — All-Out Barrage, Lunges & Fists
+# PHASE 8: TEMPLE-CLUTCH PANIC & SILENT SHATTER — 4-Wall Pinball & Elite Trio
 # ------------------------------------------------------------------------------
 func _choreograph_phase_8(beat_idx: int, beat_in_phase: int) -> void:
 	var s: Vector2 = _scale_vec()
@@ -889,54 +1030,87 @@ func _choreograph_phase_8(beat_idx: int, beat_in_phase: int) -> void:
 			request_clear_hazards.emit()
 		return
 
-	if beat_in_phase in [4, 8, 12, 16, 20]:
-		var is_cardinal: bool = (beat_in_phase == 4 or beat_in_phase == 12 or beat_in_phase == 20)
-		var base_ang: float = 0.0 if is_cardinal else PI * 0.25
-		_mouth_beam_flash = 0.30
-		request_beam.emit(_body_pos, base_ang, 46.0, 0.92, 0.32)
-		request_beam.emit(_body_pos, base_ang + PI * 0.5, 46.0, 0.92, 0.32)
-		if is_cardinal:
-			var exp_pos: Vector2 = _clamp_hazard_target(Vector2(200.0 * s.x, 165.0 * s.y) if beat_in_phase != 12 else Vector2(952.0 * s.x, 485.0 * s.y), s)
-			_launch_seed(beat_in_phase != 12, "hand", exp_pos, 0.34, &"exploder", [exp_pos, 1.05, 8, 330.0])
-		for i: int in range(4):
-			var dir: Vector2 = Vector2.from_angle(_spiral_angle + TAU * float(i) / 4.0)
-			request_projectile.emit(_body_pos + dir * 48.0, dir, 335.0, 9.5)
+	match beat_in_phase:
+		1:
+			_start_wall_slam(true, &"left", 324.0 * s.y, 0.48, 0.78, false)
+		2:
+			_start_wall_slam(false, &"top", 812.0 * s.x, 0.48, 0.78, true)
+		4:
+			_start_wall_slam(true, &"bottom", 472.0 * s.x, 0.48, 0.78, false)
+		5:
+			_start_wall_slam(false, &"right", 324.0 * s.y, 0.48, 0.78, true)
+		16:
+			_body_target = center
+			_body_move_speed = 9.0
+			_start_wall_slam(true, &"left", 324.0 * s.y, 0.48, 0.80, false)
+		17:
+			_start_wall_slam(false, &"top", 340.0 * s.x, 0.48, 0.80, true)
+		19:
+			_start_wall_slam(true, &"bottom", 472.0 * s.x, 0.48, 0.80, false)
+		20:
+			_start_wall_slam(false, &"right", 324.0 * s.y, 0.48, 0.80, true)
+
+	if beat_in_phase >= 4 and beat_in_phase <= 26 and (beat_in_phase % 2 == 0):
+		for i: int in range(6):
+			var dir: Vector2 = Vector2.from_angle(_spiral_angle + TAU * float(i) / 6.0)
+			if _body_pos.y < 235.0 * s.y and dir.y < 0.08:
+				dir = Vector2(dir.x, maxf(absf(dir.y), 0.12)).normalized()
+			_emit_safe_projectile(_body_pos, 48.0, dir, 335.0, 9.5)
 		_spiral_angle += deg_to_rad(22.0)
 
-	if beat_in_phase == 5:
+		if beat_in_phase in [4, 8, 12, 16, 20, 24]:
+			var is_cardinal: bool = (beat_in_phase == 4 or beat_in_phase == 12 or beat_in_phase == 20)
+			var base_ang: float = 0.0 if is_cardinal else PI * 0.25
+			_mouth_beam_flash = 0.30
+			request_beam.emit(_body_pos, base_ang, 46.0, 0.92, 0.32)
+			request_beam.emit(_body_pos, base_ang + PI * 0.5, 46.0, 0.92, 0.32)
+			if is_cardinal:
+				var exp_pos: Vector2 = _clamp_hazard_target(Vector2(200.0 * s.x, 165.0 * s.y) if beat_in_phase != 12 else Vector2(952.0 * s.x, 485.0 * s.y), s)
+				_launch_seed(beat_in_phase != 12, "hand", exp_pos, 0.34, &"exploder", [exp_pos, 1.05, 8, 330.0])
+
+	if beat_in_phase == 6:
+		var orbiter_pos: Vector2 = _clamp_hazard_target(Vector2(260.0 * s.x, 200.0 * s.y) if _player_pos.x > center.x else Vector2(892.0 * s.x, 200.0 * s.y), s)
+		_start_spawn_ritual(RitualStyle.DIMENSIONAL_RIFT, 2, orbiter_pos, 0.75, 1.38)
+	elif beat_in_phase == 7:
 		var end_l: Vector2 = _clamp_combat_bounds(_player_pos, s)
 		var end_r: Vector2 = _clamp_combat_bounds(_player_pos + Vector2(55.0 * s.x, -45.0 * s.y), s)
 		_start_hand_telegraph(true, Vector2(180.0 * s.x, end_l.y), end_l, BEAT_DURATION * 1.95, HandDashStyle.FIST_ROCKET)
 		_start_hand_telegraph(false, Vector2(972.0 * s.x, end_r.y), end_r, BEAT_DURATION * 2.95, HandDashStyle.FIST_ROCKET)
-	elif beat_in_phase == 7:
+	elif beat_in_phase == 9:
 		_start_hand_dash(true, 0.24, true, HandDashStyle.FIST_ROCKET)
-	elif beat_in_phase == 8:
+	elif beat_in_phase == 10:
 		_start_hand_dash(false, 0.24, true, HandDashStyle.FIST_ROCKET)
-	elif beat_in_phase == 13:
+	elif beat_in_phase == 11:
+		var chaser_pos: Vector2 = _clamp_hazard_target(Vector2(900.0 * s.x, 185.0 * s.y) if _player_pos.x < center.x else Vector2(250.0 * s.x, 185.0 * s.y), s)
+		_start_spawn_ritual(RitualStyle.DIMENSIONAL_RIFT, 0, chaser_pos, 0.75, 1.40)
+	elif beat_in_phase == 12:
 		var lane_y: float = clampf(_player_pos.y, 165.0 * s.y, 485.0 * s.y)
 		_body_target = Vector2(200.0 * s.x, lane_y)
 		_body_move_speed = 11.0
-	elif beat_in_phase == 14:
+		var swipe_y: float = clampf(_player_pos.y, 200.0 * s.y, 480.0 * s.y)
+		_start_hand_telegraph(true, Vector2(175.0 * s.x, swipe_y), Vector2(977.0 * s.x, swipe_y), BEAT_DURATION * 1.95, HandDashStyle.CLAW_SWIPE)
+	elif beat_in_phase == 13:
 		_start_lunge_telegraph(Vector2(200.0 * s.x, _body_target.y), Vector2(952.0 * s.x, _body_target.y))
+	elif beat_in_phase == 14:
+		_start_hand_dash(true, 0.30, true, HandDashStyle.CLAW_SWIPE)
 	elif beat_in_phase == 15:
 		SoundManager.play_sfx(&"boss_roar", -2.5)
 		_start_lunge_dash(Vector2(200.0 * s.x, _body_target.y), Vector2(952.0 * s.x, _body_target.y), 0.34, true)
-	elif beat_in_phase == 16:
-		_body_target = center
-		_body_move_speed = 9.0
-		var sweep_y: float = clampf(_player_pos.y, 145.0 * s.y, 505.0 * s.y)
-		_start_hand_telegraph(false, Vector2(987.0 * s.x, sweep_y), Vector2(165.0 * s.x, sweep_y), BEAT_DURATION * 1.95, HandDashStyle.CLAW_SWIPE)
-	elif beat_in_phase == 18:
-		_start_hand_dash(false, 0.28, true, HandDashStyle.CLAW_SWIPE)
+		var pulsar_pos: Vector2 = _clamp_hazard_target(Vector2(892.0 * s.x, 450.0 * s.y) if _player_pos.x < center.x else Vector2(260.0 * s.x, 195.0 * s.y), s)
+		_start_spawn_ritual(RitualStyle.DIMENSIONAL_RIFT, 3, pulsar_pos, 0.75, 1.42)
 	elif beat_in_phase == 21:
 		_start_pincer_telegraph(_player_pos, BEAT_DURATION * 1.95)
 	elif beat_in_phase == 23:
 		_execute_pincer_clap()
-	elif beat_in_phase == 24:
+	elif beat_in_phase == 25:
 		SoundManager.play_sfx(&"boss_roar", -2.0)
 		_mouth_beam_flash = 0.45
 		for i: int in range(4):
-			request_beam.emit(_body_pos, float(i) * (PI * 0.25), 44.0, 0.98, 0.35)
+			request_beam.emit(_body_pos, float(i) * (PI * 0.25), 44.0, 0.78, 0.35)
+		var final_exp_pos: Vector2 = _clamp_hazard_target(_player_pos, s)
+		_launch_seed(true, "mouth", final_exp_pos, 0.22, &"exploder", [final_exp_pos, 0.72, 8, 345.0])
+	elif beat_in_phase == 26:
+		_fire_downward_arc_ring(8, 345.0, 0.06, PI - 0.06)
 
 
 # ------------------------------------------------------------------------------
@@ -1038,6 +1212,28 @@ func _fire_hand_beam(is_left: bool, origin: Vector2, angle: float, width: float,
 	request_beam.emit(center_pos, angle, width, warning_time, active_time)
 
 
+func _emit_safe_projectile(origin: Vector2, offset_dist: float, dir: Vector2, speed: float, radius: float) -> void:
+	var s: Vector2 = _scale_vec()
+	var safe_dir: Vector2 = dir.normalized() if dir.length_squared() > 0.0001 else Vector2.DOWN
+	var spawn_p: Vector2 = origin + safe_dir * offset_dist
+	if spawn_p.y < 185.0 * s.y and safe_dir.y < -0.40:
+		safe_dir = Vector2(safe_dir.x, absf(safe_dir.y)).normalized()
+		spawn_p = origin + safe_dir * offset_dist
+	request_projectile.emit(spawn_p, safe_dir, speed, radius)
+
+
+func _fire_downward_arc_ring(count: int, speed: float, min_angle: float = 0.08, max_angle: float = PI - 0.08) -> void:
+	_mouth_beam_flash = 0.28
+	var safe_count: int = maxi(count, 1)
+	for i: int in range(safe_count):
+		var frac: float = float(i) / float(maxi(safe_count - 1, 1)) if safe_count > 1 else 0.5
+		var ang: float = lerpf(min_angle, max_angle, frac)
+		var dir: Vector2 = Vector2.from_angle(ang)
+		if dir.y < 0.0:
+			dir = Vector2(dir.x, absf(dir.y)).normalized()
+		_emit_safe_projectile(_body_pos, 48.0, dir, speed, 10.0)
+
+
 func _fire_mouth_fan(aim_target: Vector2, count: int, step_angle: float, speed: float) -> void:
 	var to_aim: Vector2 = aim_target - _body_pos
 	var aim_dir: Vector2 = to_aim.normalized() if to_aim.length_squared() > 1.0 else Vector2.DOWN
@@ -1046,14 +1242,17 @@ func _fire_mouth_fan(aim_target: Vector2, count: int, step_angle: float, speed: 
 	for i: int in range(count):
 		var offset: float = (float(i) - half) * step_angle
 		var dir: Vector2 = aim_dir.rotated(offset)
-		request_projectile.emit(_body_pos + dir * 48.0, dir, speed, 10.0)
+		_emit_safe_projectile(_body_pos, 48.0, dir, speed, 10.0)
 
 
 func _fire_radial_mouth_ring(count: int, speed: float, angle_offset: float) -> void:
+	if _body_pos.y < 235.0 * _scale_vec().y:
+		_fire_downward_arc_ring(count, speed, 0.06, PI - 0.06)
+		return
 	_mouth_beam_flash = 0.28
 	for i: int in range(count):
 		var dir: Vector2 = Vector2.from_angle(angle_offset + TAU * float(i) / float(count))
-		request_projectile.emit(_body_pos + dir * 48.0, dir, speed, 10.0)
+		_emit_safe_projectile(_body_pos, 48.0, dir, speed, 10.0)
 
 
 func _start_hand_telegraph(is_left: bool, from_pos: Vector2, to_pos: Vector2, duration: float, style: int = HandDashStyle.FIST_ROCKET) -> void:
@@ -1106,7 +1305,7 @@ func _execute_pincer_clap() -> void:
 	boss_slammed.emit(_pincer_mid, 0.62)
 	for i: int in range(4):
 		var dir: Vector2 = Vector2.from_angle(float(i) * PI * 0.5 + PI * 0.25)
-		request_projectile.emit(_pincer_mid + dir * 24.0, dir, 300.0, 8.5)
+		_emit_safe_projectile(_pincer_mid, 24.0, dir, 300.0, 8.5)
 	_launch_seed(true, "hand", _pincer_mid, 0.22, &"circle", [_pincer_mid, 92.0, 0, 0.85, 0.35])
 
 
@@ -1117,6 +1316,144 @@ func _start_wall_push(axis: int, gap_center: float, gap_size: float, warning: fl
 	_wall_push_duration = warning + close_time + 0.3
 	_wall_push_timer = _wall_push_duration
 	request_closing_wall.emit(axis, gap_center, gap_size, warning, close_time, hold_time)
+
+
+func _start_wall_slam(is_left: bool, wall_side: StringName, coord: float, windup_duration: float, strength: float, spawn_spall: bool = false) -> void:
+	var s: Vector2 = _scale_vec()
+	var wall_pos: Vector2 = Vector2.ZERO
+	var normal: Vector2 = Vector2.RIGHT
+	match wall_side:
+		&"left":
+			var clamped_y: float = clampf(coord, 120.0 * s.y, _arena_size.y - 120.0 * s.y)
+			wall_pos = Vector2(28.0 * s.x, clamped_y)
+			normal = Vector2.RIGHT
+		&"right":
+			var clamped_y: float = clampf(coord, 120.0 * s.y, _arena_size.y - 120.0 * s.y)
+			wall_pos = Vector2(_arena_size.x - 28.0 * s.x, clamped_y)
+			normal = Vector2.LEFT
+		&"top":
+			var clamped_x: float = clampf(coord, 120.0 * s.x, _arena_size.x - 120.0 * s.x)
+			if clamped_x > 340.0 * s.x and clamped_x < 812.0 * s.x:
+				clamped_x = 340.0 * s.x if is_left else 812.0 * s.x
+			wall_pos = Vector2(clamped_x, 68.0 * s.y)
+			normal = Vector2.DOWN
+		&"bottom":
+			var clamped_x: float = clampf(coord, 120.0 * s.x, _arena_size.x - 120.0 * s.x)
+			wall_pos = Vector2(clamped_x, _arena_size.y - 52.0 * s.y)
+			normal = Vector2.UP
+		_:
+			var clamped_y: float = clampf(coord, 120.0 * s.y, _arena_size.y - 120.0 * s.y)
+			wall_pos = Vector2(28.0 * s.x, clamped_y)
+			normal = Vector2.RIGHT
+
+	var contact_pos: Vector2 = wall_pos + normal * 20.0
+	var stage_pos: Vector2 = contact_pos + normal * 92.0
+	var idx: int = 0 if is_left else 1
+	var cur_pos: Vector2 = _left_hand_pos if is_left else _right_hand_pos
+	_hand_aims[idx]["timer"] = 0.0
+	_hand_dashes[idx]["telegraph"] = 0.0
+	_hand_dashes[idx]["active"] = false
+	_hand_slams[idx]["telegraph"] = 0.0
+	_hand_slams[idx]["active"] = 0.0
+
+	_hand_wall_slams[idx] = {
+		"phase": WallSlamPhase.WINDUP,
+		"wall_side": wall_side,
+		"wall_pos": wall_pos,
+		"contact_pos": contact_pos,
+		"stage_pos": stage_pos,
+		"start_pos": cur_pos,
+		"normal": normal,
+		"rot": (-normal).angle(),
+		"timer": 0.0,
+		"duration": 0.20,
+		"windup_duration": maxf(windup_duration, 0.48),
+		"strength": strength,
+		"spawn_spall": spawn_spall,
+		"impact_emitted": false,
+		"pending_emit": false,
+	}
+
+
+func _emit_wall_slam_impact(idx: int) -> void:
+	var s: Vector2 = _scale_vec()
+	var ws: Dictionary = _hand_wall_slams[idx]
+	var wall_pos: Vector2 = Vector2(ws["wall_pos"])
+	var normal: Vector2 = Vector2(ws["normal"])
+	var strength: float = float(ws["strength"])
+	_hand_throw_flash[idx] = 0.32
+	_wall_cracks.append({
+		"pos": wall_pos,
+		"normal": normal,
+		"life": 0.55,
+		"max_life": 0.55,
+		"strength": strength,
+	})
+	total_wall_slams += 1
+	boss_wall_slammed.emit(wall_pos, normal, strength)
+
+	if bool(ws["spawn_spall"]):
+		var safe_pt: Vector2 = Vector2(100.0 * s.x, 580.0 * s.y)
+		var base_ang: float = normal.angle()
+		for offset: float in [-0.30, 0.0, 0.30]:
+			var dir: Vector2 = Vector2.from_angle(base_ang + offset)
+			var spawn_p: Vector2 = wall_pos + dir * 16.0
+			if spawn_p.y < 185.0 * s.y and dir.y < -0.40:
+				dir = Vector2(dir.x, absf(dir.y)).normalized()
+				spawn_p = wall_pos + dir * 16.0
+			var closest_pt: Vector2 = spawn_p + dir * maxf((safe_pt - spawn_p).dot(dir), 0.0)
+			if closest_pt.distance_to(safe_pt) < 54.0:
+				var dir_pos: Vector2 = dir.rotated(0.30)
+				var dir_neg: Vector2 = dir.rotated(-0.30)
+				var dist_pos: float = (spawn_p + dir_pos * maxf((safe_pt - spawn_p).dot(dir_pos), 0.0)).distance_to(safe_pt)
+				var dist_neg: float = (spawn_p + dir_neg * maxf((safe_pt - spawn_p).dot(dir_neg), 0.0)).distance_to(safe_pt)
+				dir = dir_pos if dist_pos >= dist_neg else dir_neg
+			_emit_safe_projectile(wall_pos, 16.0, dir, 265.0, 8.5)
+
+
+func _start_spawn_ritual(style: int, enemy_type: int, target_pos: Vector2, duration: float = 0.80, speed_scale: float = 1.0) -> void:
+	total_spawn_rituals += 1
+	var initial_core: Vector2 = (_body_pos + Vector2(0.0, -48.0)) if style == RitualStyle.CROWN_FORGE else target_pos
+	_spawn_rituals.append({
+		"style": style,
+		"enemy_type": enemy_type,
+		"target": target_pos,
+		"core_pos": initial_core,
+		"elapsed": 0.0,
+		"duration": maxf(duration, 0.25),
+		"speed_scale": speed_scale,
+	})
+
+
+func _update_spawn_rituals(delta: float) -> void:
+	for i: int in range(_spawn_rituals.size() - 1, -1, -1):
+		var rt: Dictionary = _spawn_rituals[i]
+		rt["elapsed"] = float(rt["elapsed"]) + delta
+		var dur: float = maxf(float(rt["duration"]), 0.25)
+		var p: float = clampf(float(rt["elapsed"]) / dur, 0.0, 1.0)
+		var style: int = int(rt["style"])
+		var target_pos: Vector2 = Vector2(rt["target"])
+		var enemy_type: int = int(rt["enemy_type"])
+		var enemy_speed_scale: float = float(rt.get("speed_scale", 1.0))
+		if style == RitualStyle.CROWN_FORGE:
+			var crown_origin: Vector2 = _body_pos + Vector2(0.0, -48.0)
+			var palm_center: Vector2 = _body_pos + Vector2(0.0, 64.0)
+			if p < 0.45:
+				rt["core_pos"] = crown_origin.lerp(palm_center, ease(p / 0.45, 0.6))
+			else:
+				rt["core_pos"] = palm_center
+				_hand_throw_flash[0] = maxf(_hand_throw_flash[0], 0.15)
+				_hand_throw_flash[1] = maxf(_hand_throw_flash[1], 0.15)
+			if p >= 1.0:
+				_launch_seed(false, "hand", target_pos, 0.34, &"enemy", [enemy_type, target_pos, enemy_speed_scale, 0.80, 7.5])
+				boss_slammed.emit(palm_center, 0.45)
+				_spawn_rituals.remove_at(i)
+		else:
+			rt["core_pos"] = target_pos
+			if p >= 1.0:
+				boss_slammed.emit(target_pos, 0.55)
+				_launch_seed(true, "hand", target_pos, 0.16, &"enemy", [enemy_type, target_pos, enemy_speed_scale, 0.80, 7.5])
+				_spawn_rituals.remove_at(i)
 
 
 func _start_lunge_telegraph(from_pos: Vector2, to_pos: Vector2) -> void:
@@ -1192,7 +1529,17 @@ func _tick_timers(delta: float) -> void:
 	_pincer_timer = maxf(0.0, _pincer_timer - delta)
 	_claw_orbit_timer = maxf(0.0, _claw_orbit_timer - delta)
 	_wall_push_timer = maxf(0.0, _wall_push_timer - delta)
+	_tether_telegraph_timer = maxf(0.0, _tether_telegraph_timer - delta)
 	_tether_beam_timer = maxf(0.0, _tether_beam_timer - delta)
+	if _tether_beam_timer > 0.0 and _tether_active:
+		var s: Vector2 = _scale_vec()
+		var sweep_p: float = 1.0 - clampf(_tether_beam_timer / maxf(_tether_duration, 0.001), 0.0, 1.0)
+		var sweep_y: float = lerpf(165.0 * s.y, 465.0 * s.y, sweep_p)
+		_tether_left = Vector2(125.0 * s.x, sweep_y)
+		_tether_right = Vector2(1027.0 * s.x, sweep_y)
+	elif _tether_beam_timer <= 0.0:
+		_tether_sweep_active = false
+		_tether_active = false
 	_mouth_charge_timer = maxf(0.0, _mouth_charge_timer - delta)
 	_mouth_beam_flash = maxf(0.0, _mouth_beam_flash - delta)
 
@@ -1219,8 +1566,14 @@ func _update_motion(delta: float) -> void:
 			_lunge_wake_emitted = true
 			var l_dir: Vector2 = (_lunge_target - _lunge_start).normalized()
 			var perp: Vector2 = Vector2(-l_dir.y, l_dir.x)
-			request_projectile.emit(_body_pos + perp * 38.0, perp, 290.0, 9.0)
-			request_projectile.emit(_body_pos - perp * 38.0, -perp, 290.0, 9.0)
+			if _body_pos.y < 220.0 * s.y and absf(l_dir.x) >= 0.30:
+				var w1: Vector2 = Vector2(l_dir.x * 0.35, 0.93).normalized()
+				var w2: Vector2 = Vector2(-l_dir.x * 0.35, 0.93).normalized()
+				_emit_safe_projectile(_body_pos, 38.0, w1, 290.0, 9.0)
+				_emit_safe_projectile(_body_pos, 38.0, w2, 290.0, 9.0)
+			else:
+				_emit_safe_projectile(_body_pos, 38.0, perp, 290.0, 9.0)
+				_emit_safe_projectile(_body_pos, 38.0, -perp, 290.0, 9.0)
 		if progress >= 1.0:
 			_lunge_active = false
 			_body_pos = _lunge_target
@@ -1230,12 +1583,19 @@ func _update_motion(delta: float) -> void:
 				_lunge_emit_slam = false
 				boss_slammed.emit(_lunge_target, 0.55)
 	else:
+		if _wall_push_timer > 0.0:
+			if _wall_push_axis == 0:
+				_body_target = Vector2(clampf(_wall_push_gap_center, 200.0 * s.x, 952.0 * s.x), 136.0 * s.y)
+			else:
+				_body_target = Vector2(210.0 * s.x, clampf(_wall_push_gap_center, 150.0 * s.y, 490.0 * s.y))
+		_body_target.y = maxf(_body_target.y, 136.0 * s.y)
 		var bob: Vector2 = Vector2.ZERO
 		if acting_state == ActingState.COCKY_CONDUCTOR:
 			bob = Vector2(0.0, sin(_elapsed_time * TAU / (BEAT_DURATION * 2.0)) * 8.0 * s.y)
 		elif acting_state == ActingState.EXHAUSTED_PANTING:
 			bob = Vector2(0.0, sin(_elapsed_time * TAU / BEAT_DURATION) * 6.0 * s.y)
 		var desired_pos: Vector2 = _body_target + bob
+		desired_pos.y = maxf(desired_pos.y, 128.0 * s.y)
 		if _freeze_timer > 0.0 or _silence_freeze:
 			desired_pos = _body_pos
 		var t: float = clampf(_body_move_speed * delta, 0.0, 1.0)
@@ -1314,7 +1674,30 @@ func _update_hands_motion(delta: float, s: Vector2) -> void:
 			rot_left = 0.35
 			rot_right = -0.35
 
-	# Active attack overrides (priority: Dash > Slam > Wall Push > Pincer > Claw Orbit > Pointer)
+	# Active attack overrides (priority: WallSlam / Dash > Slam > Pointer > Pincer > Wall Push > Claw Orbit > Tether/Ritual)
+	for rt: Dictionary in _spawn_rituals:
+		if int(rt["style"]) == RitualStyle.CROWN_FORGE:
+			var p_rt: float = clampf(float(rt["elapsed"]) / maxf(float(rt["duration"]), 0.25), 0.0, 1.0)
+			if p_rt < 0.45:
+				target_left = _clamp_combat_bounds(_body_pos + Vector2(-58.0 * s.x, -42.0 * s.y), s)
+				target_right = _clamp_combat_bounds(_body_pos + Vector2(58.0 * s.x, -42.0 * s.y), s)
+				rot_left = -0.35
+				rot_right = 0.35
+			else:
+				target_left = _clamp_combat_bounds(_body_pos + Vector2(-54.0 * s.x, 64.0 * s.y), s)
+				target_right = _clamp_combat_bounds(_body_pos + Vector2(54.0 * s.x, 64.0 * s.y), s)
+				rot_left = 0.0
+				rot_right = PI
+			break
+
+	if _tether_beam_timer > 0.0 and _tether_sweep_active:
+		pose_left = HandPose.POINTER
+		pose_right = HandPose.POINTER
+		target_left = _tether_left
+		target_right = _tether_right
+		rot_left = 0.0
+		rot_right = PI
+
 	if _claw_orbit_timer > 0.0:
 		var orbit_p: float = 1.0 - clampf(_claw_orbit_timer / maxf(_claw_orbit_duration, 0.001), 0.0, 1.0)
 		var orbit_r: float = lerpf(115.0, 195.0, sin(orbit_p * PI * 0.5)) * minf(s.x, s.y)
@@ -1340,8 +1723,8 @@ func _update_hands_motion(delta: float, s: Vector2) -> void:
 			rot_left = 0.0
 			rot_right = PI
 		else:
-			var edge_t: float = lerpf(120.0 * s.y, _wall_push_gap_center - _wall_push_gap_size * 0.5 - 32.0, ease(push_p, 0.7))
-			var edge_b: float = lerpf(_arena_size.y - 120.0 * s.y, _wall_push_gap_center + _wall_push_gap_size * 0.5 + 32.0, ease(push_p, 0.7))
+			var edge_t: float = maxf(92.0 * s.y, lerpf(120.0 * s.y, _wall_push_gap_center - _wall_push_gap_size * 0.5 - 32.0, ease(push_p, 0.7)))
+			var edge_b: float = minf(540.0 * s.y, lerpf(_arena_size.y - 120.0 * s.y, _wall_push_gap_center + _wall_push_gap_size * 0.5 + 32.0, ease(push_p, 0.7)))
 			target_left = Vector2(_arena_size.x * 0.5, edge_t)
 			target_right = Vector2(_arena_size.x * 0.5, edge_b)
 			rot_left = PI * 0.5
@@ -1391,6 +1774,19 @@ func _update_hands_motion(delta: float, s: Vector2) -> void:
 		target_right = Vector2(_hand_dashes[1]["start"])
 		rot_right = (Vector2(_hand_dashes[1]["target"]) - target_right).angle()
 
+	if int(_hand_wall_slams[0]["phase"]) != WallSlamPhase.NONE:
+		pose_left = HandPose.CLAW if acting_state == ActingState.FAKE_OUT_COLLAPSE else HandPose.FIST
+		rot_left = float(_hand_wall_slams[0]["rot"])
+		target_left = Vector2(_hand_wall_slams[0]["stage_pos"]) if int(_hand_wall_slams[0]["phase"]) == WallSlamPhase.WINDUP else Vector2(_hand_wall_slams[0]["contact_pos"])
+	else:
+		target_left.y = maxf(target_left.y, 90.0 * s.y)
+	if int(_hand_wall_slams[1]["phase"]) != WallSlamPhase.NONE:
+		pose_right = HandPose.CLAW if acting_state == ActingState.FAKE_OUT_COLLAPSE else HandPose.FIST
+		rot_right = float(_hand_wall_slams[1]["rot"])
+		target_right = Vector2(_hand_wall_slams[1]["stage_pos"]) if int(_hand_wall_slams[1]["phase"]) == WallSlamPhase.WINDUP else Vector2(_hand_wall_slams[1]["contact_pos"])
+	else:
+		target_right.y = maxf(target_right.y, 90.0 * s.y)
+
 	var left_res: Array = _step_hand_motion(true, _left_hand_pos, _left_hand_rot, target_left, rot_left, pose_left, delta)
 	_left_hand_pos = left_res[0]
 	_left_hand_rot = float(left_res[1])
@@ -1409,6 +1805,11 @@ func _update_hands_motion(delta: float, s: Vector2) -> void:
 	_set_hand_pose(true, pose_left)
 	_set_hand_pose(false, pose_right)
 
+	for idx_ws: int in range(2):
+		if bool(_hand_wall_slams[idx_ws]["pending_emit"]):
+			_hand_wall_slams[idx_ws]["pending_emit"] = false
+			_emit_wall_slam_impact(idx_ws)
+
 
 func _pose_for_dash_style(style: int) -> HandPose:
 	if style == HandDashStyle.CLAW_SWIPE:
@@ -1420,7 +1821,10 @@ func _step_hand_motion(is_left: bool, cur_pos: Vector2, cur_rot: float, target_p
 	var idx: int = 0 if is_left else 1
 	var d: Dictionary = _hand_dashes[idx]
 	var sl: Dictionary = _hand_slams[idx]
+	var ws: Dictionary = _hand_wall_slams[idx]
 	d["swept"] = false
+	if int(ws["phase"]) != WallSlamPhase.NONE and not bool(d["active"]):
+		return _step_wall_slam(idx, cur_pos, cur_rot, delta)
 	if not bool(d["active"]):
 		if float(sl["active"]) > 0.0:
 			var dur: float = maxf(float(sl["duration"]), 0.001)
@@ -1441,7 +1845,7 @@ func _step_hand_motion(is_left: bool, cur_pos: Vector2, cur_rot: float, target_p
 						boss_slammed.emit(end_p, 0.52)
 						for i: int in range(4):
 							var proj_dir: Vector2 = Vector2.from_angle(float(i) * PI * 0.5 + PI * 0.25)
-							request_projectile.emit(end_p + proj_dir * 24.0, proj_dir, 305.0, 9.0)
+							_emit_safe_projectile(end_p, 24.0, proj_dir, 305.0, 9.0)
 					elif mode == 2:
 						boss_slammed.emit(end_p, 0.45)
 						_launch_seed(is_left, "hand", end_p, 0.22, &"circle", [end_p, 86.0, 0, 1.00, 0.35])
@@ -1488,14 +1892,66 @@ func _step_hand_motion(is_left: bool, cur_pos: Vector2, cur_rot: float, target_p
 			if style == HandDashStyle.CLAW_SWIPE:
 				for i: int in range(-1, 2):
 					var dir: Vector2 = (-dash_dir).rotated(float(i) * 0.35)
-					request_projectile.emit(end_p + dir * 24.0, dir, 315.0, 9.0)
+					_emit_safe_projectile(end_p, 24.0, dir, 315.0, 9.0)
 			else:
 				var rot_off: float = 0.0 if is_left else PI / 6.0
 				for i: int in range(6):
 					var dir: Vector2 = Vector2.from_angle(TAU * float(i) / 6.0 + rot_off)
-					request_projectile.emit(end_p + dir * 24.0, dir, 305.0, 8.5)
+					_emit_safe_projectile(end_p, 24.0, dir, 305.0, 8.5)
 
 	return [next_pos, dash_ang, active_pose]
+
+
+func _step_wall_slam(idx: int, cur_pos: Vector2, cur_rot: float, delta: float) -> Array:
+	var ws: Dictionary = _hand_wall_slams[idx]
+	var pose: HandPose = HandPose.CLAW if acting_state == ActingState.FAKE_OUT_COLLAPSE else HandPose.FIST
+	var target_rot: float = float(ws["rot"])
+	var next_rot: float = rotate_toward(cur_rot, target_rot, MAX_HAND_ROT_SPEED * delta)
+	var phase_i: int = int(ws["phase"])
+
+	if phase_i == WallSlamPhase.WINDUP:
+		ws["timer"] = float(ws["timer"]) + delta
+		var windup_dur: float = maxf(float(ws["windup_duration"]), 0.48)
+		var stage_pos: Vector2 = Vector2(ws["stage_pos"])
+		var contact_pos: Vector2 = Vector2(ws["contact_pos"])
+		var max_speed: float = MAX_HAND_OVERDRIVE_SPEED if current_phase == 8 else MAX_HAND_REPOSITION_SPEED
+		var windup_speed: float = clampf(cur_pos.distance_to(stage_pos) / maxf(windup_dur * 0.72, 0.12), max_speed, 1800.0)
+		var next_pos: Vector2 = cur_pos.move_toward(stage_pos, windup_speed * delta)
+		if float(ws["timer"]) >= windup_dur:
+			ws["phase"] = WallSlamPhase.STRIKE
+			ws["timer"] = 0.0
+			ws["start_pos"] = next_pos
+			ws["duration"] = clampf(next_pos.distance_to(contact_pos) / 1050.0, 0.16, 0.34)
+		return [next_pos, next_rot, pose]
+
+	if phase_i == WallSlamPhase.STRIKE:
+		ws["timer"] = float(ws["timer"]) + delta
+		var dur: float = maxf(float(ws["duration"]), 0.16)
+		var p: float = clampf(float(ws["timer"]) / dur, 0.0, 1.0)
+		var start_p: Vector2 = Vector2(ws["start_pos"])
+		var contact_pos: Vector2 = Vector2(ws["contact_pos"])
+		var next_pos: Vector2 = start_p.lerp(contact_pos, p)
+		_afterimages.append({"pos": next_pos, "radius": 20.0, "rot": next_rot, "shape": "diamond", "life": 0.14, "max_life": 0.14})
+		if p >= 1.0:
+			next_pos = contact_pos
+			next_rot = target_rot
+			ws["phase"] = WallSlamPhase.RECOVER
+			ws["timer"] = 0.0
+			ws["duration"] = 0.14
+			if not bool(ws["impact_emitted"]):
+				ws["impact_emitted"] = true
+				ws["pending_emit"] = true
+		return [next_pos, next_rot, pose]
+
+	ws["timer"] = float(ws["timer"]) + delta
+	var rec_dur: float = maxf(float(ws["duration"]), 0.14)
+	var p_rec: float = clampf(float(ws["timer"]) / rec_dur, 0.0, 1.0)
+	var contact_p: Vector2 = Vector2(ws["contact_pos"])
+	var rebound_p: Vector2 = contact_p + Vector2(ws["normal"]) * 16.0
+	var next_pos_rec: Vector2 = contact_p.lerp(rebound_p, p_rec)
+	if p_rec >= 1.0:
+		ws["phase"] = WallSlamPhase.NONE
+	return [next_pos_rec, next_rot, pose]
 
 
 func _sync_hazard_flags() -> void:
@@ -1547,6 +2003,11 @@ func _check_contact_damage(player_node: Node2D) -> void:
 		var rd: Dictionary = _hand_dashes[1]
 		var closest_r: Vector2 = Geometry2D.get_closest_point_to_segment(p_pos, Vector2(rd["prev"]), right_hand.global_position) if bool(rd["swept"]) else right_hand.global_position
 		if closest_r.distance_to(p_pos) <= HAND_RADIUS + player_radius:
+			player_node.take_damage(1)
+			return
+	if _tether_active:
+		var closest_t: Vector2 = Geometry2D.get_closest_point_to_segment(p_pos, left_hand.global_position, right_hand.global_position)
+		if closest_t.distance_to(p_pos) <= 5.0 + player_radius:
 			player_node.take_damage(1)
 
 
@@ -1752,9 +2213,10 @@ func _hand_flash_amount(idx: int) -> float:
 	var sl: Dictionary = _hand_slams[idx]
 	var da: Dictionary = _hand_dashes[idx]
 	var ai: Dictionary = _hand_aims[idx]
-	if float(sl["active"]) > 0.0 or bool(da["active"]) or _hand_throw_flash[idx] > 0.0:
+	var ws_phase: int = int(_hand_wall_slams[idx]["phase"])
+	if float(sl["active"]) > 0.0 or bool(da["active"]) or ws_phase == WallSlamPhase.STRIKE or _hand_throw_flash[idx] > 0.0:
 		return 1.0
-	if float(sl["telegraph"]) > 0.0 or float(da["telegraph"]) > 0.0 or float(ai["timer"]) > 0.0:
+	if float(sl["telegraph"]) > 0.0 or float(da["telegraph"]) > 0.0 or ws_phase == WallSlamPhase.WINDUP or float(ai["timer"]) > 0.0:
 		return 0.75
 	if acting_state == ActingState.FAKE_OUT_COLLAPSE and _phase5_hands_awake:
 		return 0.65
@@ -1804,6 +2266,10 @@ func _update_sweat_shards(delta: float) -> void:
 
 func _draw() -> void:
 	if _shattered:
+		for k: int in range(8):
+			var f_ang: float = TAU * float(k) / 8.0 + 0.18
+			var f_dir: Vector2 = Vector2.from_angle(f_ang)
+			draw_line(f_dir * 12.0, f_dir * 78.0, Color(0.88, 0.88, 0.88, 0.78), 2.0, true)
 		for sh: Dictionary in _shatter_shards:
 			var offset: Vector2 = Vector2(sh["offset"])
 			var rot: float = float(sh["rot"])
@@ -1817,6 +2283,18 @@ func _draw() -> void:
 			draw_colored_polygon(pts, Color(g, g, g, 0.92))
 		draw_arc(Vector2.ZERO, 68.0, 0.0, TAU, 36, Color(0.95, 0.95, 0.95, 0.75), 2.2, true)
 		return
+
+	if acting_state == ActingState.FAKE_OUT_COLLAPSE:
+		var rim_pts: PackedVector2Array = Shapes.circle(BODY_RADIUS + 2.0, 8, PI / 8.0)
+		var transformed_rim: PackedVector2Array = PackedVector2Array()
+		transformed_rim.resize(rim_pts.size() + 1)
+		for r_i: int in range(rim_pts.size()):
+			transformed_rim[r_i] = (rim_pts[r_i] * face_rig.scale).rotated(face_rig.rotation) + face_rig.position
+		transformed_rim[rim_pts.size()] = transformed_rim[0]
+		draw_polyline(transformed_rim, Color(0.52, 0.52, 0.52, 0.88), 1.8, true)
+
+	# Wall-slam border fractures
+	_draw_wall_cracks()
 
 	# Floor-rake grooves
 	for gr: Dictionary in _rake_grooves:
@@ -1863,7 +2341,7 @@ func _draw() -> void:
 	if _lunge_telegraphing:
 		_draw_corridor_rail(_body_pos, _lunge_target, 38.0, 34.0)
 
-	# Hand dash / claw swipe / floor rake telegraphs
+	# Hand dash / claw swipe / floor rake / wall slam telegraphs
 	for idx: int in range(2):
 		var d: Dictionary = _hand_dashes[idx]
 		if float(d["telegraph"]) > 0.0:
@@ -1875,13 +2353,28 @@ func _draw() -> void:
 			var sp: Vector2 = Vector2(sl["target"]) - global_position
 			draw_arc(sp, 34.0, 0.0, TAU, 24, Color(0.92, 0.92, 0.92, 0.70), 2.4, true)
 			draw_line(sp - Vector2(18, 0), sp + Vector2(18, 0), Color(0.92, 0.92, 0.92, 0.50), 1.6, true)
+		var ws: Dictionary = _hand_wall_slams[idx]
+		if int(ws["phase"]) == WallSlamPhase.WINDUP:
+			var stage_p: Vector2 = Vector2(ws["stage_pos"])
+			var contact_p: Vector2 = Vector2(ws["contact_pos"])
+			var wp_local: Vector2 = Vector2(ws["wall_pos"]) - global_position
+			var n: Vector2 = Vector2(ws["normal"]).normalized()
+			var tang: Vector2 = Vector2(-n.y, n.x)
+			var p_w: float = clampf(float(ws["timer"]) / maxf(float(ws["windup_duration"]), 0.48), 0.0, 1.0)
+			_draw_corridor_rail(stage_p, contact_p, 24.0, 22.0)
+			var ret_r: float = lerpf(32.0, 18.0, p_w)
+			draw_arc(wp_local, ret_r, n.angle() - PI * 0.5, n.angle() + PI * 0.5, 18, Color(0.96, 0.96, 0.96, 0.55 + 0.35 * p_w), 2.0, true)
+			draw_line(wp_local - tang * 26.0, wp_local + tang * 26.0, Color(0.96, 0.96, 0.96, 0.72 + 0.24 * p_w), 2.2, true)
 
 	# Twin-hand tether & pincer lines
 	if _tether_beam_timer > 0.0:
 		var lp: Vector2 = _left_hand_pos - global_position
 		var rp: Vector2 = _right_hand_pos - global_position
-		draw_line(lp, rp, Color(0.94, 0.94, 0.94, 0.68), 2.2, true)
-		draw_circle((lp + rp) * 0.5, 10.0 + 4.0 * sin(_elapsed_time * 24.0), Color(0.96, 0.96, 0.96, 0.75))
+		if _tether_sweep_active:
+			_draw_high_voltage_tether(lp, rp, _tether_active)
+		else:
+			draw_line(lp, rp, Color(0.94, 0.94, 0.94, 0.68), 2.2, true)
+			draw_circle((lp + rp) * 0.5, 10.0 + 4.0 * sin(_elapsed_time * 24.0), Color(0.96, 0.96, 0.96, 0.75))
 	if _pincer_timer > 0.0:
 		var pl: Vector2 = _pincer_left - global_position
 		var pr: Vector2 = _pincer_right - global_position
@@ -1919,6 +2412,13 @@ func _draw() -> void:
 			cur_l + Vector2(0.0, 7.0).rotated(rot_seed),
 		])
 		draw_colored_polygon(seed_poly, Color(1.0, 1.0, 1.0, 0.96))
+
+	# Phase 5 Marionette Puppet Strings
+	if acting_state == ActingState.FAKE_OUT_COLLAPSE and _phase5_hands_awake and not _silence_freeze:
+		_draw_puppet_strings()
+
+	# Animated Enemy-Spawning Rituals (Crown Forge & Dimensional Rift)
+	_draw_spawn_rituals()
 
 	# Articulated 5-Finger JSAB Hand Details + thrust chevrons
 	_draw_jsab_hand_details(true)
@@ -1960,6 +2460,163 @@ func _draw() -> void:
 		draw_colored_polygon(drop, Color(0.88, 0.88, 0.88, 0.85 * alpha))
 
 
+func _draw_wall_cracks() -> void:
+	for wc: Dictionary in _wall_cracks:
+		var lr: float = clampf(float(wc["life"]) / maxf(float(wc["max_life"]), 0.001), 0.0, 1.0)
+		var wp: Vector2 = Vector2(wc["pos"]) - global_position
+		var n: Vector2 = Vector2(wc["normal"]).normalized()
+		var tang: Vector2 = Vector2(-n.y, n.x)
+		var str_val: float = clampf(float(wc.get("strength", 0.6)), 0.3, 1.0)
+
+		var arc_r: float = (14.0 + 38.0 * (1.0 - lr)) * str_val
+		draw_arc(wp, arc_r, n.angle() - PI * 0.52, n.angle() + PI * 0.52, 18, Color(0.96, 0.96, 0.96, 0.78 * lr), 2.4 * lr, true)
+
+		var border_span: float = 32.0 + 28.0 * str_val
+		draw_line(wp - tang * border_span, wp + tang * border_span, Color(0.95, 0.95, 0.95, 0.88 * lr), 3.0 * lr, true)
+
+		var branch_angles: Array[float] = [-0.88, -0.34, 0.34, 0.88]
+		for b_idx: int in range(branch_angles.size()):
+			var b_dir: Vector2 = n.rotated(branch_angles[b_idx])
+			var b_perp: Vector2 = Vector2(-b_dir.y, b_dir.x)
+			var seg_len: float = (18.0 + 16.0 * str_val) * (0.85 if b_idx in [0, 3] else 1.15)
+			var pts: PackedVector2Array = PackedVector2Array([wp])
+			for step_i: int in range(1, 4):
+				var zig: float = (7.5 if (step_i + b_idx) % 2 == 0 else -7.5) * str_val
+				pts.append(wp + b_dir * (seg_len * float(step_i)) + b_perp * zig)
+			draw_polyline(pts, Color(0.94, 0.94, 0.94, 0.84 * lr), 2.0 * lr, true)
+			draw_polyline(pts, Color(0.76, 0.76, 0.76, 0.38 * lr), 3.6 * lr, true)
+
+
+func _draw_high_voltage_tether(lp: Vector2, rp: Vector2, active: bool) -> void:
+	var span: Vector2 = rp - lp
+	var dist: float = span.length()
+	var dir: Vector2 = span / dist if dist > 0.001 else Vector2.RIGHT
+	var perp: Vector2 = Vector2(-dir.y, dir.x)
+	if not active:
+		var seg_step: float = 24.0
+		var dash_len: float = 10.0
+		var d_t: float = 0.0
+		var pulse_a: float = 0.32 + 0.06 * sin(_elapsed_time * 18.0)
+		var tele_col: Color = Color(0.84, 0.84, 0.84, clampf(pulse_a, 0.30, 0.40))
+		while d_t < dist:
+			var d_end: float = minf(d_t + dash_len, dist)
+			draw_line(lp + dir * d_t, lp + dir * d_end, tele_col, 1.6, true)
+			d_t += seg_step
+		draw_arc(lp, 14.0, 0.0, TAU, 16, Color(0.86, 0.86, 0.86, 0.38), 1.4, true)
+		draw_arc(rp, 14.0, 0.0, TAU, 16, Color(0.86, 0.86, 0.86, 0.38), 1.4, true)
+		return
+
+	draw_line(lp, rp, Color(0.88, 0.88, 0.88, 0.24), 10.0, true)
+	draw_line(lp, rp, Color(0.98, 0.98, 0.98, 0.98), 3.6, true)
+	var segs: int = 10
+	for strand: int in range(2):
+		var pts: PackedVector2Array = PackedVector2Array()
+		var amp: float = 5.5 if strand == 0 else 9.0
+		var speed: float = 28.0 + float(strand) * 12.0
+		for k: int in range(segs + 1):
+			var frac: float = float(k) / float(segs)
+			var base_pt: Vector2 = lp.lerp(rp, frac)
+			var env: float = sin(frac * PI)
+			var offset: float = sin(_elapsed_time * speed + float(k) * 2.4 + float(strand) * 1.9) * amp * env
+			pts.append(base_pt + perp * offset)
+		var g: float = 0.92 if strand == 0 else 0.80
+		var alpha: float = 0.78 if strand == 0 else 0.48
+		draw_polyline(pts, Color(g, g, g, alpha), 1.8, true)
+	var mid: Vector2 = (lp + rp) * 0.5
+	draw_circle(mid, 9.0 + 3.5 * sin(_elapsed_time * 24.0), Color(0.98, 0.98, 0.98, 0.88))
+	draw_arc(lp, 18.0 + 4.0 * sin(_elapsed_time * 18.0), 0.0, TAU, 16, Color(0.94, 0.94, 0.94, 0.72), 1.8, true)
+	draw_arc(rp, 18.0 + 4.0 * cos(_elapsed_time * 18.0), 0.0, TAU, 16, Color(0.94, 0.94, 0.94, 0.72), 1.8, true)
+
+
+func _draw_puppet_strings() -> void:
+	for is_left: bool in [true, false]:
+		var hp_world: Vector2 = _left_hand_pos if is_left else _right_hand_pos
+		var hand_rot: float = _left_hand_rot if is_left else _right_hand_rot
+		var hp_local: Vector2 = hp_world - global_position
+		var top_anchor: Vector2 = Vector2(hp_world.x, 28.0) - global_position
+		var bar_y: float = 34.0 - global_position.y
+		var bar_left: Vector2 = Vector2(top_anchor.x - 18.0, bar_y)
+		var bar_right: Vector2 = Vector2(top_anchor.x + 18.0, bar_y)
+		draw_line(bar_left, bar_right, Color(0.86, 0.86, 0.86, 0.62), 2.0, true)
+		var anchors: Array[Vector2] = [
+			top_anchor + Vector2(-14.0, 0.0),
+			top_anchor,
+			top_anchor + Vector2(14.0, 0.0),
+		]
+		var attachments: Array[Vector2] = [
+			hp_local + Vector2(-18.0, -14.0).rotated(hand_rot),
+			hp_local + Vector2(0.0, -20.0).rotated(hand_rot),
+			hp_local + Vector2(18.0, -14.0).rotated(hand_rot),
+		]
+		for k: int in range(3):
+			var g: float = 0.90 if k == 1 else 0.78
+			var alpha: float = 0.66 if k == 1 else 0.46
+			draw_line(anchors[k], attachments[k], Color(g, g, g, alpha), 1.4, true)
+			draw_circle(attachments[k], 2.5, Color(0.95, 0.95, 0.95, 0.75))
+
+
+func _draw_spawn_rituals() -> void:
+	for rt: Dictionary in _spawn_rituals:
+		var dur: float = maxf(float(rt["duration"]), 0.25)
+		var p: float = clampf(float(rt["elapsed"]) / dur, 0.0, 1.0)
+		var style: int = int(rt["style"])
+		if style == RitualStyle.CROWN_FORGE:
+			var core_local: Vector2 = Vector2(rt.get("core_pos", _body_pos)) - global_position
+			var crown_anchors: Array[Vector2] = [
+				Vector2(-24.0, -46.0),
+				Vector2(0.0, -56.0),
+				Vector2(24.0, -46.0),
+			]
+			for ca: Vector2 in crown_anchors:
+				var mid_pt: Vector2 = ca.lerp(core_local, 0.5) + Vector2(sin(_elapsed_time * 32.0 + ca.x) * 8.0, cos(_elapsed_time * 28.0) * 6.0)
+				draw_polyline(PackedVector2Array([ca, mid_pt, core_local]), Color(0.92, 0.92, 0.92, 0.72 * (1.0 - 0.35 * p)), 1.8, true)
+			var outer_r: float = lerpf(14.0, 28.0, p)
+			var inner_r: float = lerpf(8.0, 16.0, p)
+			var rot_a: float = _elapsed_time * 8.5
+			var rot_b: float = -_elapsed_time * 11.0
+			_draw_local_polygon(core_local, Shapes.circle(outer_r, 8, rot_a), Color(0.94, 0.94, 0.94, 0.85), 2.0)
+			_draw_local_polygon(core_local, Shapes.circle(inner_r, 8, rot_b), Color(0.84, 0.84, 0.84, 0.72), 1.6)
+			draw_circle(core_local, 7.0 + 4.0 * p, Color(0.98, 0.98, 0.98, 0.92))
+		else:
+			var rift_local: Vector2 = Vector2(rt["target"]) - global_position
+			var rad: float = lerpf(8.0, 54.0, ease(p, 0.5))
+			var rot_outer: float = _elapsed_time * 6.0
+			var rot_inner: float = -_elapsed_time * 9.0
+			_draw_local_polygon(rift_local, _rotated_diamond(rad, rot_outer), Color(0.96, 0.96, 0.96, 0.90), 2.4)
+			_draw_local_polygon(rift_local, _rotated_diamond(rad * 0.62, rot_inner), Color(0.86, 0.86, 0.86, 0.78), 1.8)
+			draw_arc(rift_local, rad * 0.82, 0.0, TAU, 8, Color(0.92, 0.92, 0.92, 0.55 + 0.35 * p), 1.6, true)
+			for k: int in range(8):
+				var ang: float = TAU * float(k) / 8.0 + rot_outer * 0.35
+				var dir: Vector2 = Vector2.from_angle(ang)
+				var pull: float = fmod(p * 2.5 + float(k) * 0.125, 1.0)
+				var r_far: float = lerpf(rad + 28.0, 10.0, pull)
+				var r_near: float = maxf(r_far - 16.0, 4.0)
+				draw_line(rift_local + dir * r_far, rift_local + dir * r_near, Color(0.94, 0.94, 0.94, 0.75 * (1.0 - pull * 0.5)), 1.6, true)
+			if p > 0.72:
+				var flash_a: float = (p - 0.72) / 0.28
+				draw_circle(rift_local, 14.0 * flash_a, Color(1.0, 1.0, 1.0, 0.88 * flash_a))
+
+
+func _draw_local_polygon(origin: Vector2, pts: PackedVector2Array, color: Color, width: float) -> void:
+	if pts.is_empty():
+		return
+	var closed: PackedVector2Array = PackedVector2Array()
+	closed.resize(pts.size() + 1)
+	for i: int in range(pts.size()):
+		closed[i] = origin + pts[i]
+	closed[pts.size()] = origin + pts[0]
+	draw_polyline(closed, color, width, true)
+
+
+func _rotated_diamond(radius: float, rot: float) -> PackedVector2Array:
+	return PackedVector2Array([
+		Vector2(radius * 1.25, 0.0).rotated(rot),
+		Vector2(0.0, -radius * 0.75).rotated(rot),
+		Vector2(-radius * 1.25, 0.0).rotated(rot),
+		Vector2(0.0, radius * 0.75).rotated(rot),
+	])
+
+
 func _draw_corridor_rail(from_pos: Vector2, to_pos: Vector2, half_width: float, end_radius: float) -> void:
 	var a: Vector2 = from_pos - global_position
 	var b: Vector2 = to_pos - global_position
@@ -1991,6 +2648,7 @@ func _draw_corridor_rail(from_pos: Vector2, to_pos: Vector2, half_width: float, 
 		draw_line(c_pos - dir * 10.0 - wing, c_pos + dir * 6.0, dash_col, 2.0, true)
 		c_dist += chev_step
 
+	draw_line(b - perp * 0.85, b + perp * 0.85, col, 2.4, true)
 	draw_arc(b, end_radius, 0.0, TAU, 22, col, 2.0, true)
 
 
@@ -2004,8 +2662,9 @@ func _draw_jsab_hand_details(is_left: bool) -> void:
 	var col_bright: Color = Color(0.96, 0.96, 0.96, 1.0)
 	var col_mid: Color = Color(0.86, 0.86, 0.86, 0.96)
 	var aim_active: bool = float(_hand_aims[idx]["timer"]) > 0.0
-	var dashing: bool = bool(_hand_dashes[idx]["active"])
-	var dash_tele: bool = float(_hand_dashes[idx]["telegraph"]) > 0.0
+	var ws_phase: int = int(_hand_wall_slams[idx]["phase"])
+	var dashing: bool = bool(_hand_dashes[idx]["active"]) or ws_phase == WallSlamPhase.STRIKE
+	var dash_tele: bool = float(_hand_dashes[idx]["telegraph"]) > 0.0 or ws_phase == WallSlamPhase.WINDUP
 
 	match pose:
 		HandPose.OPEN:
@@ -2058,7 +2717,7 @@ func _draw_jsab_hand_details(is_left: bool) -> void:
 				draw_arc(tip_world, 13.0, 0.0, TAU, 20, Color(0.94, 0.94, 0.94, 0.72), 1.8, true)
 				if aim_active:
 					var ray_end: Vector2 = tip_world + Vector2.from_angle(hand_rot) * 1400.0
-					draw_line(tip_world, ray_end, Color(0.92, 0.92, 0.92, 0.38), 1.6, true)
+					draw_line(tip_world, ray_end, Color(0.92, 0.92, 0.92, 0.20), 1.2, true)
 
 		HandPose.CLAW:
 			var angles: Array[float] = [-1.15, -0.58, 0.0, 0.58, 1.15]

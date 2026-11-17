@@ -2,6 +2,7 @@ extends "res://scripts/level.gd"
 
 var _healed_phase_5: bool = false
 var _healed_phase_7: bool = false
+var _last_healed_phase: int = 1
 var _last_boss_phase: int = 1
 var _boss_signals_connected: bool = false
 
@@ -28,10 +29,13 @@ func _start_music() -> void:
 func restart_level() -> void:
 	_healed_phase_5 = false
 	_healed_phase_7 = false
+	_last_healed_phase = 1
 	_last_boss_phase = 1
 	super.restart_level()
 	hud.configure_boss_hud(true, GameManager.BOSS_TOTAL_PHASES)
 	hud.update_boss_phase(1, GameManager.BOSS_TOTAL_PHASES)
+	if hud != null and hud.has_method("set_controls_hint_alpha"):
+		hud.set_controls_hint_alpha(1.0)
 	if boss != null and boss.has_method("reset_boss"):
 		boss.reset_boss(_arena_size)
 
@@ -117,6 +121,7 @@ func _connect_boss_signals() -> void:
 	boss.request_enemy.connect(spawn_enemy)
 	boss.request_clear_hazards.connect(_clear_hazards)
 	boss.boss_slammed.connect(_on_boss_slammed)
+	boss.boss_wall_slammed.connect(_on_boss_wall_slammed)
 	boss.phase_changed.connect(_on_boss_phase_changed)
 
 
@@ -132,10 +137,11 @@ func _check_boss_phase_and_heals() -> void:
 	var cur_phase: int = _get_current_boss_phase()
 	if cur_phase != _last_boss_phase:
 		_on_boss_phase_changed(cur_phase)
-	if elapsed_time >= 60.0 and elapsed_time < 90.0 and not _healed_phase_5:
-		_apply_phase_heal(5)
-	if elapsed_time >= 90.0 and not _healed_phase_7:
-		_apply_phase_heal(7)
+	while _last_healed_phase < cur_phase:
+		_last_healed_phase += 1
+		_apply_phase_heal(_last_healed_phase)
+	if hud != null and hud.has_method("set_controls_hint_alpha"):
+		hud.set_controls_hint_alpha(1.0 if cur_phase <= 1 else 0.15)
 
 
 func _on_boss_phase_changed(new_phase: int) -> void:
@@ -146,40 +152,52 @@ func _on_boss_phase_changed(new_phase: int) -> void:
 		return
 	_last_boss_phase = clamped_phase
 	hud.update_boss_phase(clamped_phase, GameManager.BOSS_TOTAL_PHASES)
+	if hud != null and hud.has_method("set_controls_hint_alpha"):
+		hud.set_controls_hint_alpha(1.0 if clamped_phase <= 1 else 0.15)
 	if clamped_phase > 1:
 		SoundManager.play_sfx(&"boss_phase", -2.0)
-	if clamped_phase == 5 and not _healed_phase_5:
-		_apply_phase_heal(5)
-	elif clamped_phase == 7 and not _healed_phase_7:
-		_apply_phase_heal(7)
+	while _last_healed_phase < clamped_phase:
+		_last_healed_phase += 1
+		_apply_phase_heal(_last_healed_phase)
 
 
 func _apply_phase_heal(phase: int) -> void:
 	if not is_level_running:
 		return
+	if phase < 2 or phase > GameManager.BOSS_TOTAL_PHASES:
+		return
+	var full_shield: bool = (phase == 5 or phase == 7)
 	if phase == 5:
-		if _healed_phase_5:
-			return
 		_healed_phase_5 = true
 	elif phase == 7:
-		if _healed_phase_7:
-			return
 		_healed_phase_7 = true
-	else:
-		return
 	if player != null and player.is_active and player.current_hp > 0:
-		player.heal(1, true)
+		player.heal(1, full_shield)
 		GameManager.report_live_telemetry(elapsed_time, level_duration, player.current_hp, player.MAX_HP)
 		if arena_fx != null:
-			arena_fx.spawn_ring(player.global_position, 14.0, 92.0, 0.48, Color(1.0, 1.0, 1.0, 0.92), 2.4)
-			arena_fx.spawn_burst(player.global_position, 14, 210.0, Color(0.95, 0.95, 0.95, 1.0), 0.36, 9.0, 1.8)
+			if full_shield:
+				arena_fx.spawn_ring(player.global_position, 14.0, 92.0, 0.48, Color(1.0, 1.0, 1.0, 0.92), 2.4)
+				arena_fx.spawn_burst(player.global_position, 14, 210.0, Color(0.95, 0.95, 0.95, 1.0), 0.36, 9.0, 1.8)
+			else:
+				arena_fx.spawn_ring(player.global_position, 14.0, 64.0, 0.36, Color(0.90, 0.90, 0.90, 0.72), 2.0)
 
 
 func _on_boss_slammed(at_position: Vector2, strength: float) -> void:
 	arena_grid.pulse(clampf(strength, 0.15, 1.0))
-	trigger_screen_shake(clampf(strength * 6.0, 1.8, 7.0), 0.20)
+	if (boss != null and bool(boss._shattered)) or strength >= 0.99:
+		trigger_screen_shake(4.5, 0.22)
+	else:
+		trigger_screen_shake(clampf(strength * 3.8, 1.4, 3.6), 0.12)
 	if arena_fx != null:
 		arena_fx.spawn_ring(at_position, 16.0, 76.0, 0.32, Color(0.92, 0.92, 0.92, 0.85), 2.2)
+
+
+func _on_boss_wall_slammed(wall_pos: Vector2, inward_normal: Vector2, strength: float) -> void:
+	if arena_fx != null:
+		arena_fx.spawn_directional_burst(wall_pos, inward_normal, deg_to_rad(56.0), 9, 300.0, Color(0.86, 0.86, 0.86, 0.85), 0.30, 10.0, 1.8)
+		arena_fx.spawn_ring(wall_pos, 12.0, 84.0, 0.28, Color(0.90, 0.90, 0.90, 0.68), 2.0)
+	arena_grid.pulse(clampf(strength * 0.72, 0.18, 0.75))
+	trigger_screen_shake(clampf(strength * 4.2, 1.5, 3.8), 0.13)
 
 
 func _on_boss_player_shield_blocked() -> void:

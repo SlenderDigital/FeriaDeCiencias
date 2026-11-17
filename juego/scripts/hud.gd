@@ -13,6 +13,8 @@ var _boss_hud_enabled: bool = false
 var _boss_total_phases: int = 8
 var _boss_ticks: Array[ColorRect] = []
 var boss_phase_label: Label = null
+var _top_left_pill: ColorRect = null
+var _top_right_pill: ColorRect = null
 
 @onready var hud_root: Control = $HUDRoot
 @onready var progress_bg: ColorRect = $HUDRoot/ProgressBg
@@ -53,8 +55,14 @@ func reset(duration: float) -> void:
 	_last_shield_state = ""
 	game_over_panel.visible = false
 	level_complete_panel.visible = false
+	set_controls_hint_alpha(1.0)
 	update_timer(0.0, duration)
 	update_hp(3, 3)
+
+
+func set_controls_hint_alpha(alpha: float) -> void:
+	if controls_hint_label != null:
+		controls_hint_label.modulate = Color(1.0, 1.0, 1.0, clampf(alpha, 0.0, 1.0))
 
 
 func update_timer(elapsed: float, duration: float) -> void:
@@ -146,6 +154,8 @@ func sync_layout(viewport_size: Vector2) -> void:
 	_layout_boss_ticks()
 	if viewport_size.x > 160.0:
 		timer_label.position.x = viewport_size.x - 150.0
+		if _top_right_pill != null and is_instance_valid(_top_right_pill):
+			_top_right_pill.position.x = timer_label.position.x - 10.0
 	if viewport_size.x > 240.0:
 		hand_status_pill.position.x = (viewport_size.x - hand_status_pill.size.x) * 0.5
 		hand_status_pill.position.y = 84.0 if viewport_size.x < 620.0 else 26.0
@@ -182,6 +192,29 @@ func configure_boss_hud(enabled: bool, total_phases: int = 8) -> void:
 	for tick: ColorRect in _boss_ticks:
 		if tick != null and is_instance_valid(tick):
 			tick.visible = enabled
+
+	if _top_left_pill == null or not is_instance_valid(_top_left_pill):
+		_top_left_pill = ColorRect.new()
+		_top_left_pill.name = "TopLeftPill"
+		_top_left_pill.position = Vector2(16.0, 22.0)
+		_top_left_pill.size = Vector2(216.0, 92.0)
+		_top_left_pill.color = Color(0.02, 0.02, 0.02, 0.78)
+		_top_left_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_top_left_pill.z_index = -1
+		hud_root.add_child(_top_left_pill)
+	_top_left_pill.visible = enabled
+
+	if _top_right_pill == null or not is_instance_valid(_top_right_pill):
+		_top_right_pill = ColorRect.new()
+		_top_right_pill.name = "TopRightPill"
+		_top_right_pill.position = Vector2(timer_label.position.x - 10.0, 22.0)
+		_top_right_pill.size = Vector2(142.0, 34.0)
+		_top_right_pill.color = Color(0.02, 0.02, 0.02, 0.78)
+		_top_right_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_top_right_pill.z_index = -1
+		hud_root.add_child(_top_right_pill)
+	_top_right_pill.position.x = timer_label.position.x - 10.0
+	_top_right_pill.visible = enabled
 
 	if boss_phase_label == null or not is_instance_valid(boss_phase_label):
 		boss_phase_label = Label.new()

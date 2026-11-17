@@ -273,6 +273,7 @@ func _draw() -> void:
 		return
 
 	if current_phase in [Phase.CLOSING, Phase.HOLD, Phase.RETRACTING, Phase.FADE_OUT]:
+		var hatch_col: Color = Color(0.32, 0.32, 0.32, 0.34)
 		var rib_col: Color = Color(0.45 + 0.35 * _slam_flash, 0.45 + 0.35 * _slam_flash, 0.45 + 0.35 * _slam_flash, 0.78)
 		var tooth_col: Color = Color(0.94, 0.94, 0.94, 0.92)
 		var pos_a: float = wall_a.global_position.x if horizontal else wall_a.global_position.y
@@ -281,6 +282,29 @@ func _draw() -> void:
 		var a_inner: float = pos_a + half_thick
 		var b_inner: float = pos_b - half_thick
 		var b_outer: float = pos_b + half_thick
+		var a_min: float = maxf(0.0, a_outer)
+		var b_max: float = minf(primary_span, b_outer)
+		var hatch_step: float = 36.0
+		var hatch_count: int = int(ceil(cross_span / hatch_step))
+		for h_idx: int in range(hatch_count):
+			var c0: float = float(h_idx) * hatch_step
+			var c1: float = minf(cross_span, c0 + wall_thickness * 0.75)
+			if a_inner > a_min + 4.0:
+				draw_line(
+					axis_vec * a_min + cross_vec * c0,
+					axis_vec * a_inner + cross_vec * c1,
+					hatch_col,
+					1.6,
+					true
+				)
+			if b_max > b_inner + 4.0:
+				draw_line(
+					axis_vec * b_inner + cross_vec * c1,
+					axis_vec * b_max + cross_vec * c0,
+					hatch_col,
+					1.6,
+					true
+				)
 		var rib_count: int = 7 if horizontal else 9
 
 		for i: int in range(rib_count):
