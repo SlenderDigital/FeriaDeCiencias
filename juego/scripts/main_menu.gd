@@ -50,9 +50,18 @@ var _square_vel: Vector2 = Vector2(135.0, 95.0)
 var _tracker_progress_value: float = 0.08
 var _tracker_done_hold_timer: float = 0.0
 var _tracker_fade_alpha: float = 1.0
+var _tracker_poll_cooldown: float = 0.0
+var _last_tracker_label: String = ""
+var _last_tracker_is_done: bool = false
+var _last_tracker_is_failed: bool = false
+var _last_tracker_bar_size: Vector2 = Vector2(-1.0, -1.0)
+var _last_tracker_rendered_progress: float = -1.0
+var _last_tracker_rendered_alpha: float = -1.0
 
 
 func _ready() -> void:
+	if DisplayServer.get_name() != "headless":
+		Engine.max_fps = 60
 	RenderingServer.set_default_clear_color(Color.BLACK)
 	selected_difficulty = GameManager.selected_difficulty
 	_update_difficulty_button_text()
@@ -459,20 +468,46 @@ func _on_resized(viewport_override: Vector2 = Vector2.ZERO) -> void:
 
 
 func _update_tracker_progress(delta: float) -> void:
+	if delta > 0.0 and not tracker_progress_box.visible and _tracker_fade_alpha <= 0.0 and _last_tracker_is_done:
+		_tracker_poll_cooldown -= delta
+		if _tracker_poll_cooldown > 0.0:
+			return
+		_tracker_poll_cooldown = 0.25
+
 	var info: Dictionary = HandTrackingClient.get_startup_progress_info()
 	var target_progress: float = clampf(float(info.get("progress", 0.08)), 0.0, 1.0)
 	var label_str: String = str(info.get("text", "HAND TRACKER: STARTING..."))
 	var is_done: bool = bool(info.get("done", false))
 	var is_failed: bool = bool(info.get("failed", false))
 
-	_tracker_progress_value = move_toward(_tracker_progress_value, target_progress, delta * 1.8) if delta > 0.0 else target_progress
-	if tracker_status_label.text != label_str:
-		tracker_status_label.text = label_str
+	if (
+		delta > 0.0
+		and not tracker_progress_box.visible
+		and _tracker_fade_alpha <= 0.0
+		and is_done
+		and _last_tracker_is_done
+		and is_failed == _last_tracker_is_failed
+		and label_str == _last_tracker_label
+		and is_equal_approx(_tracker_progress_value, target_progress)
+	):
+		return
 
-	var fill_gray: float = 0.45 if is_failed else (1.0 if is_done else 0.88)
-	var bar_w: float = maxf(tracker_bar_bg.size.x, tracker_bar_bg.custom_minimum_size.x)
-	tracker_bar_fill.size = Vector2(bar_w * _tracker_progress_value, tracker_bar_bg.size.y)
-	tracker_bar_fill.color = Color(fill_gray, fill_gray, fill_gray, 1.0)
+	_tracker_progress_value = move_toward(_tracker_progress_value, target_progress, delta * 1.8) if delta > 0.0 else target_progress
+	if _last_tracker_label != label_str or tracker_status_label.text != label_str:
+		tracker_status_label.text = label_str
+		_last_tracker_label = label_str
+
+	var bar_size: Vector2 = Vector2(maxf(tracker_bar_bg.size.x, tracker_bar_bg.custom_minimum_size.x), tracker_bar_bg.size.y)
+	if not is_equal_approx(_tracker_progress_value, _last_tracker_rendered_progress) or not bar_size.is_equal_approx(_last_tracker_bar_size):
+		tracker_bar_fill.size = Vector2(bar_size.x * _tracker_progress_value, bar_size.y)
+		_last_tracker_rendered_progress = _tracker_progress_value
+		_last_tracker_bar_size = bar_size
+
+	if is_done != _last_tracker_is_done or is_failed != _last_tracker_is_failed or _last_tracker_rendered_alpha < 0.0:
+		var fill_gray: float = 0.45 if is_failed else (1.0 if is_done else 0.88)
+		tracker_bar_fill.color = Color(fill_gray, fill_gray, fill_gray, 1.0)
+		_last_tracker_is_done = is_done
+		_last_tracker_is_failed = is_failed
 
 	if is_done:
 		_tracker_done_hold_timer += maxf(0.0, delta)
@@ -481,6 +516,9 @@ func _update_tracker_progress(delta: float) -> void:
 	else:
 		_tracker_done_hold_timer = 0.0
 		_tracker_fade_alpha = 1.0
+		_tracker_poll_cooldown = 0.0
 
-	tracker_progress_box.modulate = Color(1.0, 1.0, 1.0, _tracker_fade_alpha)
-	tracker_progress_box.visible = _tracker_fade_alpha > 0.01
+	if not is_equal_approx(_tracker_fade_alpha, _last_tracker_rendered_alpha):
+		tracker_progress_box.modulate = Color(1.0, 1.0, 1.0, _tracker_fade_alpha)
+		tracker_progress_box.visible = _tracker_fade_alpha > 0.01
+		_last_tracker_rendered_alpha = _tracker_fade_alpha

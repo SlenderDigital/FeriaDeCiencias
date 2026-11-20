@@ -6,10 +6,10 @@
 blend_mode = 1
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_boss_body"]
-radius = 42.0
+radius = 30.0
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_boss_hand"]
-radius = 26.0
+radius = 19.0
 
 [node name="Boss" type="Area2D" groups=["boss"]]
 position = Vector2(576, 152)
@@ -42,28 +42,28 @@ light_mask = 0
 color = Color(0.06, 0.06, 0.06, 1)
 
 [node name="LeftEyePolygon" type="Polygon2D" parent="FaceRig"]
-position = Vector2(-14, -5)
+position = Vector2(-10.5, -4)
 light_mask = 0
 color = Color(1, 1, 1, 1)
 
 [node name="RightEyePolygon" type="Polygon2D" parent="FaceRig"]
-position = Vector2(14, -5)
+position = Vector2(10.5, -4)
 light_mask = 0
 color = Color(1, 1, 1, 1)
 
 [node name="LeftPupilPolygon" type="Polygon2D" parent="FaceRig"]
-position = Vector2(-14, -5)
+position = Vector2(-10.5, -4)
 light_mask = 0
 color = Color(0.06, 0.06, 0.06, 1)
 
 [node name="RightPupilPolygon" type="Polygon2D" parent="FaceRig"]
-position = Vector2(14, -5)
+position = Vector2(10.5, -4)
 light_mask = 0
 color = Color(0.06, 0.06, 0.06, 1)
 
 [node name="LeftBrowLine" type="Line2D" parent="FaceRig"]
 light_mask = 0
-width = 4.0
+width = 3.0
 default_color = Color(0.96, 0.96, 0.96, 1)
 begin_cap_mode = 2
 end_cap_mode = 2
@@ -71,7 +71,7 @@ antialiased = true
 
 [node name="RightBrowLine" type="Line2D" parent="FaceRig"]
 light_mask = 0
-width = 4.0
+width = 3.0
 default_color = Color(0.96, 0.96, 0.96, 1)
 begin_cap_mode = 2
 end_cap_mode = 2
@@ -79,7 +79,7 @@ antialiased = true
 
 [node name="MouthLine" type="Line2D" parent="FaceRig"]
 light_mask = 0
-width = 3.5
+width = 2.6
 default_color = Color(0.96, 0.96, 0.96, 1)
 joint_mode = 2
 begin_cap_mode = 2
@@ -90,7 +90,7 @@ antialiased = true
 visible = false
 z_index = -5
 light_mask = 0
-width = 3.0
+width = 2.4
 default_color = Color(0.88, 0.88, 0.88, 0.72)
 begin_cap_mode = 2
 end_cap_mode = 2
@@ -122,7 +122,7 @@ color = Color(0.96, 0.96, 0.96, 1)
 [node name="HandRing" type="Line2D" parent="LeftHand"]
 light_mask = 0
 closed = true
-width = 2.0
+width = 1.6
 default_color = Color(0.82, 0.82, 0.82, 0.75)
 antialiased = true
 
@@ -152,7 +152,7 @@ color = Color(0.96, 0.96, 0.96, 1)
 [node name="HandRing" type="Line2D" parent="RightHand"]
 light_mask = 0
 closed = true
-width = 2.0
+width = 1.6
 default_color = Color(0.82, 0.82, 0.82, 0.75)
 antialiased = true
 

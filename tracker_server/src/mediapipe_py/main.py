@@ -68,18 +68,25 @@ def _is_pid_alive(pid: int) -> bool:
 UDP_IP = "127.0.0.1"
 UDP_PORT = 5005
 
-# ---- Config de camara (override por env, ej: TRACKER_CAM_WIDTH=640) ----
+# ---- Config de camara (override por env: TRACKER_CAM_WIDTH / TRACKER_CAM_HEIGHT) ----
 # Camara USB2.0 (Shinetech FHD): modos reales MJPG hasta 1920x1080 SOLO a
-# 30/15fps (no hay 1080p60). En esta sala el auto-exposure llega a bajarla a
-# ~17fps; la clave para 30fps estables es:
+# 30/15fps (no hay 1080p60). Default 1280x720 (720p@30fps MJPG), overridable
+# por env con TRACKER_CAM_WIDTH / TRACKER_CAM_HEIGHT. En sala oscura el
+# auto-exposure baja el fps a ~17fps; la clave para 30fps estables es:
 #   1) exposure_dynamic_framerate=0 (v4l2-ctl, ANTES de abrir)
 #   2) BUFFERSIZE=2 (con 1 el driver se degrada a ~14fps)
-#   3) captura en su propio hilo (la inferencia MediaPipe ~21ms no frena el bus)
+#   3) captura en su propio hilo (la inferencia MediaPipe no frena el bus)
 CAM_WIDTH = int(os.environ.get("TRACKER_CAM_WIDTH", "1280"))
 CAM_HEIGHT = int(os.environ.get("TRACKER_CAM_HEIGHT", "720"))
 CAM_FPS = int(os.environ.get("TRACKER_CAM_FPS", "30"))
 CAM_INDEX = int(os.environ.get("TRACKER_CAM_INDEX", "0"))
 V4L2_DEV = f"/dev/video{CAM_INDEX}"
+
+# Backoff adaptativo en idle: baja a IDLE_FPS tras IDLE_AFTER_SEC sin mano,
+# manteniendo 30 FPS completos durante gracia inicial y apenas vuelve la mano.
+IDLE_BACKOFF = os.environ.get("TRACKER_IDLE_BACKOFF", "1") == "1"
+IDLE_AFTER_SEC = float(os.environ.get("TRACKER_IDLE_AFTER_SEC", "5.0"))
+IDLE_FPS = max(1.0, float(os.environ.get("TRACKER_IDLE_FPS", "10.0")))
 
 
 def _write_status(fase: str) -> None:
@@ -186,14 +193,30 @@ def main() -> None:
     last_hb = time.time()
 
     last_seq = 0
+    last_hand_time = time.monotonic()
+    idle_interval = 1.0 / IDLE_FPS
+    last_proc_time = last_hand_time - idle_interval
     while latest["ok"] and cap.isOpened():
+        now_wall = time.time()
+        if now_wall - last_hb > 2.0:
+            _write_status("ready")
+            last_hb = now_wall
+
         if latest["seq"] == last_seq:
             time.sleep(0.002)   # sin frame nuevo: no quemar CPU
             continue
-        if time.time() - last_hb > 2.0:
-            _write_status("ready")
-            last_hb = time.time()
+
+        now_mono = time.monotonic()
+        if (
+            IDLE_BACKOFF
+            and (now_mono - last_hand_time) >= IDLE_AFTER_SEC
+            and (now_mono - last_proc_time) < idle_interval
+        ):
+            time.sleep(0.005)
+            continue
+
         last_seq = latest["seq"]
+        last_proc_time = now_mono
         image = latest["frame"]
 
         # Convert to RGB for inference
@@ -201,17 +224,21 @@ def main() -> None:
         rgb_image.flags.writeable = False
 
         landmarks_result = landmarker.process(rgb_image)
+        if landmarks_result:
+            last_hand_time = time.monotonic()
 
         # Process landmarks and network payload
         if landmarks_result:
             packed_landmarks = []
+            if not HEADLESS:
+                h, w, _ = image.shape
             for lm in landmarks_result:
                 packed_landmarks.extend([lm[0], lm[1], lm[2]])
 
-                # Draw landmark (assuming normalized coordinates 0.0 - 1.0)
-                h, w, _ = image.shape
-                cx, cy = int(lm[0] * w), int(lm[1] * h)
-                cv2.circle(image, (cx, cy), 3, (0, 255, 0), -1)
+                if not HEADLESS:
+                    # Draw landmark (assuming normalized coordinates 0.0 - 1.0)
+                    cx, cy = int(lm[0] * w), int(lm[1] * h)
+                    cv2.circle(image, (cx, cy), 3, (0, 255, 0), -1)
 
             payload = struct.pack(
                 f"<i{len(packed_landmarks)}f",

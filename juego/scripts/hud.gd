@@ -6,15 +6,30 @@ signal main_menu_requested
 var _hud_timer_bucket: int = -1
 var _last_shield_ratio: float = -1.0
 var _last_shield_state: String = ""
+var _last_shield_sec_bucket: int = -1
 var _last_hand_state: int = -1
 var _last_hand_label: String = ""
 var _last_hand_pulse_bucket: int = -1
+var _current_hp: int = 3
+var _hp_flash_timer: float = 0.0
+var _hp_pulse_time: float = 0.0
 var _boss_hud_enabled: bool = false
 var _boss_total_phases: int = 8
 var _boss_ticks: Array[ColorRect] = []
 var boss_phase_label: Label = null
+var shield_time_label: Label = null
 var _top_left_pill: ColorRect = null
 var _top_right_pill: ColorRect = null
+var _intro_view_size: Vector2 = Vector2(1152.0, 648.0)
+var _intro_top_bar: ColorRect = null
+var _intro_bottom_bar: ColorRect = null
+var _intro_skip_label: Label = null
+var _intro_banner: Control = null
+var _intro_backdrop: ColorRect = null
+var _intro_top_rule: ColorRect = null
+var _intro_bottom_rule: ColorRect = null
+var _intro_title_label: Label = null
+var _intro_subtitle_label: Label = null
 
 @onready var hud_root: Control = $HUDRoot
 @onready var progress_bg: ColorRect = $HUDRoot/ProgressBg
@@ -41,6 +56,7 @@ var _top_right_pill: ColorRect = null
 
 
 func _ready() -> void:
+	set_process(false)
 	game_over_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	level_complete_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	retry_button.pressed.connect(func() -> void: retry_requested.emit())
@@ -48,13 +64,75 @@ func _ready() -> void:
 	game_over_menu_button.pressed.connect(func() -> void: main_menu_requested.emit())
 	complete_menu_button.pressed.connect(func() -> void: main_menu_requested.emit())
 
+	_ensure_top_left_pill()
+
+	shield_time_label = Label.new()
+	shield_time_label.name = "ShieldTimeLabel"
+	shield_time_label.position = Vector2(shield_bg.position.x + shield_bg.size.x + 8.0, shield_bg.position.y - 5.0)
+	shield_time_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shield_time_label.add_theme_font_size_override("font_size", 13)
+	shield_time_label.add_theme_color_override("font_color", Color.WHITE)
+	shield_time_label.text = "1.7s"
+	hud_root.add_child(shield_time_label)
+
+	for i: int in range(2):
+		var tick: ColorRect = ColorRect.new()
+		tick.name = "ShieldTick%d" % (i + 1)
+		tick.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tick.color = Color(0.06, 0.06, 0.06, 0.85)
+		tick.z_index = 1
+		tick.position = Vector2(roundf(shield_bg.size.x * float(i + 1) / 3.0), 0.0)
+		tick.size = Vector2(1.0, shield_bg.size.y)
+		shield_bg.add_child(tick)
+
+	var vp: Viewport = get_viewport()
+	if vp != null:
+		var vr: Vector2 = vp.get_visible_rect().size
+		if vr.x > 0.0 and vr.y > 0.0:
+			_intro_view_size = vr
+	_setup_boss_intro_overlay()
+
+
+func _process(delta: float) -> void:
+	_hp_flash_timer = maxf(0.0, _hp_flash_timer - delta * 2.5)
+	_hp_pulse_time += delta
+	var gray: float = 1.0
+	if _hp_flash_timer > 0.0:
+		var flash_blink: bool = int(_hp_flash_timer * 12.0) % 2 == 0
+		gray = 0.42 if flash_blink else 1.0
+	elif _current_hp == 1:
+		gray = 0.825 + 0.175 * sin(_hp_pulse_time * 10.0)
+	hp_label.add_theme_color_override("font_color", Color(gray, gray, gray, 1.0))
+	if _hp_flash_timer <= 0.0 and _current_hp != 1:
+		hp_label.add_theme_color_override("font_color", Color.WHITE)
+		set_process(false)
+
+
+func _ensure_top_left_pill() -> void:
+	if _top_left_pill == null or not is_instance_valid(_top_left_pill):
+		_top_left_pill = ColorRect.new()
+		_top_left_pill.name = "TopLeftPill"
+		_top_left_pill.position = Vector2(16.0, 22.0)
+		_top_left_pill.size = Vector2(228.0, 66.0)
+		_top_left_pill.color = Color(0.02, 0.02, 0.02, 0.78)
+		_top_left_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_top_left_pill.z_index = -1
+		hud_root.add_child(_top_left_pill)
+
 
 func reset(duration: float) -> void:
 	_hud_timer_bucket = -1
 	_last_shield_ratio = -1.0
 	_last_shield_state = ""
+	_last_shield_sec_bucket = -1
+	_current_hp = 3
+	_hp_flash_timer = 0.0
+	_hp_pulse_time = 0.0
+	hp_label.add_theme_color_override("font_color", Color.WHITE)
+	set_process(false)
 	game_over_panel.visible = false
 	level_complete_panel.visible = false
+	hide_boss_intro()
 	set_controls_hint_alpha(1.0)
 	update_timer(0.0, duration)
 	update_hp(3, 3)
@@ -80,9 +158,17 @@ func update_hp(new_hp: int, max_hp: int) -> void:
 	for i: int in range(max_hp):
 		blocks += "■ " if i < new_hp else "□ "
 	hp_label.text = "HP: %s(%d/%d)" % [blocks, new_hp, max_hp]
+	if new_hp != _current_hp:
+		_hp_flash_timer = 1.0
+	_current_hp = new_hp
+	if _current_hp != 1:
+		_hp_pulse_time = 0.0
+	set_process(_hp_flash_timer > 0.0 or _current_hp == 1)
+	if _hp_flash_timer <= 0.0 and _current_hp != 1:
+		hp_label.add_theme_color_override("font_color", Color.WHITE)
 
 
-func update_shield(ratio: float, is_active: bool, is_exhausted: bool) -> void:
+func update_shield(ratio: float, is_active: bool, is_exhausted: bool, max_seconds: float = 1.65) -> void:
 	var clamped_ratio: float = clampf(ratio, 0.0, 1.0)
 	var state_text: String = "SHIELD: READY"
 	var state_gray: float = 0.82
@@ -101,6 +187,14 @@ func update_shield(ratio: float, is_active: bool, is_exhausted: bool) -> void:
 		var fill_gray: float = 0.42 if is_exhausted else lerpf(0.60, 1.0, clamped_ratio)
 		shield_fill.color = Color(fill_gray, fill_gray, fill_gray, 1.0)
 		_last_shield_ratio = clamped_ratio
+
+	var remaining_sec: float = clamped_ratio * max_seconds
+	var sec_tenths: int = int(round(remaining_sec * 10.0))
+	if shield_time_label != null and (sec_tenths != _last_shield_sec_bucket or state_text != _last_shield_state):
+		shield_time_label.text = "%.1fs" % (float(sec_tenths) / 10.0)
+		var time_gray: float = 1.0 if (is_active or clamped_ratio >= 0.999) else (0.48 if is_exhausted else 0.74)
+		shield_time_label.add_theme_color_override("font_color", Color(time_gray, time_gray, time_gray, 1.0))
+		_last_shield_sec_bucket = sec_tenths
 
 	if state_text != _last_shield_state:
 		shield_label.text = state_text
@@ -149,6 +243,8 @@ func show_level_complete(subtitle_text: String) -> void:
 
 
 func sync_layout(viewport_size: Vector2) -> void:
+	if viewport_size.x > 0.0 and viewport_size.y > 0.0:
+		_intro_view_size = viewport_size
 	if viewport_size.x > 48.0:
 		progress_bg.size.x = viewport_size.x - 48.0
 	_layout_boss_ticks()
@@ -169,6 +265,207 @@ func sync_layout(viewport_size: Vector2) -> void:
 			box.custom_minimum_size.x = modal_half_w * 2.0
 			box.offset_left = -modal_half_w
 			box.offset_right = modal_half_w
+	_layout_boss_intro_overlay()
+
+
+func _setup_boss_intro_overlay() -> void:
+	_intro_top_bar = ColorRect.new()
+	_intro_top_bar.name = "IntroTopBar"
+	_intro_top_bar.color = Color(0.02, 0.02, 0.02, 0.96)
+	_intro_top_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_intro_top_bar.z_index = 5
+	_intro_top_bar.visible = false
+	hud_root.add_child(_intro_top_bar)
+
+	_intro_bottom_bar = ColorRect.new()
+	_intro_bottom_bar.name = "IntroBottomBar"
+	_intro_bottom_bar.color = Color(0.02, 0.02, 0.02, 0.96)
+	_intro_bottom_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_intro_bottom_bar.z_index = 5
+	_intro_bottom_bar.visible = false
+	hud_root.add_child(_intro_bottom_bar)
+
+	_intro_skip_label = Label.new()
+	_intro_skip_label.name = "IntroSkipLabel"
+	_intro_skip_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_intro_skip_label.add_theme_font_size_override("font_size", 12)
+	_intro_skip_label.add_theme_color_override("font_color", Color(0.58, 0.58, 0.58, 0.9))
+	_intro_skip_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_intro_skip_label.text = "SPACE / CLICK TO SKIP"
+	_intro_bottom_bar.add_child(_intro_skip_label)
+
+	_intro_banner = Control.new()
+	_intro_banner.name = "IntroBanner"
+	_intro_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_intro_banner.z_index = 6
+	_intro_banner.visible = false
+	hud_root.add_child(_intro_banner)
+
+	_intro_backdrop = ColorRect.new()
+	_intro_backdrop.name = "IntroBackdrop"
+	_intro_backdrop.color = Color(0.02, 0.02, 0.02, 0.86)
+	_intro_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_intro_banner.add_child(_intro_backdrop)
+
+	_intro_top_rule = ColorRect.new()
+	_intro_top_rule.name = "IntroTopRule"
+	_intro_top_rule.color = Color(1.0, 1.0, 1.0, 1.0)
+	_intro_top_rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_intro_banner.add_child(_intro_top_rule)
+
+	_intro_bottom_rule = ColorRect.new()
+	_intro_bottom_rule.name = "IntroBottomRule"
+	_intro_bottom_rule.color = Color(1.0, 1.0, 1.0, 1.0)
+	_intro_bottom_rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_intro_banner.add_child(_intro_bottom_rule)
+
+	_intro_title_label = Label.new()
+	_intro_title_label.name = "IntroTitleLabel"
+	_intro_title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_intro_title_label.add_theme_font_size_override("font_size", 40)
+	_intro_title_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 1.0))
+	_intro_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_intro_title_label.text = "THE ARCHITECT"
+	_intro_banner.add_child(_intro_title_label)
+
+	_intro_subtitle_label = Label.new()
+	_intro_subtitle_label.name = "IntroSubtitleLabel"
+	_intro_subtitle_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_intro_subtitle_label.add_theme_font_size_override("font_size", 14)
+	_intro_subtitle_label.add_theme_color_override("font_color", Color(0.80, 0.80, 0.80, 1.0))
+	_intro_subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_intro_subtitle_label.text = "8 PHASES  ·  SURVIVE 120s"
+	_intro_banner.add_child(_intro_subtitle_label)
+
+	_layout_boss_intro_overlay()
+
+
+func _layout_boss_intro_overlay() -> void:
+	if _intro_top_bar == null or not is_instance_valid(_intro_top_bar):
+		return
+	var vw: float = _intro_view_size.x
+	var vh: float = _intro_view_size.y
+	var bar_h: float = 58.0
+	var banner_h: float = 98.0
+
+	_intro_top_bar.size = Vector2(vw, bar_h)
+	_intro_bottom_bar.size = Vector2(vw, bar_h)
+	_intro_skip_label.position = Vector2(0.0, (bar_h - 18.0) * 0.5)
+	_intro_skip_label.size = Vector2(vw, 20.0)
+
+	_intro_banner.position = Vector2(0.0, (vh - banner_h) * 0.5)
+	_intro_banner.size = Vector2(vw, banner_h)
+	_intro_banner.pivot_offset = Vector2(vw * 0.5, banner_h * 0.5)
+
+	_intro_backdrop.position = Vector2.ZERO
+	_intro_backdrop.size = Vector2(vw, banner_h)
+	_intro_top_rule.position.y = 0.0
+	_intro_top_rule.size.y = 2.0
+	_intro_bottom_rule.position.y = banner_h - 2.0
+	_intro_bottom_rule.size.y = 2.0
+	if _intro_top_rule.size.x <= 0.0:
+		_intro_top_rule.position.x = 0.0
+		_intro_top_rule.size.x = vw
+		_intro_bottom_rule.position.x = 0.0
+		_intro_bottom_rule.size.x = vw
+
+	_intro_title_label.position = Vector2(0.0, 12.0)
+	_intro_title_label.size = Vector2(vw, 50.0)
+	_intro_subtitle_label.position = Vector2(0.0, 64.0)
+	_intro_subtitle_label.size = Vector2(vw, 24.0)
+
+
+func hide_boss_intro() -> void:
+	if _intro_top_bar != null and is_instance_valid(_intro_top_bar):
+		_intro_top_bar.visible = false
+		_intro_top_bar.modulate = Color.WHITE
+	if _intro_bottom_bar != null and is_instance_valid(_intro_bottom_bar):
+		_intro_bottom_bar.visible = false
+		_intro_bottom_bar.modulate = Color.WHITE
+	if _intro_banner != null and is_instance_valid(_intro_banner):
+		_intro_banner.visible = false
+		_intro_banner.scale = Vector2.ONE
+		_intro_banner.modulate = Color.WHITE
+
+
+func update_boss_intro(active: bool, progress: float, dismiss_t: float = 0.0, quick_mode: bool = false) -> void:
+	if _intro_top_bar == null or not is_instance_valid(_intro_top_bar):
+		return
+	_layout_boss_intro_overlay()
+	var vw: float = _intro_view_size.x
+	var vh: float = _intro_view_size.y
+	var bar_h: float = 58.0
+
+	if active and not quick_mode:
+		var p: float = clampf(progress, 0.0, 1.0)
+		var bar_t: float = ease(clampf(p / 0.18, 0.0, 1.0), 0.35)
+		_intro_top_bar.visible = true
+		_intro_bottom_bar.visible = true
+		_intro_top_bar.modulate = Color.WHITE
+		_intro_bottom_bar.modulate = Color.WHITE
+		_intro_top_bar.position = Vector2(0.0, lerpf(-bar_h, 0.0, bar_t))
+		_intro_bottom_bar.position = Vector2(0.0, lerpf(vh, vh - bar_h, bar_t))
+		_intro_skip_label.visible = true
+
+		if p < 0.52:
+			_intro_banner.visible = false
+		else:
+			_intro_banner.visible = true
+			var slash_t: float = ease(clampf((p - 0.52) / 0.14, 0.0, 1.0), 0.35)
+			_intro_banner.scale = Vector2(1.0, lerpf(0.08, 1.0, slash_t))
+			_intro_banner.modulate = Color(1.0, 1.0, 1.0, clampf((p - 0.52) / 0.06, 0.0, 1.0))
+			var rule_w: float = vw * lerpf(0.18, 1.0, slash_t)
+			var rule_x: float = (vw - rule_w) * 0.5
+			_intro_top_rule.position.x = rule_x
+			_intro_top_rule.size.x = rule_w
+			_intro_bottom_rule.position.x = rule_x
+			_intro_bottom_rule.size.x = rule_w
+		return
+
+	if active and quick_mode:
+		_intro_top_bar.visible = false
+		_intro_bottom_bar.visible = false
+		var p: float = clampf(progress, 0.0, 1.0)
+		if p < 0.35:
+			_intro_banner.visible = false
+		else:
+			_intro_banner.visible = true
+			var flash_t: float = clampf((p - 0.35) / 0.65, 0.0, 1.0)
+			var alpha: float = clampf(flash_t / 0.25, 0.0, 1.0) if flash_t < 0.5 else sin(flash_t * PI)
+			_intro_banner.scale = Vector2(1.0, lerpf(0.75, 1.0, minf(flash_t * 3.0, 1.0)))
+			_intro_banner.modulate = Color(1.0, 1.0, 1.0, clampf(alpha, 0.0, 1.0))
+			_intro_top_rule.position.x = 0.0
+			_intro_top_rule.size.x = vw
+			_intro_bottom_rule.position.x = 0.0
+			_intro_bottom_rule.size.x = vw
+		return
+
+	var dt_norm: float = clampf(dismiss_t, 0.0, 1.0)
+	if dt_norm >= 1.0:
+		hide_boss_intro()
+		return
+
+	var out_t: float = ease(dt_norm, 2.0)
+	if not quick_mode:
+		_intro_top_bar.visible = true
+		_intro_bottom_bar.visible = true
+		_intro_top_bar.position = Vector2(0.0, lerpf(0.0, -bar_h, out_t))
+		_intro_bottom_bar.position = Vector2(0.0, lerpf(vh - bar_h, vh, out_t))
+		_intro_top_bar.modulate = Color(1.0, 1.0, 1.0, 1.0 - out_t * 0.5)
+		_intro_bottom_bar.modulate = Color(1.0, 1.0, 1.0, 1.0 - out_t * 0.5)
+	else:
+		_intro_top_bar.visible = false
+		_intro_bottom_bar.visible = false
+
+	_intro_banner.visible = true
+	_intro_banner.scale = Vector2(1.0, lerpf(1.0, 0.05, out_t))
+	_intro_banner.modulate = Color(1.0, 1.0, 1.0, 1.0 - out_t)
+	var rule_w: float = vw * (1.0 - out_t)
+	var rule_x: float = (vw - rule_w) * 0.5
+	_intro_top_rule.position.x = rule_x
+	_intro_top_rule.size.x = rule_w
+	_intro_bottom_rule.position.x = rule_x
+	_intro_bottom_rule.size.x = rule_w
 
 
 func configure_boss_hud(enabled: bool, total_phases: int = 8) -> void:
@@ -193,16 +490,9 @@ func configure_boss_hud(enabled: bool, total_phases: int = 8) -> void:
 		if tick != null and is_instance_valid(tick):
 			tick.visible = enabled
 
-	if _top_left_pill == null or not is_instance_valid(_top_left_pill):
-		_top_left_pill = ColorRect.new()
-		_top_left_pill.name = "TopLeftPill"
-		_top_left_pill.position = Vector2(16.0, 22.0)
-		_top_left_pill.size = Vector2(216.0, 92.0)
-		_top_left_pill.color = Color(0.02, 0.02, 0.02, 0.78)
-		_top_left_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_top_left_pill.z_index = -1
-		hud_root.add_child(_top_left_pill)
-	_top_left_pill.visible = enabled
+	_ensure_top_left_pill()
+	_top_left_pill.size = Vector2(228.0, 92.0) if enabled else Vector2(228.0, 66.0)
+	_top_left_pill.visible = true
 
 	if _top_right_pill == null or not is_instance_valid(_top_right_pill):
 		_top_right_pill = ColorRect.new()

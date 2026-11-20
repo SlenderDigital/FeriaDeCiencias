@@ -11,6 +11,8 @@ var _scroll_tween: Tween = null
 
 
 func _ready() -> void:
+	if DisplayServer.get_name() != "headless":
+		Engine.max_fps = 60
 	RenderingServer.set_default_clear_color(Color.BLACK)
 	UiStyle.add_hover_pop(back_button)
 	back_button.pressed.connect(_on_back_pressed)

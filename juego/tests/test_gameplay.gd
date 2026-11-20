@@ -694,6 +694,72 @@ func test_shield_hud_reflects_energy_state() -> void:
 	assert_eq(shield_label.text, "SHIELD: RECHARGING", "Shield HUD must report recharge state")
 
 
+func test_cube_life_slices_and_shield_time_feedback() -> void:
+	var level: Node2D = _spawn(LEVEL_SCENE) as Node2D
+	var player: CharacterBody2D = level.get_node("Player") as CharacterBody2D
+	var slice1: Polygon2D = player.get_node_or_null("LifeSlice1") as Polygon2D
+	var slice2: Polygon2D = player.get_node_or_null("LifeSlice2") as Polygon2D
+	var slice3: Polygon2D = player.get_node_or_null("LifeSlice3") as Polygon2D
+	var shield_bar_root: Node2D = player.get_node_or_null("ShieldBarRoot") as Node2D
+	var shield_bar_fill: Polygon2D = player.get_node_or_null("ShieldBarRoot/ShieldBarFill") as Polygon2D
+	var shield_time_label: Label = level.get_node_or_null("HUD/HUDRoot/ShieldTimeLabel") as Label
+
+	assert_true(slice1 != null and slice2 != null and slice3 != null, "Player must expose LifeSlice1..3 nodes")
+	assert_true(shield_bar_root != null and shield_bar_fill != null, "Player must expose ShieldBarRoot and ShieldBarFill")
+	assert_true(shield_time_label != null, "HUD must expose ShieldTimeLabel")
+	_assert_subtree_monochrome_and_primitive(player)
+	for slice: Polygon2D in [slice1, slice2, slice3]:
+		assert_eq(slice.light_mask, 0, "Life slices must have light_mask == 0")
+		assert_true(slice.color.r > 0.9, "All 3 life slices must start bright at 3 HP")
+
+	player.take_damage(1)
+	assert_eq(player.current_hp, 2, "Player HP must drop to 2 after 1 damage")
+	for _i: int in range(15):
+		player._physics_process(0.1)
+	assert_true(slice1.color.r > 0.9 and slice2.color.r > 0.9, "LifeSlice1 and LifeSlice2 must remain bright at 2 HP")
+	assert_true(slice3.color.r < 0.3, "LifeSlice3 must dim at 2 HP once flash settles")
+
+	player.take_damage(1)
+	assert_eq(player.current_hp, 1, "Player HP must drop to 1 after second hit")
+	for _i: int in range(15):
+		player._physics_process(0.1)
+	assert_true(slice1.color.r > 0.6, "LifeSlice1 must remain visible/bright at 1 HP")
+	assert_true(slice2.color.r < 0.3 and slice3.color.r < 0.3, "LifeSlice2 and LifeSlice3 must dim at 1 HP")
+
+	player.heal(2)
+	assert_eq(player.current_hp, 3, "heal(2) must restore player to 3 HP")
+	assert_true(slice1.color.r > 0.9 and slice2.color.r > 0.9 and slice3.color.r > 0.9, "All 3 life slices must restore bright on heal")
+
+	assert_false(shield_bar_root.visible, "Under-cube ShieldBarRoot must start hidden when full")
+	assert_eq(shield_time_label.text, "1.7s", "HUD ShieldTimeLabel must start at 1.7s")
+
+	player.set_shield_held(true)
+	player._physics_process(0.5)
+	level.simulate_physics(0.016)
+	assert_true(shield_bar_root.visible, "ShieldBarRoot must become visible while shielding")
+	assert_true(shield_bar_fill.scale.x < 1.0 and shield_bar_fill.scale.x > 0.0, "ShieldBarFill.scale.x must shrink while draining")
+	assert_true(shield_time_label.text.ends_with("s"), "ShieldTimeLabel must format seconds with s suffix")
+	assert_true(float(shield_time_label.text.trim_suffix("s")) < 1.5, "ShieldTimeLabel must drop below 1.5s while draining")
+
+	for _i: int in range(30):
+		player._physics_process(0.05)
+	level.simulate_physics(0.016)
+	assert_eq(shield_time_label.text, "0.0s", "ShieldTimeLabel must reach 0.0s when empty")
+
+	player.set_shield_held(false)
+	for _i: int in range(10):
+		player._physics_process(0.08)
+	level.simulate_physics(0.016)
+	assert_true(shield_bar_root.visible, "ShieldBarRoot must stay visible while recharging")
+	assert_true(shield_bar_fill.scale.x > 0.0 and shield_bar_fill.scale.x < 1.0, "ShieldBarFill.scale.x must reflect partial recharge")
+
+	for _i: int in range(50):
+		player._physics_process(0.05)
+	level.simulate_physics(0.016)
+	assert_eq(shield_time_label.text, "1.7s", "ShieldTimeLabel must restore 1.7s on full recharge")
+	assert_false(shield_bar_root.visible, "ShieldBarRoot must fade back out after reaching full")
+
+
 func test_autonomous_threat_rotation_covers_all_new_types() -> void:
 	var level: Node2D = _spawn(LEVEL_SCENE) as Node2D
 	level.set_difficulty(0)
@@ -1092,18 +1158,33 @@ func test_boss_level_8_phases_jsab_acting_healing_and_monochrome_visuals() -> vo
 	GameManager.save_data = SaveData.new()
 	GameManager.set_player_name("BossTester")
 
+	# Verify Boss Mode 0.78x player scale isolation vs normal Level 1.0x scale
+	var normal_level: Node2D = _spawn(LEVEL_SCENE) as Node2D
+	var normal_player: CharacterBody2D = normal_level.get_node_or_null("Player") as CharacterBody2D
+	assert_true(normal_player != null, "Normal Level player must exist")
+	assert_true(normal_player.scale.is_equal_approx(Vector2.ONE), "Normal Level must keep player.scale == Vector2.ONE")
+
 	var boss_level: Node2D = _spawn(BOSS_LEVEL_SCENE) as Node2D
 	var boss_container: Node2D = boss_level.get_node_or_null("BossContainer") as Node2D
 	var beam_container: Node2D = boss_level.get_node_or_null("BeamContainer") as Node2D
+	var hazard_layer: Node2D = boss_level.get_node_or_null("BossHazardLayer") as Node2D
 	var boss: Area2D = boss_level.get_node_or_null("BossContainer/Boss") as Area2D
 	var player: CharacterBody2D = boss_level.get_node_or_null("Player") as CharacterBody2D
 	var complete_panel: Control = boss_level.get_node_or_null("HUD/HUDRoot/LevelCompletePanel") as Control
 	var hud: CanvasLayer = boss_level.get_node_or_null("HUD") as CanvasLayer
 
-	assert_true(boss_container != null and beam_container != null and boss != null and player != null, "BossLevel nodes must exist")
+	assert_true(boss_container != null and beam_container != null and hazard_layer != null and boss != null and player != null, "BossLevel nodes must exist")
 	assert_gt(beam_container.get_index(), boss_container.get_index(), "BossContainer must precede BeamContainer so _clear_hazards never frees Boss")
+	assert_true(boss_level.boss_hex_grid != null and boss_level.boss_hex_grid.get_parent() == hazard_layer, "BossHexGrid must live in BossHazardLayer outside BeamContainer")
+	assert_true(boss_level.boss_bullet_manager != null and boss_level.boss_bullet_manager.get_parent() == hazard_layer, "BossBulletManager must live in BossHazardLayer outside BeamContainer")
 	assert_eq(boss_level.difficulty_mode, GameManager.Difficulty.BOSS, "BossLevel difficulty_mode must be BOSS (3)")
 	assert_eq(boss_level.level_duration, 120.0, "BossLevel duration must be 120.0s")
+	assert_true(player.scale.is_equal_approx(Vector2(0.78, 0.78)), "BossLevel must set player.scale to Vector2(0.78, 0.78)")
+	assert_eq(float(boss.BODY_RADIUS), 30.0, "Boss BODY_RADIUS must be 30.0")
+	assert_eq(float(boss.HAND_RADIUS), 19.0, "Boss HAND_RADIUS must be 19.0")
+	assert_eq((boss.body_collision.shape as CircleShape2D).radius, 30.0, "Boss body CircleShape2D radius must be 30.0")
+	assert_eq((boss.left_hand_collision.shape as CircleShape2D).radius, 19.0, "Boss left hand CircleShape2D radius must be 19.0")
+	assert_eq((boss.right_hand_collision.shape as CircleShape2D).radius, 19.0, "Boss right hand CircleShape2D radius must be 19.0")
 	assert_true(hud.boss_phase_label != null and hud.boss_phase_label.visible, "Boss HUD phase label must be visible")
 	assert_eq(hud.boss_phase_label.text, "PHASE 1 / 8", "Boss HUD must start at PHASE 1 / 8")
 	assert_eq(hud.controls_hint_label.modulate.a, 1.0, "ControlsHintLabel alpha must be 1.0 in Phase 1")
@@ -1112,14 +1193,11 @@ func test_boss_level_8_phases_jsab_acting_healing_and_monochrome_visuals() -> vo
 	_assert_subtree_monochrome_and_primitive(boss_level)
 	_assert_no_text_nodes(boss)
 
-	# Keep player in bottom-left safe corner so Boss lunges/slams do not accidentally hit during phase sweep
-	player.global_position = Vector2(100.0, 580.0)
-
-	# Phase 1 acting state, always-active hitboxes & live micro-reactions (shield_blocked -> flinch, damaged -> laugh)
+	# Phase 1 acting state, form, always-active hitboxes & live micro-reactions (shield_blocked -> flinch, damaged -> laugh)
 	assert_eq(boss.current_phase, 1, "Boss must start in Phase 1")
 	assert_eq(int(boss.acting_state), int(boss.ActingState.COCKY_CONDUCTOR), "Phase 1 acting_state must be COCKY_CONDUCTOR")
+	assert_eq(int(boss.boss_form), int(boss.BossForm.CONDUCTOR), "Phase 1 boss_form must be CONDUCTOR")
 	assert_false(bool(boss._lunge_active), "Boss must not be lunging at spawn")
-	assert_false(bool(boss._hand_dashes[0]["active"]) or bool(boss._hand_dashes[1]["active"]), "Hands must not be dashing at spawn")
 	assert_true(bool(boss.is_body_hazardous), "Boss body must be hazardous in active Phase 1 even when idle")
 	assert_true(bool(boss.is_left_hand_hazardous), "Boss left hand must be hazardous in active Phase 1 even when idle")
 	assert_true(bool(boss.is_right_hand_hazardous), "Boss right hand must be hazardous in active Phase 1 even when idle")
@@ -1162,47 +1240,35 @@ func test_boss_level_8_phases_jsab_acting_healing_and_monochrome_visuals() -> vo
 		assert_eq(player.current_hp, 2, "Unshielded contact with Boss %s must deal 1 contact damage" % c_label)
 		assert_gt(float(boss._laugh_timer), 0.0, "Unshielded contact with Boss %s must trigger Boss laugh reaction" % c_label)
 
+	# Reset player and park at old (100, 580) corner to prove AFK safe-corner exploit is eliminated in Act 1
 	player.global_position = Vector2(100.0, 580.0)
 	player.heal(1, true)
 	player.hit_invincibility_timer = 0.0
 	player.hit_flash_timer = 0.0
 	boss._flinch_timer = 0.0
 	boss._laugh_timer = 0.0
+	boss_level.total_parries = 0
+	boss.total_parries = 0
+	boss_level._parry_cooldown = 0.0
 
-	# Step 0s -> 120s in 0.5s outer steps (4x 0.125s substeps so short physical dashes & thrown seeds are captured)
 	var seen_states: Dictionary = {int(boss.acting_state): true}
+	var seen_forms: Dictionary = {int(boss.boss_form): true}
 	var phase_transitions_checked: Dictionary = {1: true}
-	var seen_dash_styles: Dictionary = {}
-	var seen_seed_payloads: Dictionary = {}
-	var seen_pincer: bool = false
-	var seen_claw_orbit: bool = false
-	var seen_hand_slam: bool = false
-	var seen_wall_push: bool = false
-	var seen_thrown_seeds: bool = false
-	var seen_ritual_styles: Dictionary = {}
-	var intro_beams: Array[int] = [0]
-	var intro_wall_slams: Array[int] = [0]
-	var enemies_by_phase: Dictionary = {}
-	var seen_enemy_types: Dictionary = {}
+	var phase_heals_verified: Dictionary = {}
+	var seen_hand_actions: Dictionary = {}
+	var afk_corner_hits_act1: int = 0
+	var bar0_active_hazards: int = 0
+	var bar8_dropout_active_hazards: int = 0
+	var beat36_drop_active_hazards: int = 0
+	var bar39_silence_active_hazards: int = 0
+	var beat158_supernova_bullets: int = 0
 	var wall_slam_signals: Array[int] = [0]
 	var max_wall_slam_miss_dist: Array[float] = [0.0]
 	var verified_phase4_tether: bool = false
-	var verified_safe_corner_pre_heal: bool = false
 
-	boss.request_beam.connect(func(_pos: Vector2, _angle: float, _width: float, _warning: float, _active_t: float) -> void:
-		if boss_level.elapsed_time < 1.8:
-			intro_beams[0] += 1
-	)
-	boss.request_enemy.connect(func(enemy_type: int, _spawn_pos: Vector2, _speed_scale: float, _warning: float, _max_lifetime: float) -> void:
-		var ph: int = int(boss.current_phase)
-		enemies_by_phase[ph] = int(enemies_by_phase.get(ph, 0)) + 1
-		seen_enemy_types[enemy_type] = true
-	)
 	boss.boss_wall_slammed.connect(func(wall_pos: Vector2, inward_normal: Vector2, _strength: float) -> void:
 		wall_slam_signals[0] += 1
-		if boss_level.elapsed_time < 1.8:
-			intro_wall_slams[0] += 1
-		var expected_contact: Vector2 = wall_pos + inward_normal * 20.0
+		var expected_contact: Vector2 = wall_pos + inward_normal * float(boss.HAND_RADIUS)
 		var hand_dist: float = minf(
 			expected_contact.distance_to(boss.left_hand.global_position),
 			expected_contact.distance_to(boss.right_hand.global_position)
@@ -1211,64 +1277,89 @@ func test_boss_level_8_phases_jsab_acting_healing_and_monochrome_visuals() -> vo
 		assert_true(hand_dist <= 28.0, "Wall slam impact #%d contact-to-hand distance %.2fpx must be <= 28.0px" % [wall_slam_signals[0], hand_dist])
 	)
 
+	# Step 0s -> 120s in 0.5s outer steps (4x 0.125s substeps)
 	for step: int in range(1, 241):
-		for _sub: int in range(4):
+		var is_pre_phase_boundary: bool = step in [30, 60, 90, 120, 150, 180, 210]
+		for sub: int in range(4):
+			# Right before the final substep that crosses each 15.0s phase boundary (14.875->15.0, 29.875->30.0, ...),
+			# arm player at HP=1 with exhausted shield and invincibility so the phase transition heal is tested cleanly.
+			if is_pre_phase_boundary and sub == 3:
+				player.current_hp = 1
+				player.shield_energy = 0.20
+				player.shield_exhausted = true
+				player.hit_invincibility_timer = 1.0
+			elif step <= 29:
+				# In Phase 1, keep unshielded passive player vulnerable at (100, 580) to prove AFK corner takes damage
+				player.global_position = Vector2(100.0, 580.0)
+				player.set_shield_held(false)
+				player.hit_invincibility_timer = 0.0
+			else:
+				# After Phase 1 AFK corner proof, keep probe player alive with invulnerability between heal probes
+				player.hit_invincibility_timer = 1.0
+
 			boss_level.simulate_physics(0.125)
+
+			if step <= 29 and player.current_hp < 3:
+				afk_corner_hits_act1 += 1
+				player.current_hp = 3
+				player.hit_invincibility_timer = 0.0
+
 			if boss_level.is_level_running:
-				for h_idx: int in range(2):
-					var hd: Dictionary = boss._hand_dashes[h_idx]
-					if bool(hd["active"]):
-						seen_dash_styles[int(hd["style"])] = true
-					if float(boss._hand_slams[h_idx]["active"]) > 0.0:
-						seen_hand_slam = true
-				if float(boss._pincer_timer) > 0.0:
-					seen_pincer = true
-				if float(boss._claw_orbit_timer) > 0.0:
-					seen_claw_orbit = true
-				if float(boss._wall_push_timer) > 0.0:
-					seen_wall_push = true
-				if not boss._thrown_seeds.is_empty():
-					seen_thrown_seeds = true
-					for sd: Dictionary in boss._thrown_seeds:
-						seen_seed_payloads[StringName(sd["payload_type"])] = true
-				for rt: Dictionary in boss._spawn_rituals:
-					seen_ritual_styles[int(rt["style"])] = true
+				seen_states[int(boss.acting_state)] = true
+				seen_forms[int(boss.boss_form)] = true
+				seen_hand_actions[int(boss.get_hand_action(true))] = true
+				seen_hand_actions[int(boss.get_hand_action(false))] = true
+				var t_now: float = boss_level.elapsed_time
+				if t_now < 1.8:
+					bar0_active_hazards += _count_active_boss_hazards(boss_level)
+					assert_eq(int(boss.total_wall_slams), 0, "Bar 0 intro (t < 1.8s) must trigger 0 wall slams")
+				elif t_now >= 15.0 and t_now <= 16.75:
+					bar8_dropout_active_hazards += _count_active_boss_hazards(boss_level)
+				elif absf(t_now - 17.0) < 0.01:
+					beat36_drop_active_hazards = _count_active_boss_hazards(boss_level)
+				elif t_now >= 73.125 and t_now <= 74.001:
+					bar39_silence_active_hazards += _count_active_boss_hazards(boss_level)
+					assert_eq(SoundManager.get_boss_beat_intensity(t_now), 0.0, "Bar 39 silence (%.3fs) must have 0.0 beat intensity" % t_now)
+				elif absf(t_now - 74.125) < 0.01:
+					beat158_supernova_bullets = boss_level.boss_bullet_manager.get_active_count()
 
 		if boss_level.is_level_running:
-			seen_states[int(boss.acting_state)] = true
 			phase_transitions_checked[int(boss.current_phase)] = true
+			_assert_subtree_monochrome_and_primitive(boss_level)
 			if step < 30:
 				assert_eq(hud.controls_hint_label.modulate.a, 1.0, "ControlsHintLabel alpha must stay 1.0 in Phase 1 (step %d)" % step)
 			else:
 				assert_true(hud.controls_hint_label.modulate.a <= 0.20, "ControlsHintLabel alpha must dim to <= 0.20 in Phases 2-8 (step %d)" % step)
 
-		# Phase boundaries at 0.5s grid: 1.5s (3), 14.5s (29), 15s (30), 30s (60), 45s (90), 48s (96), 59s (118), 59.5s (119), 60s (120), 64s (128), 75s (150), 89.5s (179), 90s (180), 105s (210), 118.5s (237)
 		if step == 3:
-			assert_eq(intro_beams[0], 0, "Phase 1 opening intro (t < 1.8s) must trigger 0 beams")
-			assert_eq(intro_wall_slams[0], 0, "Phase 1 opening intro (t < 1.8s) must trigger 0 wall slams")
-			assert_eq(beam_container.get_child_count(), 0, "Phase 1 opening intro (t < 1.8s) must have 0 hazard nodes")
+			assert_eq(bar0_active_hazards, 0, "Bar 0 intro (t < 1.8s) must have 0 active lethal hazards")
 		elif step == 29:
-			# Before Phase 2 (t = 14.5s): set HP=1 and exhaust shield to test standard phase heal(1, false)
-			assert_eq(player.current_hp, 3, "Passive corner (100, 580) must be undamaged across Phase 1")
-			player.current_hp = 1
-			player.shield_energy = 0.25
-			player.shield_exhausted = true
+			assert_gt(afk_corner_hits_act1, 0, "Unshielded passive player parked at Vector2(100, 580) must take damage during Phase 1 (AFK corner eliminated)")
 		elif step == 30:
 			assert_eq(boss.current_phase, 2, "t=15s must be Phase 2")
 			assert_eq(int(boss.acting_state), int(boss.ActingState.FROZEN_DOUBLE_TAKE), "Phase 2 must enter FROZEN_DOUBLE_TAKE")
 			assert_true(bool(boss.is_body_hazardous) and bool(boss.is_left_hand_hazardous) and bool(boss.is_right_hand_hazardous), "Boss body and hands must remain hazardous in Phase 2")
-			assert_eq(player.current_hp, 2, "Phase 2 completion must heal +1 HP (1 -> 2)")
+			assert_eq(player.current_hp, 2, "Phase 2 transition must heal +1 HP (1 -> 2)")
 			assert_true(player.shield_exhausted, "Standard Phase 2 heal(1, false) must preserve shield exhaustion")
+			phase_heals_verified[2] = true
+		elif step == 34:
+			assert_eq(bar8_dropout_active_hazards, 0, "Phase 2 Bar 8 dropout (15.0..16.75s) must have 0 active lethal hazards")
+			assert_true(beat36_drop_active_hazards >= 2, "Phase 2 Beat 36 (16.875s) hard drop must activate twin pistons + shockwave ring")
 		elif step == 60:
 			assert_eq(boss.current_phase, 3, "t=30s must be Phase 3")
 			assert_eq(int(boss.acting_state), int(boss.ActingState.FLOOR_SLAM_TANTRUM), "Phase 3 must enter FLOOR_SLAM_TANTRUM")
-			assert_eq(player.current_hp, 3, "Phase 3 completion must heal +1 HP (2 -> 3)")
+			assert_eq(player.current_hp, 2, "Phase 3 transition must heal +1 HP (1 -> 2)")
+			assert_true(player.shield_exhausted, "Standard Phase 3 heal(1, false) must preserve shield exhaustion")
+			phase_heals_verified[3] = true
 		elif step == 90:
 			assert_eq(boss.current_phase, 4, "t=45s must be Phase 4")
 			assert_eq(int(boss.acting_state), int(boss.ActingState.ACCUSING_POINT), "Phase 4 must enter ACCUSING_POINT")
+			assert_eq(int(boss.boss_form), int(boss.BossForm.WHEEL_CORE), "Phase 4 must use WHEEL_CORE form")
+			assert_eq(player.current_hp, 2, "Phase 4 transition must heal +1 HP (1 -> 2)")
+			assert_true(player.shield_exhausted, "Standard Phase 4 heal(1, false) must preserve shield exhaustion")
+			phase_heals_verified[4] = true
 		elif step == 96:
 			assert_true(bool(boss._tether_active), "Phase 4 High-Voltage Clothesline (_tether_active) must be active at t=48.0s")
-			assert_eq(player.current_hp, 3, "Passive corner (100, 580) must be undamaged prior to Phase 4 Clothesline probe")
 			var tether_pt: Vector2 = boss.left_hand.global_position.lerp(boss.right_hand.global_position, 0.22)
 			assert_gt(tether_pt.distance_to(boss.global_position), 80.0, "Clothesline probe point must be clear of Boss body")
 			assert_gt(tether_pt.distance_to(boss.left_hand.global_position), 80.0, "Clothesline probe point must be clear of Left Hand")
@@ -1276,12 +1367,13 @@ func test_boss_level_8_phases_jsab_acting_healing_and_monochrome_visuals() -> vo
 
 			var tether_dir: Vector2 = (boss.right_hand.global_position - boss.left_hand.global_position).normalized()
 			var tether_perp: Vector2 = Vector2(-tether_dir.y, tether_dir.x)
+			player.current_hp = 3
 			player.set_shield_held(false)
 			player._physics_process(0.016)
 			player.hit_invincibility_timer = 0.0
 			player.global_position = tether_pt + tether_perp * 22.0
 			boss.simulate_boss(0.0, boss_level.elapsed_time, Vector2(1152.0, 648.0), player)
-			assert_eq(player.current_hp, 3, "22px outside narrowed Phase 4 Clothesline (5 + 14 = 19px) must NOT deal damage")
+			assert_eq(player.current_hp, 3, "22px outside Phase 4 Clothesline must NOT deal damage")
 
 			var blocks_before_tether: int = shield_block_count[0]
 			player.set_shield_held(true)
@@ -1302,25 +1394,12 @@ func test_boss_level_8_phases_jsab_acting_healing_and_monochrome_visuals() -> vo
 
 			player.global_position = Vector2(100.0, 580.0)
 			player.heal(1, true)
-			player.hit_invincibility_timer = 0.0
-			player.hit_flash_timer = 0.0
-			player.shield_block_feedback_timer = 0.0
-			boss._flinch_timer = 0.0
-			boss._laugh_timer = 0.0
-			boss.simulate_boss(0.0, boss_level.elapsed_time, Vector2(1152.0, 648.0), player)
-			assert_eq(player.current_hp, 3, "Passive safe corner (100, 580) must remain untouched by active Phase 4 Clothesline")
+			player.hit_invincibility_timer = 1.0
 			verified_phase4_tether = true
-		elif step == 118:
-			assert_eq(player.current_hp, 3, "Passive safe corner Vector2(100.0, 580.0) must remain untouched across Act 1 & Phase 4")
-			verified_safe_corner_pre_heal = true
-		elif step == 119:
-			# Right before Phase 5 (t = 59.5s): set HP=1 and exhaust shield to test Act Milestone Phase 5 heal(1, true)
-			player.current_hp = 1
-			player.shield_energy = 0.10
-			player.shield_exhausted = true
 		elif step == 120:
 			assert_eq(boss.current_phase, 5, "t=60s must be Phase 5")
 			assert_eq(int(boss.acting_state), int(boss.ActingState.FAKE_OUT_COLLAPSE), "Phase 5 must enter FAKE_OUT_COLLAPSE")
+			assert_eq(int(boss.boss_form), int(boss.BossForm.MARIONETTE), "Phase 5 must enter MARIONETTE form")
 			assert_false(bool(boss.is_body_hazardous), "Collapsed Boss head must have is_body_hazardous == false during FAKE_OUT_COLLAPSE")
 			assert_true(boss.body_collision.disabled, "Collapsed Boss body CollisionShape2D must be disabled during FAKE_OUT_COLLAPSE")
 			assert_false(bool(boss.is_left_hand_hazardous) or bool(boss.is_right_hand_hazardous), "Hands must stay dormant before beat 8 of FAKE_OUT_COLLAPSE")
@@ -1328,6 +1407,7 @@ func test_boss_level_8_phases_jsab_acting_healing_and_monochrome_visuals() -> vo
 			assert_eq(player.shield_energy, player.SHIELD_MAX_ENERGY, "Phase 5 heal must recharge shield to 100%")
 			assert_false(player.shield_exhausted, "Phase 5 heal must clear shield_exhausted")
 			assert_eq(hud.boss_phase_label.text, "PHASE 5 / 8", "HUD must display PHASE 5 / 8")
+			phase_heals_verified[5] = true
 		elif step == 121:
 			# Verify live Boss micro-reactions are suppressed during FAKE_OUT_COLLAPSE
 			assert_eq(float(boss._flinch_timer), 0.0, "Boss flinch timer must be 0 during FAKE_OUT_COLLAPSE")
@@ -1340,62 +1420,74 @@ func test_boss_level_8_phases_jsab_acting_healing_and_monochrome_visuals() -> vo
 			assert_false(bool(boss.is_body_hazardous), "Collapsed Boss head must remain non-hazardous at beat >= 8 of Phase 5")
 			assert_true(bool(boss.is_left_hand_hazardous) and bool(boss.is_right_hand_hazardous), "Possessed hands must wake up hazardous by beat 8 of Phase 5")
 			assert_false(boss.left_hand_collision.disabled or boss.right_hand_collision.disabled, "Possessed hand CollisionShape2Ds must be enabled by beat 8 of Phase 5")
+		elif step == 149:
+			assert_eq(bar39_silence_active_hazards, 0, "Phase 5 Bar 39 digital silence (73.125..74.0s) must have 0 active lethal hazards")
+			assert_true(beat158_supernova_bullets >= 24, "Phase 5 Beat 158 (74.0625s) supernova must detonate >= 24 radial bullets")
 		elif step == 150:
 			assert_eq(boss.current_phase, 6, "t=75s must be Phase 6")
 			assert_eq(int(boss.acting_state), int(boss.ActingState.HOLLOW_REBIRTH), "Phase 6 must enter HOLLOW_REBIRTH")
-			assert_true(bool(boss.is_body_hazardous) and bool(boss.is_left_hand_hazardous) and bool(boss.is_right_hand_hazardous), "Boss body and hands must be hazardous in Phase 6")
-			assert_false(boss.body_collision.disabled or boss.left_hand_collision.disabled or boss.right_hand_collision.disabled, "Boss CollisionShape2Ds must be enabled in Phase 6")
-			assert_eq(player.current_hp, 3, "Phase 6 completion must heal +1 HP (2 -> 3)")
-		elif step == 179:
-			# Right before Phase 7 (t = 89.5s): set HP=2 and exhaust shield to test Act Milestone Phase 7 heal(1, true)
-			player.current_hp = 2
-			player.shield_energy = 0.15
-			player.shield_exhausted = true
+			assert_eq(int(boss.boss_form), int(boss.BossForm.TRIPLE_CANNON), "Phase 6 must enter TRIPLE_CANNON form")
+			assert_true(bool(boss.is_body_hazardous), "Boss body must be hazardous in Phase 6")
+			assert_false(bool(boss.is_left_hand_hazardous) or bool(boss.is_right_hand_hazardous), "Hands must retract into Triple-Cannon body in Phase 6")
+			assert_eq(player.current_hp, 2, "Phase 6 transition must heal +1 HP (1 -> 2)")
+			assert_true(player.shield_exhausted, "Standard Phase 6 heal(1, false) must preserve shield exhaustion")
+			phase_heals_verified[6] = true
 		elif step == 180:
 			assert_eq(boss.current_phase, 7, "t=90s must be Phase 7")
 			assert_eq(int(boss.acting_state), int(boss.ActingState.EXHAUSTED_PANTING), "Phase 7 must enter EXHAUSTED_PANTING")
-			assert_eq(player.current_hp, 3, "Phase 7 must heal player from 2 HP to 3 HP")
+			assert_eq(int(boss.boss_form), int(boss.BossForm.STOMP_COLOSSUS), "Phase 7 must enter STOMP_COLOSSUS form")
+			assert_eq(player.current_hp, 2, "Phase 7 must heal player from 1 HP to 2 HP")
 			assert_eq(player.shield_energy, player.SHIELD_MAX_ENERGY, "Phase 7 heal must recharge shield to 100%")
 			assert_false(player.shield_exhausted, "Phase 7 heal must clear shield_exhausted")
 			player.heal(1, true)
 			assert_eq(player.current_hp, 3, "player.heal must clamp at MAX_HP (3)")
+			phase_heals_verified[7] = true
 		elif step == 210:
 			assert_eq(boss.current_phase, 8, "t=105s must be Phase 8")
 			assert_eq(int(boss.acting_state), int(boss.ActingState.TEMPLE_CLUTCH_PANIC), "Phase 8 must enter TEMPLE_CLUTCH_PANIC")
+			assert_eq(int(boss.boss_form), int(boss.BossForm.OVERDRIVE_PANIC), "Phase 8 must enter OVERDRIVE_PANIC form")
+			assert_eq(player.current_hp, 2, "Phase 8 transition must heal +1 HP (1 -> 2)")
+			assert_true(player.shield_exhausted, "Standard Phase 8 heal(1, false) must preserve shield exhaustion")
+			phase_heals_verified[8] = true
 		elif step == 237:
 			assert_eq(int(boss.acting_state), int(boss.ActingState.SILENT_SHATTER), "Beat 252 (>=118.125s) must enter SILENT_SHATTER")
+			assert_eq(int(boss.boss_form), int(boss.BossForm.SHATTERED), "Beat 252 (>=118.125s) must enter SHATTERED form")
 			assert_false(bool(boss.is_body_hazardous) or bool(boss.is_left_hand_hazardous) or bool(boss.is_right_hand_hazardous), "SILENT_SHATTER must disable Boss and hand hazard flags")
-			assert_eq(player.current_hp, 3, "Passive safe corner Vector2(100.0, 580.0) must remain untouched through Act 3")
+			assert_eq(_count_active_boss_hazards(boss_level), 0, "SILENT_SHATTER at Beat 252 must clear all active hazards")
+			assert_eq(boss_level.boss_hex_grid.get_active_tile_count(), 0, "SILENT_SHATTER must clear BossHexGrid tiles")
+			assert_eq(boss_level.boss_bullet_manager.get_active_count(), 0, "SILENT_SHATTER must clear BossBulletManager bullets")
 
-	assert_true(seen_dash_styles.has(int(boss.HandDashStyle.FIST_ROCKET)), "Rocket fist dash (FIST_ROCKET) must trigger during Boss phases")
-	assert_true(seen_dash_styles.has(int(boss.HandDashStyle.CLAW_SWIPE)), "Claw sweep (CLAW_SWIPE) must trigger during Boss phases")
-	assert_true(seen_dash_styles.has(int(boss.HandDashStyle.FLOOR_RAKE)), "Floor rake (FLOOR_RAKE) must trigger during Boss phases")
-	assert_true(seen_pincer, "Double-fist pincer attack must trigger during Boss phases")
-	assert_true(seen_claw_orbit, "Spinning claw orbit must trigger during Boss phases")
-	assert_true(seen_hand_slam, "Hand slam pounce must trigger during Boss phases")
-	assert_true(seen_wall_push, "Hand-pushed closing wall must trigger during Boss phases")
-	assert_true(seen_thrown_seeds, "Thrown hazard seeds must launch during Boss phases")
-	assert_eq(intro_beams[0], 0, "Phase 1 opening intro (t < 1.8s) must fire 0 beams")
-	assert_eq(intro_wall_slams[0], 0, "Phase 1 opening intro (t < 1.8s) must trigger 0 wall slams")
-	assert_true(int(boss.total_wall_slams) >= 16, "Border wall slams must trigger >= 16 times across Phases 2, 5, 7, 8 (got %d)" % int(boss.total_wall_slams))
+	assert_eq(int(boss_level.enemies_spawned), 0, "Boss Mode must spawn 0 regular enemy.gd instances")
+	assert_true(int(boss_level.boss_choreographer.glitch_waves_spawned) >= 2, "Phase 8 must spawn >= 2 Chromatic Glitch Waves")
+	assert_true(int(boss.total_wall_slams) >= 16, "Border wall slams must trigger >= 16 times across Phases 2, 7, 8 (got %d)" % int(boss.total_wall_slams))
 	assert_true(wall_slam_signals[0] >= 16, "boss_wall_slammed signal must fire >= 16 times across phases (got %d)" % wall_slam_signals[0])
 	assert_true(max_wall_slam_miss_dist[0] <= 28.0, "Every wall slam impact must have hand within 28.0px of wall contact (max %.2fpx)" % max_wall_slam_miss_dist[0])
 	assert_true(verified_phase4_tether, "Phase 4 Clothesline tether contact verification must execute")
-	assert_true(verified_safe_corner_pre_heal, "Passive corner pre-heal verification must execute")
-	assert_true(int(boss.total_spawn_rituals) >= 6, "Enemy-spawning rituals (CROWN_FORGE & DIMENSIONAL_RIFT) must execute >= 6 times across Phase 3 & Act 3 (got %d)" % int(boss.total_spawn_rituals))
-	assert_true(seen_ritual_styles.has(int(boss.RitualStyle.CROWN_FORGE)), "CROWN_FORGE ritual must execute in Phase 3")
-	assert_true(seen_ritual_styles.has(int(boss.RitualStyle.DIMENSIONAL_RIFT)), "DIMENSIONAL_RIFT ritual must execute in Act 3")
-	assert_true(int(enemies_by_phase.get(3, 0)) >= 2, "Phase 3 must request >= 2 enemies (got %d)" % int(enemies_by_phase.get(3, 0)))
-	assert_true(int(enemies_by_phase.get(6, 0)) >= 2, "Phase 6 must request >= 2 enemies (got %d)" % int(enemies_by_phase.get(6, 0)))
-	assert_true(int(enemies_by_phase.get(7, 0)) >= 1, "Phase 7 must request >= 1 enemy (got %d)" % int(enemies_by_phase.get(7, 0)))
-	assert_true(int(enemies_by_phase.get(8, 0)) >= 2, "Phase 8 must request >= 2 enemies (got %d)" % int(enemies_by_phase.get(8, 0)))
-	for expected_enemy_type: int in [0, 1, 2, 3]:
-		assert_true(seen_enemy_types.has(expected_enemy_type), "Boss must request Enemy type %d across Phase 3 & Act 3" % expected_enemy_type)
-	for expected_payload: StringName in [&"circle", &"exploder", &"saw", &"enemy"]:
-		assert_true(seen_seed_payloads.has(expected_payload), "Thrown seed payload '%s' must launch during Boss phases" % String(expected_payload))
+
+	for expected_hazard: StringName in [
+		&"sweeping_beam",
+		&"shockwave_ring",
+		&"tidal_wave",
+		&"piston_wall",
+		&"hex_grid",
+		&"gravity_well",
+		&"spike_ring",
+		&"border_cage",
+		&"ceiling_spike",
+		&"beat_minion",
+		&"minion_thread_spider",
+		&"minion_orbit_specter",
+		&"minion_border_snapper",
+		&"glitch_wave",
+		&"filling_circle",
+		&"boss_bullets",
+	]:
+		assert_true(boss_level.boss_choreographer.seen_hazard_kinds.has(expected_hazard), "Boss choreography must fire JSAB hazard primitive '%s'" % String(expected_hazard))
 
 	for p: int in range(1, 9):
 		assert_true(phase_transitions_checked.has(p), "Boss must visit Phase %d/8" % p)
+	for hp_phase: int in range(2, 9):
+		assert_true(phase_heals_verified.has(hp_phase), "Phase %d transition heal must be verified" % hp_phase)
 	for st: int in [
 		int(boss.ActingState.COCKY_CONDUCTOR),
 		int(boss.ActingState.FROZEN_DOUBLE_TAKE),
@@ -1408,6 +1500,17 @@ func test_boss_level_8_phases_jsab_acting_healing_and_monochrome_visuals() -> vo
 		int(boss.ActingState.SILENT_SHATTER),
 	]:
 		assert_true(seen_states.has(st), "Boss must transition through ActingState %d" % st)
+	for fm: int in [
+		int(boss.BossForm.CONDUCTOR),
+		int(boss.BossForm.SPIKE_ROLL),
+		int(boss.BossForm.WHEEL_CORE),
+		int(boss.BossForm.MARIONETTE),
+		int(boss.BossForm.TRIPLE_CANNON),
+		int(boss.BossForm.STOMP_COLOSSUS),
+		int(boss.BossForm.OVERDRIVE_PANIC),
+		int(boss.BossForm.SHATTERED),
+	]:
+		assert_true(seen_forms.has(fm) or boss_level.boss_choreographer.seen_forms.has(fm), "Boss must morph through BossForm %d" % fm)
 
 	assert_false(boss_level.is_level_running, "BossLevel must complete at 120.0s")
 	assert_true(complete_panel.visible, "LevelCompletePanel must display at 120.0s")
@@ -1418,21 +1521,27 @@ func test_boss_level_8_phases_jsab_acting_healing_and_monochrome_visuals() -> vo
 	assert_true(bool(boss_rec.get("completed", false)), "Boss record key 3 must be marked completed=true")
 	assert_true(float(boss_rec.get("time", 0.0)) >= 120.0, "Boss record key 3 time must be >= 120.0s")
 
-	# Retry must reset Boss and re-arm Phase 2..8 heals
+	# Retry must reset Boss, preserve persistent managers, restore 0.78x scale & 3 HP, and re-arm Phase 2..8 heals
 	boss_level._on_retry_pressed()
 	assert_true(boss_level.is_level_running, "Retry must restart BossLevel")
 	assert_eq(boss_level.elapsed_time, 0.0, "Retry must reset elapsed_time")
 	assert_eq(boss.current_phase, 1, "Retry must reset Boss to Phase 1")
 	assert_eq(int(boss.acting_state), int(boss.ActingState.COCKY_CONDUCTOR), "Retry must reset Boss ActingState to COCKY_CONDUCTOR")
+	assert_eq(int(boss.boss_form), int(boss.BossForm.CONDUCTOR), "Retry must reset BossForm to CONDUCTOR")
 	assert_false(bool(boss._shattered), "Retry must clear Boss shattered state")
 	assert_eq(int(boss.total_wall_slams), 0, "Retry must reset total_wall_slams to 0")
-	assert_eq(int(boss.total_spawn_rituals), 0, "Retry must reset total_spawn_rituals to 0")
+	assert_eq(int(boss.total_parries), 0, "Retry must reset boss.total_parries to 0")
+	assert_eq(int(boss_level.total_parries), 0, "Retry must reset boss_level.total_parries to 0")
+	assert_true(is_instance_valid(boss_level.boss_hex_grid) and boss_level.boss_hex_grid.get_active_tile_count() == 0, "Retry must clear BossHexGrid without freeing it")
+	assert_true(is_instance_valid(boss_level.boss_bullet_manager) and boss_level.boss_bullet_manager.get_active_count() == 0, "Retry must clear BossBulletManager without freeing it")
 	assert_eq(int(boss_level._last_healed_phase), 1, "Retry must reset _last_healed_phase to 1")
 	assert_eq(hud.controls_hint_label.modulate.a, 1.0, "Retry must restore ControlsHintLabel alpha to 1.0 in Phase 1")
+	assert_true(player.scale.is_equal_approx(Vector2(0.78, 0.78)), "Retry must preserve Boss Mode player.scale == Vector2(0.78, 0.78)")
 	assert_eq(player.current_hp, 3, "Retry must restore player to 3 HP")
 
 	player.global_position = Vector2(100.0, 580.0)
 	for step_retry: int in range(1, 121):
+		player.hit_invincibility_timer = 1.0
 		if step_retry == 29 or step_retry == 119:
 			player.current_hp = 1
 		boss_level.simulate_physics(0.5)
@@ -1444,6 +1553,235 @@ func test_boss_level_8_phases_jsab_acting_healing_and_monochrome_visuals() -> vo
 	GameManager.set_difficulty(backup_diff)
 	GameManager.save_data = backup_save
 	GameManager.save_game()
+
+
+func test_boss_parry_glitch_wave_and_gravity_well() -> void:
+	var backup_save: SaveData = GameManager.save_data
+	var backup_diff: int = GameManager.selected_difficulty
+	GameManager.save_data = SaveData.new()
+
+	var boss_level: Node2D = _spawn(BOSS_LEVEL_SCENE) as Node2D
+	var beam_container: Node2D = boss_level.get_node_or_null("BeamContainer") as Node2D
+	var boss: Area2D = boss_level.get_node_or_null("BossContainer/Boss") as Area2D
+	var player: CharacterBody2D = boss_level.get_node_or_null("Player") as CharacterBody2D
+	assert_true(beam_container != null and boss != null and player != null, "BossLevel nodes must exist for focused unit tests")
+
+	# 1. Timed fist-shield parry on a parryable shockwave ring + BossGlitchWave purge_by_parry()
+	boss_level.elapsed_time = 2.0
+	player.global_position = Vector2(576.0, 420.0)
+	player.shield_energy = 0.50
+	player.shield_exhausted = false
+	player.shield_block_feedback_timer = 0.0
+	player.set_shield_held(true)
+	player._physics_process(0.016)
+	assert_true(player.is_shielding, "Player must raise shield before timed parry")
+
+	var crack_before: float = float(boss._crack_intensity)
+	var energy_before: float = player.shield_energy
+	var ring: BossShockwaveRing = BossShockwaveRing.new()
+	beam_container.add_child(ring)
+	ring.configure_ring(player.global_position, 10.0, 200.0, 32.0, 0.01, 1.0, true)
+	ring.simulate_physics(0.02, player)
+	_assert_subtree_monochrome_and_primitive(ring)
+
+	assert_eq(int(boss_level.total_parries), 1, "Timed shield block within 0.32s must increment boss_level.total_parries")
+	assert_eq(int(boss.total_parries), 1, "Timed shield block within 0.32s must increment boss.total_parries")
+	assert_gt(player.shield_energy, energy_before, "Timed parry must refund player.shield_energy")
+	assert_gt(float(boss._crack_intensity), crack_before, "Timed parry must increase Boss crack intensity")
+	ring.queue_free()
+
+	# Parrying a BossGlitchWave must call purge_by_parry() and enter SHATTER_PURGE (is_hazard_active = false)
+	boss_level._parry_cooldown = 0.0
+	boss_level.elapsed_time = 3.0
+	player.set_shield_held(false)
+	player._physics_process(0.016)
+	player.shield_energy = 0.55
+	player.shield_block_feedback_timer = 0.0
+	player.set_shield_held(true)
+	player._physics_process(0.016)
+
+	var glitch_wave: BossGlitchWave = BossGlitchWave.new()
+	beam_container.add_child(glitch_wave)
+	assert_eq(glitch_wave.get_child_count(), 0, "BossGlitchWave must use pure _draw() with 0 child nodes")
+	glitch_wave.configure(Vector2(1152.0, 648.0), Vector2.RIGHT, 0.01, 1.60, 80.0, 0.5, 148.0, 0.0, true)
+	glitch_wave.simulate_physics(0.02, null)
+	assert_true(glitch_wave.is_hazard_active, "BossGlitchWave must become active after warning_time")
+	# Place player on the top wing of the glitch wave crest (outside the center safe gap)
+	player.global_position = Vector2(glitch_wave._current_sweep, 80.0)
+	glitch_wave.simulate_physics(0.016, player)
+
+	assert_eq(int(boss_level.total_parries), 2, "Parrying BossGlitchWave must increment boss_level.total_parries to 2")
+	assert_eq(int(boss.total_parries), 2, "Parrying BossGlitchWave must increment boss.total_parries to 2")
+	assert_false(glitch_wave.is_hazard_active, "purge_by_parry() must immediately deactivate BossGlitchWave hazard")
+	assert_eq(int(glitch_wave.current_phase), int(BossGlitchWave.Phase.SHATTER_PURGE), "Parried BossGlitchWave must enter SHATTER_PURGE phase")
+	glitch_wave.simulate_physics(0.35, null)
+	assert_true(glitch_wave.is_queued_for_deletion(), "Purged BossGlitchWave must self-queue_free after SHATTER_PURGE")
+	_assert_subtree_monochrome_and_primitive(boss_level)
+
+	# 2. BossGravityWell pull in both direct (use_target_position = false) and target-position (hand tracking/mouse) modes
+	player.set_shield_held(false)
+	player._physics_process(0.016)
+	var well: BossGravityWell = BossGravityWell.new()
+	beam_container.add_child(well)
+	var well_origin: Vector2 = Vector2(576.0, 324.0)
+	well.configure(well_origin, 24.0, 460.0, 76.0, 145.0, 0.01, 5.0)
+	well.simulate_physics(0.02, null)
+	well.simulate_physics(0.35, null)
+	assert_true(well.is_hazard_active, "BossGravityWell must be active after warning_time")
+	_assert_subtree_monochrome_and_primitive(well)
+
+	# WASD / direct mode (use_target_position = false)
+	player.release_external_tracking()
+	player.use_target_position = false
+	player.global_position = Vector2(360.0, 324.0)
+	var dist_before_direct: float = player.global_position.distance_to(well_origin)
+	boss_level._apply_gravity_well_pull(0.10)
+	var dist_after_direct: float = player.global_position.distance_to(well_origin)
+	assert_true(dist_after_direct < dist_before_direct, "BossGravityWell must pull player smoothly inward in direct (WASD) mode")
+	assert_true(_is_player_within_arena(player.global_position, Vector2(1152.0, 648.0), player.PLAYER_HALF_SIZE), "Direct gravity pull must stay clamped within arena bounds")
+
+	# Hand-tracking / mouse mode (use_target_position = true)
+	var hand_anchor: Vector2 = Vector2(360.0, 324.0)
+	player.global_position = hand_anchor
+	player.set_target_position(hand_anchor, true)
+	boss_level._apply_gravity_well_pull(0.10)
+	assert_true(player.target_position.distance_to(well_origin) < hand_anchor.distance_to(well_origin), "BossGravityWell must pull player.target_position inward in target-position mode")
+	assert_true(player.target_position.distance_to(hand_anchor) <= 76.5, "Target-position gravity pull must remain bounded by max_pull_offset")
+	assert_true(_is_player_within_arena(player.target_position, Vector2(1152.0, 648.0), player.PLAYER_HALF_SIZE), "Target-position gravity pull must stay clamped within arena bounds")
+
+	# Near-edge clamp check
+	var edge_well: BossGravityWell = BossGravityWell.new()
+	beam_container.add_child(edge_well)
+	edge_well.configure(Vector2(2.0, 324.0), 24.0, 460.0, 90.0, 220.0, 0.01, 5.0)
+	edge_well.simulate_physics(0.40, null)
+	player.use_target_position = false
+	player.global_position = Vector2(18.0, 324.0)
+	boss_level._apply_gravity_well_pull(0.25)
+	assert_true(_is_player_within_arena(player.global_position, Vector2(1152.0, 648.0), player.PLAYER_HALF_SIZE), "Gravity pull near border must never pull player outside viewport bounds")
+
+	GameManager.set_state(GameManager.State.MENU)
+	GameManager.set_difficulty(backup_diff)
+	GameManager.save_data = backup_save
+	GameManager.save_game()
+
+
+func test_boss_intro_animation_safety_and_handoff() -> void:
+	var backup_save: SaveData = GameManager.save_data
+	var backup_diff: int = GameManager.selected_difficulty
+	GameManager.save_data = SaveData.new()
+
+	var boss_level: Node2D = _spawn(BOSS_LEVEL_SCENE) as Node2D
+	var boss: Area2D = boss_level.get_node_or_null("BossContainer/Boss") as Area2D
+	var player: CharacterBody2D = boss_level.get_node_or_null("Player") as CharacterBody2D
+	var intro_top_bar: ColorRect = boss_level.get_node_or_null("HUD/HUDRoot/IntroTopBar") as ColorRect
+	var intro_bottom_bar: ColorRect = boss_level.get_node_or_null("HUD/HUDRoot/IntroBottomBar") as ColorRect
+	var intro_banner: Control = boss_level.get_node_or_null("HUD/HUDRoot/IntroBanner") as Control
+	assert_true(boss != null and player != null, "BossLevel boss and player must exist")
+	assert_true(intro_top_bar != null and intro_bottom_bar != null and intro_banner != null, "Boss intro HUD overlays must exist under HUD/HUDRoot")
+
+	boss_level.start_intro(false)
+	assert_true(bool(boss_level.is_intro_active), "start_intro(false) must activate boss intro")
+	assert_eq(float(boss_level.elapsed_time), 0.0, "Boss intro start must keep elapsed_time at 0.0")
+	assert_false(bool(boss.is_body_hazardous), "Boss body must not be hazardous during intro")
+	assert_false(bool(boss.is_left_hand_hazardous), "Boss left hand must not be hazardous during intro")
+	assert_false(bool(boss.is_right_hand_hazardous), "Boss right hand must not be hazardous during intro")
+	assert_false(bool(boss.is_hand_hazardous), "Boss is_hand_hazardous must be false during intro")
+	assert_true(boss.body_collision.disabled, "Boss body CollisionShape2D must be disabled during intro")
+	assert_true(boss.left_hand_collision.disabled, "Boss left hand CollisionShape2D must be disabled during intro")
+	assert_true(boss.right_hand_collision.disabled, "Boss right hand CollisionShape2D must be disabled during intro")
+
+	player.set_shield_held(false)
+	player._physics_process(0.016)
+	player.current_hp = 3
+	player.hit_invincibility_timer = 0.0
+	player.global_position = boss.global_position
+	boss.simulate_boss(0.016, 1.0, Vector2(1152.0, 648.0), player)
+	assert_eq(player.current_hp, 3, "Touching Boss during intro must deal 0 contact damage")
+
+	# Step to t = 0.50s (before Beat 2 drop-in)
+	for _i: int in range(10):
+		boss_level.simulate_physics(0.05)
+	assert_true(bool(boss_level.is_intro_active), "Intro must remain active at 0.50s")
+	assert_eq(float(boss_level.elapsed_time), 0.0, "Fight elapsed_time must stay 0.0 at 0.50s")
+	assert_true(boss.global_position.y < 0.0, "Boss must remain staged above top edge before Beat 2 drop-in")
+	assert_true(intro_top_bar.visible and intro_bottom_bar.visible, "Letterbox bars must be visible during full intro")
+	assert_false(intro_banner.visible, "IntroBanner must remain hidden before Beat 2 slam")
+
+	# Step to t = 1.05s (past Beat 2 slam at 0.9375s)
+	for _i: int in range(11):
+		boss_level.simulate_physics(0.05)
+	assert_true(bool(boss_level.is_intro_active), "Intro must remain active at 1.05s")
+	assert_eq(float(boss_level.elapsed_time), 0.0, "Fight elapsed_time must stay 0.0 at 1.05s")
+	assert_true(boss.global_position.is_equal_approx(Vector2(576.0, 152.0)), "Boss must slam to (576, 152) on Beat 2")
+	assert_true(intro_banner.visible, "HUD/HUDRoot/IntroBanner must be visible after Beat 2 slam")
+
+	player.global_position = boss.global_position
+	boss.simulate_boss(0.016, 1.0, Vector2(1152.0, 648.0), player)
+	assert_eq(player.current_hp, 3, "Touching Boss after Beat 2 slam during intro must still deal 0 contact damage")
+	_assert_subtree_monochrome_and_primitive(boss_level)
+	_assert_no_text_nodes(boss)
+
+	# Step past 1.875s (to 1.90s) to verify clean completion & hitbox handoff
+	for _i: int in range(17):
+		boss_level.simulate_physics(0.05)
+	assert_false(bool(boss_level.is_intro_active), "Intro must complete cleanly past 1.875s")
+	assert_eq(float(boss_level.elapsed_time), 0.0, "elapsed_time must start at 0.0 on the exact frame intro finishes")
+	assert_true(boss.global_position.is_equal_approx(Vector2(576.0, 152.0)), "Boss must hand off at (576, 152)")
+	assert_true(bool(boss.is_body_hazardous), "Boss body hitbox must re-enable after intro")
+	assert_true(bool(boss.is_left_hand_hazardous), "Boss left hand hitbox must re-enable after intro")
+	assert_true(bool(boss.is_right_hand_hazardous), "Boss right hand hitbox must re-enable after intro")
+	assert_false(boss.body_collision.disabled, "Boss body CollisionShape2D must re-enable after intro")
+	assert_false(boss.left_hand_collision.disabled, "Boss left hand CollisionShape2D must re-enable after intro")
+	assert_false(boss.right_hand_collision.disabled, "Boss right hand CollisionShape2D must re-enable after intro")
+
+	boss_level.simulate_physics(0.05)
+	assert_gt(float(boss_level.elapsed_time), 0.0, "Next simulate_physics after intro must advance elapsed_time > 0")
+	for _i: int in range(7):
+		boss_level.simulate_physics(0.05)
+	assert_false(intro_banner.visible, "IntroBanner must hide cleanly after dismiss transition")
+	assert_false(intro_top_bar.visible or intro_bottom_bar.visible, "Intro letterbox bars must hide cleanly after dismiss")
+
+	# Verify skip_intro() immediately completes intro
+	boss_level.start_intro(false)
+	boss_level.simulate_physics(0.10)
+	assert_true(bool(boss_level.is_intro_active), "Intro must be active before skip_intro()")
+	boss_level.skip_intro()
+	assert_false(bool(boss_level.is_intro_active), "skip_intro() must immediately finish intro")
+	assert_true(boss.global_position.is_equal_approx(Vector2(576.0, 152.0)), "skip_intro() must snap Boss to (576, 152)")
+	assert_true(bool(boss.is_body_hazardous) and not boss.body_collision.disabled, "skip_intro() must re-enable Boss hitboxes")
+
+	# Verify quick Retry intro finishes cleanly within 0.5s
+	boss_level.start_intro(true)
+	assert_true(bool(boss_level.is_intro_active), "start_intro(true) must activate quick Retry intro")
+	assert_false(intro_top_bar.visible or intro_bottom_bar.visible, "Quick Retry intro must keep letterbox bars hidden")
+	for _i: int in range(10):
+		boss_level.simulate_physics(0.05)
+	assert_false(bool(boss_level.is_intro_active), "Quick Retry intro must finish cleanly within 0.5s")
+	assert_true(boss.global_position.is_equal_approx(Vector2(576.0, 152.0)), "Quick Retry intro must land Boss at (576, 152)")
+	assert_true(bool(boss.is_body_hazardous) and not boss.body_collision.disabled, "Quick Retry intro must re-enable Boss hitboxes")
+
+	GameManager.set_state(GameManager.State.MENU)
+	GameManager.set_difficulty(backup_diff)
+	GameManager.save_data = backup_save
+	GameManager.save_game()
+
+
+func _count_active_boss_hazards(boss_level: Node2D) -> int:
+	var count: int = 0
+	if boss_level.boss_hex_grid != null and bool(boss_level.boss_hex_grid.is_hazard_active):
+		count += 1
+	if boss_level.boss_bullet_manager != null and bool(boss_level.boss_bullet_manager.is_hazard_active):
+		count += 1
+	var beam_container: Node2D = boss_level.get_node_or_null("BeamContainer") as Node2D
+	if beam_container != null:
+		for child: Node in beam_container.get_children():
+			if is_instance_valid(child) and not child.is_queued_for_deletion() and "is_hazard_active" in child and bool(child.is_hazard_active):
+				count += 1
+	return count
+
+
+func _is_player_within_arena(pos: Vector2, arena_size: Vector2, margin: float) -> bool:
+	return pos.x >= margin - 0.01 and pos.x <= arena_size.x - margin + 0.01 and pos.y >= margin - 0.01 and pos.y <= arena_size.y - margin + 0.01
 
 
 func _assert_no_text_nodes(node: Node) -> void:

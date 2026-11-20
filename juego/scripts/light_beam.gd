@@ -65,6 +65,8 @@ func _physics_process(delta: float) -> void:
 			center_line.color = Color(line_g, line_g, line_g, lerpf(0.65, 0.92, progress))
 			if phase_timer >= telegraph_duration:
 				_enter_phase(Phase.ACTIVE)
+			else:
+				queue_redraw()
 		Phase.ACTIVE:
 			_check_player_overlap()
 			if phase_timer >= active_duration:
@@ -75,7 +77,6 @@ func _physics_process(delta: float) -> void:
 			beam_visual.color = Color(0.75, 0.75, 0.75, lerpf(0.8, 0.0, fade_progress))
 			if phase_timer >= fade_duration:
 				queue_free()
-	queue_redraw()
 
 
 func _enter_phase(new_phase: Phase) -> void:

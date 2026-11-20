@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shapes &amp; Beams — Ranking &amp; Records</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23000'/%3E%3Crect x='4' y='4' width='24' height='24' fill='none' stroke='%23fff' stroke-width='2.5'/%3E%3Crect x='11' y='11' width='10' height='10' transform='rotate(45 16 16)' fill='%23fff'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <canvas id="bg-canvas" aria-hidden="true"></canvas>
+
+  <main class="records-panel">
+    <section class="records-box" aria-label="Shapes and Beams Ranking and Records">
+      <h1 class="records-title">RANKING &amp; RECORDS</h1>
+      <p id="records-player-label" class="records-player">PLAYER: PLAYER  •  UNRANKED</p>
+      <p id="records-highest-label" class="records-highest">No runs yet</p>
+
+      <div class="personal-stats-box" id="personal-stats-box" aria-label="Active player personal bests">
+        <span id="stat-easy" class="personal-stat">EASY:  No runs recorded</span>
+        <span id="stat-normal" class="personal-stat">NORMAL:  No runs recorded</span>
+        <span id="stat-hard" class="personal-stat">HARD:  No runs recorded</span>
+        <span id="stat-boss" class="personal-stat">BOSS:  No runs recorded</span>
+      </div>
+
+      <hr class="records-sep" />
+
+      <h2 class="leaderboard-header">COMPETITIVE LEADERBOARD</h2>
+
+      <div class="filter-row" role="tablist" aria-label="Leaderboard category">
+        <button type="button" role="tab" class="filter-btn" id="filter-btn--1" data-filter="-1" aria-selected="true" aria-controls="leaderboard-panel">GLOBAL</button>
+        <button type="button" role="tab" class="filter-btn" id="filter-btn-0" data-filter="0" aria-selected="false" aria-controls="leaderboard-panel">EASY</button>
+        <button type="button" role="tab" class="filter-btn" id="filter-btn-1" data-filter="1" aria-selected="false" aria-controls="leaderboard-panel">NORMAL</button>
+        <button type="button" role="tab" class="filter-btn" id="filter-btn-2" data-filter="2" aria-selected="false" aria-controls="leaderboard-panel">HARD</button>
+        <button type="button" role="tab" class="filter-btn" id="filter-btn-3" data-filter="3" aria-selected="false" aria-controls="leaderboard-panel">BOSS</button>
+      </div>
+
+      <div
+        class="leaderboard-scroll"
+        id="leaderboard-panel"
+        role="tabpanel"
+        aria-labelledby="filter-btn--1"
+        aria-live="polite"
+      >
+        <div class="leaderboard-list" id="leaderboard-list">
+          <p class="empty-leaderboard">Loading records...</p>
+        </div>
+      </div>
+
+      <hr class="records-sep" />
+
+      <footer class="status-footer">
+        <span id="live-indicator" class="live-indicator is-connecting">
+          <span class="live-marker" aria-hidden="true"></span>
+          <span id="live-text">CONNECTING...</span>
+        </span>
+        <span id="footer-meta" class="footer-meta">0 PLAYERS</span>
+      </footer>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

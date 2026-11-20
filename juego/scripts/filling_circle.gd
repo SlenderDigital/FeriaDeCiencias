@@ -67,17 +67,20 @@ func _physics_process(delta: float) -> void:
 			_update_fill_visual(progress)
 			if phase_timer >= telegraph_duration:
 				_enter_phase(Phase.ACTIVE)
+			else:
+				queue_redraw()
 		Phase.ACTIVE:
 			_check_player_overlap()
 			if phase_timer >= active_duration:
 				_enter_phase(Phase.FADE_OUT)
+			else:
+				queue_redraw()
 		Phase.FADE_OUT:
 			var fade_progress: float = clampf(phase_timer / maxf(fade_duration, 0.001), 0.0, 1.0)
 			shadow_visual.scale = Vector2.ONE * lerpf(1.0, 0.0, fade_progress)
 			shadow_visual.color = Color(0.75, 0.75, 0.75, lerpf(0.8, 0.0, fade_progress))
 			if phase_timer >= fade_duration:
 				queue_free()
-	queue_redraw()
 
 
 func _enter_phase(new_phase: Phase) -> void:
@@ -110,7 +113,11 @@ func _enter_phase(new_phase: Phase) -> void:
 
 func _rebuild_geometry() -> void:
 	shadow_visual.polygon = Shapes.circle(circle_radius, CIRCLE_SEGMENTS)
-	fill_visual.polygon = PackedVector2Array()
+	if fill_mode == FillMode.CENTER_OUT:
+		fill_visual.polygon = Shapes.circle(circle_radius, CIRCLE_SEGMENTS)
+	else:
+		fill_visual.polygon = PackedVector2Array()
+		fill_visual.scale = Vector2.ONE
 	var circle_shape: CircleShape2D = CircleShape2D.new()
 	circle_shape.radius = circle_radius
 	collision_shape.shape = circle_shape
@@ -120,10 +127,12 @@ func _update_fill_visual(progress: float) -> void:
 	var clamped: float = clampf(progress, 0.0, 1.0)
 	match fill_mode:
 		FillMode.CENTER_OUT:
-			fill_visual.polygon = Shapes.circle(maxf(circle_radius * clamped, 1.0), CIRCLE_SEGMENTS)
+			fill_visual.scale = Vector2.ONE * maxf(clamped, 0.001)
 		FillMode.OUTSIDE_IN:
+			fill_visual.scale = Vector2.ONE
 			fill_visual.polygon = Shapes.annulus(circle_radius * (1.0 - clamped), circle_radius, CIRCLE_SEGMENTS)
 		FillMode.ANGULAR_SWEEP:
+			fill_visual.scale = Vector2.ONE
 			fill_visual.polygon = Shapes.sector(circle_radius, TAU * clamped, CIRCLE_SEGMENTS)
 
 

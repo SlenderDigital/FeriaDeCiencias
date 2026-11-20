@@ -10,7 +10,7 @@ const PALM_BRIDGE_INDICES: Array[int] = [1, 5, 9, 13, 17, 0]
 const FINGERTIP_INDICES: Array[int] = [4, 8, 12, 16, 20]
 const FINGER_MID_INDICES: Array[int] = [2, 3, 6, 7, 10, 11, 14, 15, 18, 19]
 const SHIELD_HULL_INDICES: Array[int] = [12, 8, 4, 3, 2, 0, 18, 19, 20, 16]
-const SHIELD_BASE_RADIUS: float = 56.0
+const SHIELD_BASE_RADIUS: float = 40.0
 
 var alpha: float = 0.0
 var pulse: float = 0.0
@@ -162,14 +162,14 @@ func update_from_tracker(tracker: Node, delta: float, arena_size: Vector2, playe
 		shield_hull_polygon.polygon = hull_pts
 		shield_hull_border.points = hull_pts
 
-		var hull_gray: float = clampf(0.74 + 0.20 * energy_ratio + 0.12 * block_flash, 0.0, 1.0)
-		var hull_fill_alpha: float = clampf((0.18 + 0.16 * block_flash + 0.10 * activation_flash) * shield_morph * flicker, 0.0, 0.65)
+		var hull_gray: float = clampf(0.45 + 0.25 * energy_ratio + 0.18 * block_flash, 0.0, 1.0)
+		var hull_fill_alpha: float = clampf((0.07 + 0.08 * block_flash + 0.05 * activation_flash) * shield_morph * flicker, 0.0, 0.24)
 		shield_hull_polygon.color = Color(hull_gray, hull_gray, hull_gray, hull_fill_alpha)
 
-		var border_gray: float = clampf(0.82 + 0.18 * energy_ratio + 0.15 * block_flash, 0.0, 1.0)
-		var border_alpha: float = clampf((0.68 + 0.30 * block_flash + 0.15 * activation_flash) * maxf(shield_morph, block_flash) * flicker, 0.0, 1.0)
+		var border_gray: float = clampf(0.86 + 0.14 * energy_ratio + 0.12 * block_flash, 0.86, 1.0)
+		var border_alpha: float = clampf((0.78 + 0.22 * block_flash + 0.12 * activation_flash) * maxf(shield_morph, block_flash) * flicker, 0.0, 1.0)
 		shield_hull_border.default_color = Color(border_gray, border_gray, border_gray, border_alpha)
-		shield_hull_border.width = 3.8 + 2.2 * block_flash + 1.0 * activation_flash
+		shield_hull_border.width = 3.2 + 2.0 * block_flash + 0.8 * activation_flash
 
 	var palm_verts: PackedVector2Array = PackedVector2Array()
 	palm_verts.resize(PALM_POLYGON_INDICES.size())
@@ -177,10 +177,10 @@ func update_from_tracker(tracker: Node, delta: float, arena_size: Vector2, playe
 		palm_verts[i] = screen_pts[PALM_POLYGON_INDICES[i]]
 	palm_polygon.polygon = palm_verts
 
-	var base_palm_gray: float = 0.12 if (is_exhausted and is_fist_held) else lerpf(0.18, 0.40, pulse)
-	var shield_palm_gray: float = clampf((0.56 + 0.22 * energy_ratio + 0.22 * block_flash) * flicker, 0.0, 1.0)
+	var base_palm_gray: float = 0.07 if (is_exhausted and is_fist_held) else lerpf(0.09, 0.16, pulse)
+	var shield_palm_gray: float = clampf((0.22 + 0.06 * energy_ratio + 0.06 * block_flash) * flicker, 0.0, 0.34)
 	var palm_gray: float = lerpf(base_palm_gray, shield_palm_gray, shield_morph)
-	var palm_alpha: float = lerpf(0.42, 0.68 + 0.18 * block_flash, shield_morph)
+	var palm_alpha: float = lerpf(0.14, clampf(0.16 + 0.08 * block_flash, 0.16, 0.24), shield_morph)
 	palm_polygon.color = Color(palm_gray, palm_gray, palm_gray, palm_alpha)
 	palm_polygon.light_mask = 0 if shield_morph > 0.25 else 2
 
@@ -191,11 +191,11 @@ func update_from_tracker(tracker: Node, delta: float, arena_size: Vector2, playe
 	_set_bone_points(pinky_bone, screen_pts, PINKY_BONE_INDICES)
 	_set_bone_points(palm_bridge_bone, screen_pts, PALM_BRIDGE_INDICES)
 
-	var base_bone_gray: float = 0.24 if (is_exhausted and is_fist_held) else lerpf(0.38, 0.78, pulse)
-	var shield_bone_gray: float = clampf((0.86 + 0.14 * energy_ratio + 0.15 * block_flash) * flicker, 0.0, 1.0)
+	var base_bone_gray: float = 0.15 if (is_exhausted and is_fist_held) else lerpf(0.22, 0.36, pulse)
+	var shield_bone_gray: float = clampf((0.42 + 0.08 * energy_ratio + 0.08 * block_flash) * flicker, 0.0, 0.58)
 	var bone_gray: float = lerpf(base_bone_gray, shield_bone_gray, shield_morph)
-	var bone_alpha: float = lerpf(0.68, 0.94, shield_morph)
-	var bone_width: float = lerpf(3.0, 5.0 + 1.8 * block_flash, shield_morph)
+	var bone_alpha: float = lerpf(0.30, 0.44, shield_morph)
+	var bone_width: float = lerpf(1.8, 3.0 + 1.2 * block_flash, shield_morph)
 	var active_light_mask: int = 0 if shield_morph > 0.25 else 2
 
 	for bone_line: Line2D in [thumb_bone, index_bone, middle_bone, ring_bone, pinky_bone]:
@@ -203,19 +203,20 @@ func update_from_tracker(tracker: Node, delta: float, arena_size: Vector2, playe
 		bone_line.width = bone_width
 		bone_line.light_mask = active_light_mask
 
-	var bridge_gray: float = lerpf(0.28, shield_bone_gray * 0.92, shield_morph)
-	palm_bridge_bone.default_color = Color(bridge_gray, bridge_gray, bridge_gray, lerpf(0.55, 0.88, shield_morph))
-	palm_bridge_bone.width = lerpf(2.0, 3.8 + 1.2 * block_flash, shield_morph)
+	var bridge_gray: float = lerpf(0.16, shield_bone_gray * 0.85, shield_morph)
+	palm_bridge_bone.default_color = Color(bridge_gray, bridge_gray, bridge_gray, lerpf(0.22, 0.36, shield_morph))
+	palm_bridge_bone.width = lerpf(1.3, 2.2 + 0.8 * block_flash, shield_morph)
 	palm_bridge_bone.light_mask = active_light_mask
 
 	var tip_nodes: Array[Polygon2D] = [fingertip_4, fingertip_8, fingertip_12, fingertip_16, fingertip_20]
 	var tip_boost: float = maxf(shield_morph, maxf(pulse, 0.5 if is_fist_held else 0.0))
-	var tip_gray: float = 0.42 if (is_exhausted and is_fist_held and shield_morph <= 0.05) else lerpf(0.76, 1.0, tip_boost)
-	var tip_scale: float = 1.0 + maxf(0.45 * pulse, 0.42 * shield_morph + 0.25 * block_flash)
+	var shield_tip_gray: float = clampf((0.78 + 0.08 * energy_ratio + 0.12 * block_flash) * flicker, 0.78, 0.95)
+	var tip_gray: float = 0.22 if (is_exhausted and is_fist_held and shield_morph <= 0.05) else lerpf(0.34, shield_tip_gray, tip_boost)
+	var tip_scale: float = lerpf(0.56, 0.90 + 0.22 * block_flash, maxf(shield_morph, 0.65 * pulse))
 	for i: int in range(FINGERTIP_INDICES.size()):
 		var tip_node: Polygon2D = tip_nodes[i]
 		tip_node.position = screen_pts[FINGERTIP_INDICES[i]]
-		tip_node.color = Color(tip_gray, tip_gray, tip_gray, lerpf(0.88, 1.0, shield_morph))
+		tip_node.color = Color(tip_gray, tip_gray, tip_gray, lerpf(0.40, 0.80, shield_morph))
 		tip_node.scale = Vector2(tip_scale, tip_scale)
 		tip_node.light_mask = active_light_mask
 

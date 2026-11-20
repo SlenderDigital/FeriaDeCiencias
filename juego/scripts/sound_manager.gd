@@ -48,10 +48,12 @@ const SFX_STREAMS: Dictionary = {
 }
 
 const MUSIC_STREAM: AudioStreamWAV = preload("res://assets/audio/music.wav")
+const BOSS_INTRO_STREAM: AudioStreamWAV = preload("res://assets/audio/boss_intro.wav")
 const BOSS_MUSIC_STREAM: AudioStreamWAV = preload("res://assets/audio/boss_music.wav")
 
 var music_player: AudioStreamPlayer = null
 var _music_playing: bool = false
+var _last_boss_clock_time: float = 0.0
 var _sfx_pool: Array[AudioStreamPlayer] = []
 var _pool_cursor: int = 0
 
@@ -125,14 +127,39 @@ func play_music(pitch_scale: float = 1.0) -> void:
 	music_player.play(0.0)
 
 
+func play_boss_intro(pitch_scale: float = 1.0) -> void:
+	_music_playing = true
+	_last_boss_clock_time = 0.0
+	var intro_stream: AudioStreamWAV = BOSS_INTRO_STREAM
+	if intro_stream != null:
+		intro_stream.loop_mode = AudioStreamWAV.LOOP_DISABLED
+	if music_player == null:
+		return
+	music_player.pitch_scale = pitch_scale
+	music_player.stream = intro_stream
+	music_player.stop()
+	music_player.play(0.0)
+
+
 func play_boss_music(pitch_scale: float = 1.0) -> void:
 	_music_playing = true
+	_last_boss_clock_time = 0.0
 	if music_player == null:
 		return
 	music_player.pitch_scale = pitch_scale
 	music_player.stream = BOSS_MUSIC_STREAM
 	music_player.stop()
 	music_player.play(0.0)
+
+
+func get_boss_playback_time(fallback_elapsed: float) -> float:
+	if DisplayServer.get_name() == "headless" or music_player == null or not _music_playing or not music_player.playing or music_player.stream != BOSS_MUSIC_STREAM:
+		return maxf(fallback_elapsed, 0.0)
+	var raw: float = music_player.get_playback_position() + AudioServer.get_time_since_last_mix() - AudioServer.get_output_latency()
+	var clamped: float = clampf(raw, 0.0, BOSS_TOTAL_DURATION)
+	var candidate: float = clamped if absf(clamped - fallback_elapsed) <= 0.35 else clampf(fallback_elapsed, 0.0, BOSS_TOTAL_DURATION)
+	_last_boss_clock_time = maxf(_last_boss_clock_time, candidate)
+	return _last_boss_clock_time
 
 
 func stop_music() -> void:
@@ -240,35 +267,81 @@ static func get_boss_beat_intensity(elapsed_seconds: float) -> float:
 		return 0.0
 
 	var section: int = get_boss_section(t)
-	var kick_env: float = pow(1.0 - get_beat_phase(t), 2.2)
+	var beat_f: float = t / BEAT_DURATION
+	var beat_idx: int = int(floor(beat_f))
+	var bar_idx: int = int(floor(beat_f / 4.0))
+	var beat_in_bar: int = beat_idx % 4
+	var beat_phase: float = get_beat_phase(t)
+	var kick_env: float = pow(1.0 - beat_phase, 2.2)
 
-	if section == 4:
-		if t < BOSS_SILENCE_START:
-			return clampf(0.32 * (0.85 + 0.15 * kick_env), 0.25, 0.35)
-		return clampf(0.98 * (0.68 + 0.32 * kick_env), 0.20, 1.0)
-
-	var base_energy: float = 0.56
 	match section:
 		0:
-			base_energy = 0.56
+			if bar_idx == 0:
+				return clampf(0.35 + 0.13 * pow(1.0 - beat_phase, 3.0), 0.35, 0.48)
+			var base_p1: float = 0.62
+			if bar_idx == 7:
+				var fill_u: float = clampf((t - 28.0 * BEAT_DURATION) / (4.0 * BEAT_DURATION), 0.0, 1.0)
+				base_p1 = lerpf(0.62, 0.78, fill_u)
+			return clampf(base_p1 * (0.62 + 0.38 * kick_env), 0.15, 1.0)
 		1:
-			base_energy = 0.68
+			if bar_idx == 8:
+				if beat_idx <= 33:
+					return 0.18
+				var rise_u: float = clampf((t - 34.0 * BEAT_DURATION) / (2.0 * BEAT_DURATION), 0.0, 1.0)
+				return lerpf(0.20, 0.80, rise_u)
+			var base_p2: float = 0.82 if bar_idx == 15 else 0.74
+			return clampf(base_p2 * (0.62 + 0.38 * kick_env), 0.15, 1.0)
 		2:
-			base_energy = 0.80
+			var base_p3: float = 0.86 if (beat_in_bar == 0 or beat_in_bar == 2) else 0.74
+			if bar_idx == 23:
+				base_p3 = 0.90
+			return clampf(base_p3 * (0.62 + 0.38 * kick_env), 0.15, 1.0)
 		3:
-			base_energy = 0.88
+			var cyc_bar: int = bar_idx % 4
+			if cyc_bar == 0:
+				var drop_base: float = 0.88 if bar_idx == 28 else 0.86
+				return clampf(drop_base * (0.62 + 0.38 * kick_env), 0.15, 1.0)
+			if cyc_bar == 1:
+				var sweep_start: float = float(bar_idx * 4) * BEAT_DURATION
+				var sweep_u: float = clampf((t - sweep_start) / (4.0 * BEAT_DURATION), 0.0, 1.0)
+				return clampf(lerpf(0.74, 0.80, sweep_u) * (0.62 + 0.38 * kick_env), 0.35, 1.0)
+			var arp_start: float = float((bar_idx - (cyc_bar - 2)) * 4) * BEAT_DURATION
+			var arp_u: float = clampf((t - arp_start) / (8.0 * BEAT_DURATION), 0.0, 1.0)
+			return clampf(lerpf(0.80, 0.92, arp_u) * (0.62 + 0.38 * kick_env), 0.40, 1.0)
+		4:
+			if t < BOSS_SILENCE_START:
+				if t < 130.0 * BEAT_DURATION:
+					var dive_u: float = clampf((t - 128.0 * BEAT_DURATION) / (2.0 * BEAT_DURATION), 0.0, 1.0)
+					return lerpf(0.66, 0.26, dive_u)
+				if bar_idx == 38:
+					var gl_u: float = clampf((t - 152.0 * BEAT_DURATION) / (4.0 * BEAT_DURATION), 0.0, 1.0)
+					return lerpf(0.32, 0.72, gl_u)
+				return clampf(0.30 * (0.85 + 0.15 * kick_env), 0.24, 0.34)
+			if beat_idx == 158:
+				return clampf(lerpf(0.55, 1.0, pow(1.0 - beat_phase, 1.6)), 0.55, 1.0)
+			return lerpf(0.52, 0.94, beat_phase)
 		5:
-			base_energy = 0.94
+			return clampf(0.94 * (0.62 + 0.38 * kick_env), 0.15, 1.0)
 		6:
-			base_energy = 0.62
+			if beat_in_bar == 0:
+				return clampf(0.96 * (0.45 + 0.55 * pow(1.0 - beat_phase, 1.8)), 0.35, 1.0)
+			if beat_in_bar == 2:
+				return clampf(0.84 * (0.36 + 0.64 * pow(1.0 - beat_phase, 3.0)), 0.28, 0.90)
+			return clampf(0.32 + 0.06 * kick_env, 0.28, 0.40)
 		7:
-			base_energy = 1.0
 			if t >= BOSS_SHATTER_START:
 				var fade_u: float = clampf(
 					(BOSS_TAIL_SILENCE_START - t) / (BOSS_TAIL_SILENCE_START - BOSS_SHATTER_START),
 					0.0,
 					1.0
 				)
-				return clampf(0.90 * fade_u, 0.0, 1.0)
+				return clampf(fade_u, 0.0, 1.0)
+			if bar_idx == 60:
+				return clampf(0.52 * (0.70 + 0.30 * kick_env), 0.30, 0.60)
+			if bar_idx == 62:
+				var build_u: float = clampf((t - 248.0 * BEAT_DURATION) / (4.0 * BEAT_DURATION), 0.0, 1.0)
+				return clampf(maxf(lerpf(0.84, 1.0, build_u), 0.78 + 0.22 * kick_env), 0.78, 1.0)
+			var base_p8: float = 1.0 if bar_idx == 58 else 0.98
+			return clampf(base_p8 * (0.65 + 0.35 * kick_env), 0.50, 1.0)
 
-	return clampf(base_energy * (0.62 + 0.38 * kick_env), 0.15, 1.0)
+	return clampf(0.56 * (0.62 + 0.38 * kick_env), 0.15, 1.0)

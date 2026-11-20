@@ -101,10 +101,10 @@ static func projectile(radius: float) -> PackedVector2Array:
 
 static func apply_radial_glow(
 	poly: Polygon2D,
-	radii: Array[float] = [14.0, 22.0, 32.0, 44.0, 56.0, 68.0, 80.0, 92.0],
-	alphas: Array[float] = [0.62, 0.42, 0.25, 0.14, 0.07, 0.03, 0.008, 0.0],
+	radii: Array[float] = [12.0, 18.0, 26.0, 35.0, 44.0, 54.0, 64.0, 74.0],
+	alphas: Array[float] = [0.42, 0.28, 0.17, 0.09, 0.045, 0.018, 0.005, 0.0],
 	segments: int = 36,
-	center_alpha: float = 0.85
+	center_alpha: float = 0.55
 ) -> void:
 	var verts: PackedVector2Array = PackedVector2Array([Vector2.ZERO])
 	var colors: PackedColorArray = PackedColorArray([Color(1.0, 1.0, 1.0, center_alpha)])

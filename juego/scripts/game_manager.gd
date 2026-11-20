@@ -49,6 +49,10 @@ var spectator_override_mode: int = 0
 var _screen_poll_timer: float = 0.0
 var _last_detected_screens: int = -1
 var _test_screen_count_override: int = -1
+var _last_telemetry_bucket: int = -1
+var _last_telemetry_hp: int = -1
+var _last_telemetry_max_hp: int = -1
+var _last_telemetry_duration: float = -1.0
 
 
 func _ready() -> void:
@@ -213,6 +217,10 @@ func set_state(new_state: int) -> void:
 	if new_state == state:
 		return
 	state = new_state
+	_last_telemetry_bucket = -1
+	_last_telemetry_hp = -1
+	_last_telemetry_max_hp = -1
+	_last_telemetry_duration = -1.0
 	state_changed.emit(state)
 
 
@@ -243,6 +251,20 @@ func notify_preview_player_name(raw_name: String) -> void:
 
 
 func report_live_telemetry(elapsed: float, duration: float, hp: int, max_hp: int) -> void:
+	var bucket: int = int(floor(maxf(elapsed, 0.0) * 10.0))
+	var force_boundary: bool = elapsed <= 0.001 or elapsed >= duration
+	if (
+		not force_boundary
+		and bucket == _last_telemetry_bucket
+		and hp == _last_telemetry_hp
+		and max_hp == _last_telemetry_max_hp
+		and is_equal_approx(duration, _last_telemetry_duration)
+	):
+		return
+	_last_telemetry_bucket = bucket
+	_last_telemetry_hp = hp
+	_last_telemetry_max_hp = max_hp
+	_last_telemetry_duration = duration
 	live_telemetry_updated.emit(elapsed, duration, hp, max_hp)
 
 

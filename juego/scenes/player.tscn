@@ -28,7 +28,7 @@ script = ExtResource("1_3vyb7")
 [node name="PlayerGlow" type="Polygon2D" parent="." unique_id=410959642]
 light_mask = 0
 material = SubResource("CanvasItemMaterial_glow")
-color = Color(1, 1, 1, 0.42)
+color = Color(1, 1, 1, 0.26)
 
 [node name="PlayerLight" type="PointLight2D" parent="." unique_id=410959643]
 color = Color(1, 1, 1, 1)
@@ -51,15 +51,56 @@ default_color = Color(1, 1, 1, 0.8)
 joint_mode = 2
 antialiased = true
 
+[node name="HitboxFrame" type="Polygon2D" parent="." unique_id=1306276985]
+light_mask = 0
+color = Color(0, 0, 0, 0.96)
+polygon = PackedVector2Array(-15, -15, 15, -15, 15, 15, -15, 15)
+
 [node name="OuterPolygon" type="Polygon2D" parent="." unique_id=1306276986]
 light_mask = 0
-polygon = PackedVector2Array(-14, -14, 14, -14, 14, 14, -14, 14)
+polygon = PackedVector2Array(-12, -12, 12, -12, 12, 12, -12, 12)
 
 [node name="InnerPolygon" type="Polygon2D" parent="." unique_id=27585643]
+light_mask = 0
+color = Color(0.05, 0.05, 0.05, 1)
+polygon = PackedVector2Array(-10.2, -10.2, 10.2, -10.2, 10.2, 10.2, -10.2, 10.2)
+
+[node name="LifeSlice1" type="Polygon2D" parent="." unique_id=27585645]
+light_mask = 0
+polygon = PackedVector2Array(-9.2, 4.2, 9.2, 4.2, 9.2, 9.2, -9.2, 9.2)
+
+[node name="LifeSlice2" type="Polygon2D" parent="." unique_id=27585646]
+light_mask = 0
+polygon = PackedVector2Array(-9.2, -2.5, 9.2, -2.5, 9.2, 2.5, -9.2, 2.5)
+
+[node name="LifeSlice3" type="Polygon2D" parent="." unique_id=27585647]
+light_mask = 0
+polygon = PackedVector2Array(-9.2, -9.2, 9.2, -9.2, 9.2, -4.2, -9.2, -4.2)
+
+[node name="HitboxCore" type="Polygon2D" parent="." unique_id=27585644]
+light_mask = 0
+color = Color(0.05, 0.05, 0.05, 0.88)
+polygon = PackedVector2Array(-1.5, -1.5, 1.5, -1.5, 1.5, 1.5, -1.5, 1.5)
+
+[node name="ShieldBarRoot" type="Node2D" parent="." unique_id=27585648]
 visible = false
 light_mask = 0
-color = Color(0, 0, 0, 1)
-polygon = PackedVector2Array(-14, -14, 14, -14, 14, 14, -14, 14)
+position = Vector2(0, 21)
+
+[node name="ShieldBarBg" type="Polygon2D" parent="ShieldBarRoot" unique_id=27585649]
+light_mask = 0
+color = Color(0, 0, 0, 0.92)
+polygon = PackedVector2Array(-17, -3.5, 17, -3.5, 17, 3.5, -17, 3.5)
+
+[node name="ShieldBarTrack" type="Polygon2D" parent="ShieldBarRoot" unique_id=27585650]
+light_mask = 0
+color = Color(0.18, 0.18, 0.18, 0.95)
+polygon = PackedVector2Array(-15.5, -2, 15.5, -2, 15.5, 2, -15.5, 2)
+
+[node name="ShieldBarFill" type="Polygon2D" parent="ShieldBarRoot" unique_id=27585651]
+light_mask = 0
+position = Vector2(-15.5, 0)
+polygon = PackedVector2Array(0, -2, 31, -2, 31, 2, 0, 2)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=2145923434]
 shape = SubResource("RectangleShape2D_g2els")

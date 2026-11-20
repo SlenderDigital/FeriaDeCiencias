@@ -8,6 +8,8 @@ const PLAYER_HIT_RADIUS: float = 12.0
 var projectile_velocity: Vector2 = Vector2.RIGHT * DEFAULT_SPEED
 var projectile_radius: float = DEFAULT_RADIUS
 var is_hazard_active: bool = true
+var _outer_tail_poly: PackedVector2Array = PackedVector2Array()
+var _inner_tail_poly: PackedVector2Array = PackedVector2Array()
 
 @onready var body_visual: Polygon2D = $BodyVisual
 @onready var core_visual: Polygon2D = $CoreVisual
@@ -44,22 +46,34 @@ func _physics_process(delta: float) -> void:
 		is_hazard_active = false
 		collision_shape.disabled = true
 		queue_free()
-	queue_redraw()
 
 
 func _rebuild_geometry() -> void:
-	body_visual.polygon = Shapes.projectile(projectile_radius)
-	core_visual.position = Vector2(projectile_radius * 0.14, 0.0)
-	core_visual.polygon = Shapes.circle(projectile_radius * 0.44, 10)
+	var r: float = projectile_radius
+	body_visual.polygon = Shapes.projectile(r)
+	core_visual.position = Vector2(r * 0.14, 0.0)
+	core_visual.polygon = Shapes.circle(r * 0.44, 10)
+	_outer_tail_poly = PackedVector2Array([
+		Vector2(-r * 0.2, -r * 0.72),
+		Vector2(-r * 3.1, 0.0),
+		Vector2(-r * 0.2, r * 0.72),
+	])
+	_inner_tail_poly = PackedVector2Array([
+		Vector2(-r * 0.1, -r * 0.42),
+		Vector2(-r * 1.9, 0.0),
+		Vector2(-r * 0.1, r * 0.42),
+	])
 	var circle_shape: CircleShape2D = CircleShape2D.new()
-	circle_shape.radius = projectile_radius
+	circle_shape.radius = r
 	collision_shape.shape = circle_shape
 
 
 func _draw() -> void:
 	var r: float = projectile_radius
-	draw_colored_polygon(PackedVector2Array([Vector2(-r * 0.2, -r * 0.72), Vector2(-r * 3.1, 0.0), Vector2(-r * 0.2, r * 0.72)]), Color(0.65, 0.65, 0.65, 0.28))
-	draw_colored_polygon(PackedVector2Array([Vector2(-r * 0.1, -r * 0.42), Vector2(-r * 1.9, 0.0), Vector2(-r * 0.1, r * 0.42)]), Color(0.92, 0.92, 0.92, 0.55))
+	if _outer_tail_poly.size() >= 3:
+		draw_colored_polygon(_outer_tail_poly, Color(0.65, 0.65, 0.65, 0.28))
+	if _inner_tail_poly.size() >= 3:
+		draw_colored_polygon(_inner_tail_poly, Color(0.92, 0.92, 0.92, 0.55))
 	draw_circle(Vector2.ZERO, r * 1.42, Color(0.88, 0.88, 0.88, 0.18))
 	draw_circle(Vector2(r * 0.12, 0.0), r * 0.36, Color(0.08, 0.08, 0.08, 0.92))
 

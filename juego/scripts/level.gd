@@ -63,6 +63,8 @@ var _shake_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 
 func _ready() -> void:
+	if DisplayServer.get_name() != "headless":
+		Engine.max_fps = 0
 	RenderingServer.set_default_clear_color(Color.BLACK)
 	rng.randomize()
 	_shake_rng.randomize()

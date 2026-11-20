@@ -4,29 +4,101 @@
 
 [resource]
 script = ExtResource("1_cqg7s")
-player_name = "Facu"
+player_name = "tito"
 records = {
+1: {
+"completed": true,
+"time": 45.0
+},
 2: {
 "completed": false,
-"time": 6.499999999999982
+"time": 35.316666666665945
+},
+3: {
+"completed": false,
+"time": 97.5666666666624
 }
 }
 player_profiles = {
-"facu": {
-"display_name": "Facu",
+"???": {
+"display_name": "???",
 "records": {
+1: {
+"completed": false,
+"time": 32.549999999999436
+},
+3: {
+"completed": false,
+"time": 53.1833333333316
+}
+}
+},
+"marchena": {
+"display_name": "MARCHENA",
+"records": {
+0: {
+"completed": true,
+"time": 45.0
+},
 2: {
 "completed": false,
-"time": 6.499999999999982
+"time": 22.816666666666652
+},
+3: {
+"completed": false,
+"time": 44.116666666665445
 }
 }
 },
 "player": {
 "display_name": "PLAYER",
 "records": {
+3: {
+"completed": false,
+"time": 107.6833333333285
+}
+}
+},
+"polenta": {
+"display_name": "Polenta",
+"records": {
 1: {
 "completed": false,
-"time": 14.600000000000305
+"time": 38.84999999999908
+},
+3: {
+"completed": false,
+"time": 100.33333333332892
+}
+}
+},
+"tito": {
+"display_name": "tito",
+"records": {
+1: {
+"completed": true,
+"time": 45.0
+},
+2: {
+"completed": false,
+"time": 35.316666666665945
+},
+3: {
+"completed": false,
+"time": 97.5666666666624
+}
+}
+},
+"tu mama": {
+"display_name": "tu mama",
+"records": {
+1: {
+"completed": false,
+"time": 14.733333333333643
+},
+3: {
+"completed": false,
+"time": 80.36666666666339
 }
 }
 }
