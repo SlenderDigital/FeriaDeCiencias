@@ -47,6 +47,7 @@ var _spike_tangents: Array[Vector2] = []
 var _saw_template: PackedVector2Array = PackedVector2Array()
 var _rotated_saw: PackedVector2Array = PackedVector2Array()
 var _outline_pts: PackedVector2Array = PackedVector2Array()
+var _chev_pts: PackedVector2Array = PackedVector2Array()
 var _unit_circle: PackedVector2Array = PackedVector2Array()
 var _tri_pts: PackedVector2Array = PackedVector2Array()
 var _tri_cols: PackedColorArray = PackedColorArray()
@@ -365,6 +366,29 @@ func _draw() -> void:
 			var rail_col: Color = Color(0.84, 0.84, 0.84, lerpf(0.46, 0.88, progress))
 			if ring_mode == RingMode.ORBIT_RING:
 				BossConstants.draw_dashed_circle(self, Vector2.ZERO, current_radius, rail_col, 1.8, 32, 0.55, _orbit_angle)
+				_chev_pts.resize(0)
+				var shrinking: bool = _end_radius < _start_radius - 6.0
+				if shrinking:
+					var target_col: Color = Color(0.76, 0.76, 0.76, lerpf(0.38, 0.78, progress))
+					BossConstants.draw_dashed_circle(self, Vector2.ZERO, _end_radius, target_col, 1.6, 28, 0.50, -_orbit_angle - phase_timer * 0.9)
+					var chev_r: float = lerpf(_start_radius - 10.0, _end_radius + 10.0, fposmod(phase_timer * 1.35, 1.0))
+					for i: int in range(8):
+						var a_in: float = float(i) * TAU / 8.0 + phase_timer * 0.35
+						var dir_out: Vector2 = Vector2.from_angle(a_in)
+						_chev_pts = BossConstants.append_double_chevron_pts(_chev_pts, dir_out * chev_r, -dir_out, 7.0)
+				if absf(_angular_speed) > 0.01:
+					var rot_sign: float = 1.0 if _angular_speed > 0.0 else -1.0
+					var spin_r: float = maxf(current_radius - _spike_radius - 10.0, 26.0) if shrinking else (current_radius + _spike_radius + 12.0)
+					var spin_col: Color = Color(0.90, 0.90, 0.90, lerpf(0.45, 0.90, progress))
+					for k: int in range(6):
+						var a0: float = float(k) * TAU / 6.0 + phase_timer * rot_sign * 0.70
+						var a1: float = a0 + rot_sign * 0.28
+						draw_arc(Vector2.ZERO, spin_r, minf(a0, a1), maxf(a0, a1), 10, spin_col, 1.7, true)
+						var tip_dir: Vector2 = Vector2.from_angle(a1 + rot_sign * PI * 0.5)
+						_chev_pts = BossConstants.append_double_chevron_pts(_chev_pts, Vector2.from_angle(a1) * spin_r, tip_dir, 7.0)
+				if _chev_pts.size() >= 2:
+					draw_multiline(_chev_pts, Color(0.06, 0.06, 0.06, 0.65), 3.2, true)
+					draw_multiline(_chev_pts, Color(0.95, 0.95, 0.95, lerpf(0.52, 0.95, progress)), 1.7, true)
 			else:
 				var rect: Rect2 = Rect2(_cage_margin, _cage_margin, _arena_size.x - _cage_margin * 2.0, _arena_size.y - _cage_margin * 2.0)
 				draw_rect(rect, rail_col, false, 1.8)

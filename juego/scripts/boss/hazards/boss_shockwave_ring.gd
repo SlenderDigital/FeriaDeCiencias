@@ -239,6 +239,20 @@ func _draw_ring() -> void:
 			var progress: float = clampf(phase_timer / maxf(_warning_time, 0.001), 0.0, 1.0)
 			var pulse: float = 0.5 + 0.5 * sin(phase_timer * 20.0)
 			var preview_r: float = _start_radius + 8.0 * pulse
+			var max_hint_r: float = minf(_end_radius, maxf(_start_radius + 160.0, 195.0))
+			var min_hint_r: float = minf(_start_radius + 28.0, max_hint_r)
+			var back_col: Color = Color(0.05, 0.05, 0.05, lerpf(0.45, 0.78, progress))
+
+			BossConstants.draw_dashed_circle(
+				self,
+				Vector2.ZERO,
+				preview_r,
+				back_col,
+				4.2,
+				28,
+				0.58,
+				phase_timer * 1.4
+			)
 			BossConstants.draw_dashed_circle(
 				self,
 				Vector2.ZERO,
@@ -249,31 +263,48 @@ func _draw_ring() -> void:
 				0.58,
 				phase_timer * 1.4
 			)
-			var charge_r: float = lerpf(_start_radius * 2.1 + 34.0, _start_radius, progress)
-			draw_arc(Vector2.ZERO, charge_r, 0.0, TAU, 48, Color(0.96, 0.96, 0.96, lerpf(0.45, 0.95, progress)), 2.0, true)
-			var expand_hint_r: float = _start_radius + 44.0 * progress
+
+			var charge_r: float = lerpf(max_hint_r, _start_radius, progress)
+			draw_arc(Vector2.ZERO, charge_r, 0.0, TAU, 48, back_col, 4.6, true)
+			draw_arc(Vector2.ZERO, charge_r, 0.0, TAU, 48, Color(0.96, 0.96, 0.96, lerpf(0.48, 0.96, progress)), 2.2, true)
+
+			var expand_hint_r: float = lerpf(min_hint_r, max_hint_r, progress)
 			BossConstants.draw_dashed_circle(
 				self,
 				Vector2.ZERO,
 				expand_hint_r,
-				Color(0.76, 0.76, 0.76, lerpf(0.32, 0.62, progress)),
-				1.4,
-				24,
-				0.45,
+				back_col,
+				3.6,
+				32,
+				0.48,
 				-phase_timer * 1.1
 			)
+			BossConstants.draw_dashed_circle(
+				self,
+				Vector2.ZERO,
+				expand_hint_r,
+				Color(0.84, 0.84, 0.84, lerpf(0.38, 0.78, progress)),
+				1.6,
+				32,
+				0.48,
+				-phase_timer * 1.1
+			)
+
 			_spoke_pts.resize(16)
 			_chev_pts.resize(0)
 			for i: int in range(8):
 				var a: float = float(i) * TAU / 8.0 + phase_timer * 0.8
 				var dir: Vector2 = Vector2.from_angle(a)
 				_spoke_pts[i * 2] = dir * _start_radius
-				_spoke_pts[i * 2 + 1] = dir * charge_r
+				_spoke_pts[i * 2 + 1] = dir * maxf(charge_r, expand_hint_r)
+				_chev_pts = BossConstants.append_double_chevron_pts(_chev_pts, dir * (expand_hint_r + 10.0), dir, 8.5)
 				if parryable:
 					_chev_pts = BossConstants.append_double_chevron_pts(_chev_pts, dir * (_start_radius + 16.0), dir, 8.0)
-			draw_multiline(_spoke_pts, Color(0.86, 0.86, 0.86, lerpf(0.42, 0.88, progress)), 1.4, true)
-			if parryable and _chev_pts.size() >= 2:
-				draw_multiline(_chev_pts, Color(0.94, 0.94, 0.94, lerpf(0.50, 0.96, progress)), 1.7, true)
+			draw_multiline(_spoke_pts, back_col, 3.4, true)
+			draw_multiline(_spoke_pts, Color(0.86, 0.86, 0.86, lerpf(0.45, 0.90, progress)), 1.5, true)
+			if _chev_pts.size() >= 2:
+				draw_multiline(_chev_pts, back_col, 3.8, true)
+				draw_multiline(_chev_pts, Color(0.96, 0.96, 0.96, lerpf(0.55, 0.98, progress)), 1.9, true)
 
 		Phase.ACTIVE:
 			var half_t: float = _thickness * 0.5
@@ -307,6 +338,16 @@ func _draw_ring() -> void:
 				draw_arc(Vector2.ZERO, current_radius + fade_t * 14.0, 0.0, TAU, 64, Color(0.82, 0.82, 0.82, (1.0 - fade_t) * 0.75), w, true)
 
 
+func _append_tidal_gap_rails(is_h: bool, gap_lo: float, gap_hi: float, anim_phase: float) -> void:
+	_rail_pts.resize(0)
+	if is_h:
+		_rail_pts = BossConstants.append_dashed_line_pts(_rail_pts, Vector2(0.0, gap_lo), Vector2(_arena_size.x, gap_lo), 14.0, 10.0, anim_phase)
+		_rail_pts = BossConstants.append_dashed_line_pts(_rail_pts, Vector2(0.0, gap_hi), Vector2(_arena_size.x, gap_hi), 14.0, 10.0, anim_phase)
+	else:
+		_rail_pts = BossConstants.append_dashed_line_pts(_rail_pts, Vector2(gap_lo, 0.0), Vector2(gap_lo, _arena_size.y), 14.0, 10.0, anim_phase)
+		_rail_pts = BossConstants.append_dashed_line_pts(_rail_pts, Vector2(gap_hi, 0.0), Vector2(gap_hi, _arena_size.y), 14.0, 10.0, anim_phase)
+
+
 func _draw_tidal_wave() -> void:
 	var sweep_dir: Vector2 = _get_tidal_sweep_dir()
 	var is_h: bool = (_side == &"left" or _side == &"right")
@@ -327,7 +368,6 @@ func _draw_tidal_wave() -> void:
 			elif _side == &"bottom":
 				edge_coord = _arena_size.y - warn_depth
 
-			_rail_pts.resize(0)
 			_chev_pts.resize(0)
 			if is_h:
 				if gap_lo > 1.0:
@@ -338,9 +378,6 @@ func _draw_tidal_wave() -> void:
 					var r2: Rect2 = Rect2(edge_coord, gap_hi, warn_depth, _arena_size.y - gap_hi)
 					draw_rect(r2, fill_col, true)
 					draw_rect(r2, edge_col, false, 2.0)
-				# Safe gap dotted rails across arena
-				_rail_pts = BossConstants.append_dashed_line_pts(_rail_pts, Vector2(0.0, gap_lo), Vector2(_arena_size.x, gap_lo), 14.0, 10.0, phase_timer * 60.0)
-				_rail_pts = BossConstants.append_dashed_line_pts(_rail_pts, Vector2(0.0, gap_hi), Vector2(_arena_size.x, gap_hi), 14.0, 10.0, phase_timer * 60.0)
 				# Directional arrows
 				var arrow_x: float = (warn_depth + 16.0) if _side == &"left" else (_arena_size.x - warn_depth - 16.0)
 				for y_step: int in range(1, 7):
@@ -357,20 +394,23 @@ func _draw_tidal_wave() -> void:
 					var r2: Rect2 = Rect2(gap_hi, edge_coord, _arena_size.x - gap_hi, warn_depth)
 					draw_rect(r2, fill_col, true)
 					draw_rect(r2, edge_col, false, 2.0)
-				_rail_pts = BossConstants.append_dashed_line_pts(_rail_pts, Vector2(gap_lo, 0.0), Vector2(gap_lo, _arena_size.y), 14.0, 10.0, phase_timer * 60.0)
-				_rail_pts = BossConstants.append_dashed_line_pts(_rail_pts, Vector2(gap_hi, 0.0), Vector2(gap_hi, _arena_size.y), 14.0, 10.0, phase_timer * 60.0)
 				var arrow_y: float = (warn_depth + 16.0) if _side == &"top" else (_arena_size.y - warn_depth - 16.0)
 				for x_step: int in range(1, 9):
 					var xx: float = _arena_size.x * float(x_step) / 9.0
 					if xx > gap_lo - 10.0 and xx < gap_hi + 10.0:
 						continue
 					_chev_pts = BossConstants.append_double_chevron_pts(_chev_pts, Vector2(xx, arrow_y), sweep_dir, 8.5)
+			_append_tidal_gap_rails(is_h, gap_lo, gap_hi, phase_timer * 60.0)
 			if _rail_pts.size() >= 2:
 				draw_multiline(_rail_pts, rail_col, 1.6, true)
 			if _chev_pts.size() >= 2:
 				draw_multiline(_chev_pts, edge_col, 1.8, true)
 
 		Phase.ACTIVE:
+			_append_tidal_gap_rails(is_h, gap_lo, gap_hi, phase_timer * 60.0)
+			if _rail_pts.size() >= 2:
+				draw_multiline(_rail_pts, Color(0.05, 0.05, 0.05, 0.25), 3.0, true)
+				draw_multiline(_rail_pts, Color(0.86, 0.86, 0.86, 0.35), 1.5, true)
 			var rects: Array[Rect2] = _get_tidal_rects(current_wave_coord)
 			var half_t: float = _thickness * 0.5
 			_chev_pts.resize(0)

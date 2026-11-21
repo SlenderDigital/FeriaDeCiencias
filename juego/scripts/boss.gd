@@ -167,7 +167,7 @@ static func _make_hand_state() -> Dictionary:
 		"style": HandDashStyle.FIST_ROCKET, "impact_mode": 0, "strength": 0.78,
 		"swept": false, "flash": 0.0, "orbit_angle": 0.0, "orbit_speed": 3.6,
 		"tether_start_y": 165.0, "tether_end_y": 465.0, "tether_active_phase": false,
-		"retract_blend": 0.0,
+		"retract_blend": 0.0, "return_grace": 0.0,
 	}
 
 
@@ -294,6 +294,8 @@ func set_phase_state(phase: int, new_acting: ActingState, new_form: BossForm, bo
 		_silence_freeze = false
 		_inflate_amount = 0.0
 		_teleport_grace_timer = 0.0
+		if current_phase == 8 and _body_pos.distance_to(body_target) > 40.0:
+			_teleport_grace_timer = maxf(_teleport_grace_timer, 0.40)
 		match new_acting:
 			ActingState.FROZEN_DOUBLE_TAKE:
 				_freeze_timer = 0.36
@@ -529,11 +531,13 @@ func _reset_hand_for_command(idx: int) -> Dictionary:
 	if int(_hands[idx]["action"]) == HandAction.TETHER_SWEEP:
 		_tether_active = false
 	var h: Dictionary = _hands[idx]
+	h["prev_pos"] = Vector2(h["pos"])
 	h["timer"] = 0.0
 	h["duration"] = 0.0
 	h["next_duration"] = 0.0
 	h["swept"] = false
 	h["tether_active_phase"] = false
+	h["return_grace"] = 0.0
 	return h
 
 
@@ -692,6 +696,7 @@ func _step_stage_phase(h: Dictionary, rem: float, next_action: int, rot_mult: fl
 	if float(h["timer"]) >= dur:
 		var overflow: float = float(h["timer"]) - dur
 		h["pos"] = Vector2(h["stage_pos"])
+		h["prev_pos"] = Vector2(h["stage_pos"])
 		h["start_pos"] = Vector2(h["stage_pos"])
 		h["action"] = next_action
 		h["timer"] = 0.0
@@ -713,6 +718,7 @@ func _step_lerp_active(h: Dictionary, rem: float, ease_exp: float) -> float:
 func _step_hand(idx: int, dt: float, s: Vector2) -> void:
 	var h: Dictionary = _hands[idx]
 	h["swept"] = false
+	h["return_grace"] = maxf(float(h.get("return_grace", 0.0)) - dt, 0.0)
 	var rem: float = dt
 	var pose: HandPose = HandPose.OPEN
 
@@ -769,6 +775,7 @@ func _step_hand(idx: int, dt: float, s: Vector2) -> void:
 					h["pos"] = Vector2(h["target_pos"])
 					h["flash"] = 0.28
 					h["action"] = HandAction.IDLE
+					h["return_grace"] = 0.40
 					_pending_events.append({"kind": &"slam", "pos": Vector2(h["target_pos"]), "strength": 0.48})
 				break
 			HandAction.FLOOR_SLAM_TELEGRAPH:
@@ -786,6 +793,7 @@ func _step_hand(idx: int, dt: float, s: Vector2) -> void:
 					h["pos"] = Vector2(h["target_pos"])
 					h["flash"] = 0.34
 					h["action"] = HandAction.IDLE
+					h["return_grace"] = 0.40
 					_pending_events.append({"kind": &"floor_slam", "is_left": idx == 0, "pos": Vector2(h["target_pos"]), "mode": int(h["impact_mode"])})
 				break
 			HandAction.WALL_SLAM_WINDUP:
@@ -835,6 +843,7 @@ func _step_hand(idx: int, dt: float, s: Vector2) -> void:
 					h["pos"] = Vector2(h["target_pos"])
 					h["flash"] = 0.32
 					h["action"] = HandAction.IDLE
+					h["return_grace"] = 0.40
 					if idx == 0:
 						_pending_events.append({"kind": &"slam", "pos": _pincer_mid, "strength": 0.65})
 				break
@@ -874,6 +883,7 @@ func _step_hand(idx: int, dt: float, s: Vector2) -> void:
 					if p >= 1.0:
 						h["action"] = HandAction.IDLE
 						h["tether_active_phase"] = false
+						h["return_grace"] = 0.40
 				break
 	_set_hand_pose(idx, pose)
 
@@ -959,10 +969,28 @@ func _flush_pending_events() -> void:
 # HAZARD FLAGS & CONTACT DAMAGE
 # ------------------------------------------------------------------------------
 func _is_hand_retracted(idx: int) -> bool:
-	return int(_hands[idx]["action"]) == HandAction.RETRACTED and float(_hands[idx]["retract_blend"]) > 0.45
+	return float(_hands[idx]["retract_blend"]) > 0.45
+
+func _is_hand_staging_or_recovering(idx: int) -> bool:
+	var h: Dictionary = _hands[idx]
+	if float(h.get("return_grace", 0.0)) > 0.0:
+		return true
+	var act: int = int(h["action"])
+	if act == HandAction.TETHER_SWEEP:
+		return not bool(h["tether_active_phase"])
+	return act in [
+		HandAction.DASH_TELEGRAPH,
+		HandAction.FLOOR_SLAM_TELEGRAPH,
+		HandAction.WALL_SLAM_WINDUP,
+		HandAction.WALL_SLAM_RECOVER,
+		HandAction.PINCER_TELEGRAPH,
+	]
 
 func _is_hand_action_parryable(idx: int) -> bool:
-	return int(_hands[idx]["action"]) in [HandAction.DASH_ACTIVE, HandAction.WALL_SLAM_STRIKE, HandAction.FLOOR_SLAM_ACTIVE, HandAction.PINCER_CLAP, HandAction.ORBIT]
+	var act: int = int(_hands[idx]["action"])
+	if act == HandAction.TETHER_SWEEP:
+		return bool(_hands[idx]["tether_active_phase"])
+	return act in [HandAction.DASH_ACTIVE, HandAction.WALL_SLAM_STRIKE, HandAction.FLOOR_SLAM_ACTIVE, HandAction.PINCER_CLAP, HandAction.ORBIT]
 
 func set_intro_state(active: bool, progress: float, arena_size: Vector2, quick_mode: bool = false) -> void:
 	_arena_size = _resolve_arena_size(arena_size)
@@ -1119,26 +1147,25 @@ func _sync_hazard_flags() -> void:
 		is_right_hand_hazardous = _phase5_hands_awake and not _is_hand_retracted(1)
 	else:
 		is_body_hazardous = (_teleport_grace_timer <= 0.0)
-		is_left_hand_hazardous = not _is_hand_retracted(0)
-		is_right_hand_hazardous = not _is_hand_retracted(1)
+		is_left_hand_hazardous = (_teleport_grace_timer <= 0.0) and not _is_hand_retracted(0) and not _is_hand_staging_or_recovering(0)
+		is_right_hand_hazardous = (_teleport_grace_timer <= 0.0) and not _is_hand_retracted(1) and not _is_hand_staging_or_recovering(1)
 	is_hand_hazardous = is_left_hand_hazardous or is_right_hand_hazardous
 	body_collision.disabled = not is_body_hazardous
 	left_hand_collision.disabled = not is_left_hand_hazardous
 	right_hand_collision.disabled = not is_right_hand_hazardous
 
 func _on_body_entered(body: Node2D) -> void:
-	_handle_contact_body(body, is_body_hazardous, _lunge_active)
+	_handle_contact_body(body, is_body_hazardous, _lunge_active, &"boss_body")
 
 func _on_left_hand_body_entered(body: Node2D) -> void:
-	_handle_contact_body(body, is_left_hand_hazardous, _is_hand_action_parryable(0))
+	_handle_contact_body(body, is_left_hand_hazardous, _is_hand_action_parryable(0), &"boss_hand")
 
 func _on_right_hand_body_entered(body: Node2D) -> void:
-	_handle_contact_body(body, is_right_hand_hazardous, _is_hand_action_parryable(1))
+	_handle_contact_body(body, is_right_hand_hazardous, _is_hand_action_parryable(1), &"boss_hand")
 
-func _handle_contact_body(body: Node2D, hazardous: bool, parryable: bool) -> void:
+func _handle_contact_body(body: Node2D, hazardous: bool, parryable: bool, kind: StringName) -> void:
 	if _elapsed_time >= SPAWN_GRACE_DURATION and hazardous and body != null and body.is_in_group("player") and body.has_method("take_damage"):
-		body.set_meta(&"last_hit_parryable", parryable)
-		body.take_damage(1)
+		BossConstants.apply_player_hit(body, parryable, kind)
 
 func _check_contact_damage(player_node: Node2D) -> void:
 	if (_elapsed_time < SPAWN_GRACE_DURATION and (_elapsed_time > 0.0 or _last_sim_delta > 0.0)) or player_node == null or not is_instance_valid(player_node) or not player_node.has_method("take_damage"):
@@ -1148,8 +1175,7 @@ func _check_contact_damage(player_node: Node2D) -> void:
 	if is_body_hazardous:
 		var cb: Vector2 = Geometry2D.get_closest_point_to_segment(p_pos, Vector2(_lunge["prev"]), global_position) if bool(_lunge["swept"]) else global_position
 		if cb.distance_to(p_pos) <= BODY_RADIUS + player_radius:
-			player_node.set_meta(&"last_hit_parryable", _lunge_active)
-			player_node.take_damage(1)
+			BossConstants.apply_player_hit(player_node, _lunge_active, &"boss_body")
 			return
 	for idx: int in range(2):
 		if not (is_left_hand_hazardous if idx == 0 else is_right_hand_hazardous):
@@ -1158,8 +1184,7 @@ func _check_contact_damage(player_node: Node2D) -> void:
 		var hp: Vector2 = left_hand.global_position if idx == 0 else right_hand.global_position
 		var ch: Vector2 = Geometry2D.get_closest_point_to_segment(p_pos, Vector2(h["prev_pos"]), hp) if bool(h["swept"]) else hp
 		if ch.distance_to(p_pos) <= HAND_RADIUS + player_radius:
-			player_node.set_meta(&"last_hit_parryable", _is_hand_action_parryable(idx))
-			player_node.take_damage(1)
+			BossConstants.apply_player_hit(player_node, _is_hand_action_parryable(idx), &"boss_hand")
 			return
 	if _tether_active:
 		var lp: Vector2 = left_hand.global_position
@@ -1170,8 +1195,7 @@ func _check_contact_damage(player_node: Node2D) -> void:
 			var prev_y: float = Vector2(_hands[0]["prev_pos"]).y
 			hit_t = p_pos.y >= minf(prev_y, lp.y) - tether_r and p_pos.y <= maxf(prev_y, lp.y) + tether_r
 		if hit_t:
-			player_node.set_meta(&"last_hit_parryable", true)
-			player_node.take_damage(1)
+			BossConstants.apply_player_hit(player_node, true, &"boss_tether")
 
 
 # ------------------------------------------------------------------------------
@@ -1341,16 +1365,19 @@ func _update_brows_and_mouth(laughing: bool, dim: float) -> void:
 func _update_hands_visuals(dim: float) -> void:
 	var hdim: float = 0.94 if (acting_state == ActingState.FAKE_OUT_COLLAPSE and _phase5_hands_awake) else dim
 	var outers: Array[Polygon2D] = [left_hand_polygon, right_hand_polygon]
+	var voids: Array[Polygon2D] = [left_hand_void, right_hand_void]
 	var cores: Array[Polygon2D] = [left_hand_core, right_hand_core]
+	var rings: Array[Line2D] = [left_hand_ring, right_hand_ring]
+	var rg: float = clampf(0.84 * hdim, 0.0, 1.0)
 	for idx: int in range(2):
 		var act: int = int(_hands[idx]["action"])
 		var fl: float = 1.0 if (_is_hand_action_parryable(idx) or float(_hands[idx]["flash"]) > 0.0) else (0.72 if act in [HandAction.DASH_TELEGRAPH, HandAction.FLOOR_SLAM_TELEGRAPH, HandAction.WALL_SLAM_WINDUP, HandAction.POINTER_AIM, HandAction.PINCER_TELEGRAPH] else (0.65 if (acting_state == ActingState.FAKE_OUT_COLLAPSE and _phase5_hands_awake) else 0.0))
 		var g: float = clampf(0.94 * hdim + fl * 0.25, 0.0, 1.0)
-		outers[idx].color = Color(g, g, g, 1.0)
+		var ha: float = 0.55 if (acting_state != ActingState.FAKE_OUT_COLLAPSE and (_teleport_grace_timer > 0.0 or _is_hand_staging_or_recovering(idx))) else 1.0
+		outers[idx].color = Color(g, g, g, ha)
+		voids[idx].color = Color(0.06, 0.06, 0.06, ha)
 		cores[idx].color = outers[idx].color
-	var rg: float = clampf(0.84 * hdim, 0.0, 1.0)
-	left_hand_ring.default_color = Color(rg, rg, rg, 0.72)
-	right_hand_ring.default_color = left_hand_ring.default_color
+		rings[idx].default_color = Color(rg, rg, rg, 0.72 * ha)
 
 
 func _update_sweat_shards(dt: float) -> void:
@@ -1522,37 +1549,57 @@ func _draw_world_fx() -> void:
 
 
 func _draw_telegraphs() -> void:
+	var dark_rail: Color = Color(0.05, 0.05, 0.05, 0.65)
 	if bool(_lunge["tele"]):
 		var pl: float = clampf(float(_lunge["timer"]) / maxf(float(_lunge["tele_dur"]), 0.001), 0.0, 1.0)
 		_draw_corridor_rail(_body_pos, Vector2(_lunge["target"]), BODY_RADIUS * 0.95, BODY_RADIUS * 0.88, pl)
 	if int(_hands[0]["action"]) == HandAction.ORBIT:
 		var po: float = clampf(float(_hands[0]["timer"]) / maxf(float(_hands[0]["duration"]), 0.001), 0.0, 1.0)
-		draw_arc(Vector2.ZERO, lerpf(88.0, 158.0, sin(po * PI * 0.5)) * minf(_scale_vec().x, _scale_vec().y), 0.0, TAU, 32, Color(0.92, 0.92, 0.92, 0.48), 1.8, true)
+		var orbit_r: float = lerpf(88.0, 158.0, sin(po * PI * 0.5)) * minf(_scale_vec().x, _scale_vec().y)
+		draw_arc(Vector2.ZERO, orbit_r, 0.0, TAU, 32, dark_rail, 4.0, true)
+		draw_arc(Vector2.ZERO, orbit_r, 0.0, TAU, 32, Color(0.92, 0.92, 0.92, 0.48), 1.8, true)
 	if int(_hands[0]["action"]) == HandAction.TETHER_SWEEP and int(_hands[1]["action"]) == HandAction.TETHER_SWEEP:
+		if not _tether_active:
+			var pt: float = clampf(float(_hands[0]["timer"]) / maxf(float(_hands[0]["duration"]), 0.001), 0.0, 1.0)
+			_draw_staging_path(Vector2(_hands[0]["pos"]), Vector2(_hands[0]["stage_pos"]), pt)
+			_draw_staging_path(Vector2(_hands[1]["pos"]), Vector2(_hands[1]["stage_pos"]), pt)
 		_draw_high_voltage_tether(Vector2(_hands[0]["pos"]) - global_position, Vector2(_hands[1]["pos"]) - global_position, _tether_active)
 	if int(_hands[0]["action"]) == HandAction.PINCER_TELEGRAPH:
 		var pp: float = clampf(float(_hands[0]["timer"]) / maxf(float(_hands[0]["duration"]), 0.001), 0.0, 1.0)
+		_draw_staging_path(Vector2(_hands[0]["pos"]), Vector2(_hands[0]["stage_pos"]), pp)
+		_draw_staging_path(Vector2(_hands[1]["pos"]), Vector2(_hands[1]["stage_pos"]), pp)
 		_draw_corridor_rail(Vector2(_hands[0]["stage_pos"]), Vector2(_hands[0]["target_pos"]), 18.0, 18.0, pp)
 		_draw_corridor_rail(Vector2(_hands[1]["stage_pos"]), Vector2(_hands[1]["target_pos"]), 18.0, 18.0, pp)
 		var pmid: Vector2 = _pincer_mid - global_position
-		draw_arc(pmid, lerpf(42.0, 22.0, pp), 0.0, TAU, 24, Color(0.98, 0.98, 0.98, lerpf(0.52, 0.96, pp)), 2.2, true)
+		var pr: float = lerpf(42.0, 22.0, pp)
+		draw_arc(pmid, pr, 0.0, TAU, 24, dark_rail, 4.4, true)
+		draw_arc(pmid, pr, 0.0, TAU, 24, Color(0.98, 0.98, 0.98, lerpf(0.52, 0.96, pp)), 2.2, true)
 	for idx: int in range(2):
 		var h: Dictionary = _hands[idx]
 		var ph: float = clampf(float(h["timer"]) / maxf(float(h["duration"]), 0.001), 0.0, 1.0)
 		match int(h["action"]):
 			HandAction.DASH_TELEGRAPH:
+				_draw_staging_path(Vector2(h["pos"]), Vector2(h["stage_pos"]), ph)
 				_draw_corridor_rail(Vector2(h["stage_pos"]), Vector2(h["target_pos"]), 26.0 if int(h["style"]) == HandDashStyle.CLAW_SWIPE else 19.0, 20.0, ph)
 			HandAction.FLOOR_SLAM_TELEGRAPH:
 				var sp: Vector2 = Vector2(h["target_pos"]) - global_position
+				var fr: float = lerpf(48.0, 26.0, ph)
+				_draw_staging_path(Vector2(h["pos"]), Vector2(h["stage_pos"]), ph)
 				_draw_corridor_rail(Vector2(h["stage_pos"]), Vector2(h["target_pos"]), 18.0, 26.0, ph)
-				draw_arc(sp, lerpf(48.0, 26.0, ph), 0.0, TAU, 24, Color(0.95, 0.95, 0.95, lerpf(0.50, 0.96, ph)), 2.0, true)
+				draw_arc(sp, fr, 0.0, TAU, 24, dark_rail, 4.2, true)
+				draw_arc(sp, fr, 0.0, TAU, 24, Color(0.95, 0.95, 0.95, lerpf(0.50, 0.96, ph)), 2.0, true)
+				draw_line(sp - Vector2(16.0, 0.0), sp + Vector2(16.0, 0.0), dark_rail, 3.8, true)
 				draw_line(sp - Vector2(16.0, 0.0), sp + Vector2(16.0, 0.0), Color(0.94, 0.94, 0.94, lerpf(0.50, 0.92, ph)), 1.6, true)
 			HandAction.WALL_SLAM_WINDUP:
 				var wpl: Vector2 = Vector2(h["wall_pos"]) - global_position
 				var n: Vector2 = Vector2(h["normal"]).normalized()
 				var tang: Vector2 = Vector2(-n.y, n.x)
+				var wr: float = lerpf(32.0, 15.0, ph)
+				_draw_staging_path(Vector2(h["pos"]), Vector2(h["stage_pos"]), ph)
 				_draw_corridor_rail(Vector2(h["stage_pos"]), Vector2(h["target_pos"]), 19.0, 18.0, ph)
-				draw_arc(wpl, lerpf(32.0, 15.0, ph), n.angle() - PI * 0.5, n.angle() + PI * 0.5, 16, Color(0.96, 0.96, 0.96, lerpf(0.54, 0.96, ph)), 2.2, true)
+				draw_arc(wpl, wr, n.angle() - PI * 0.5, n.angle() + PI * 0.5, 16, dark_rail, 4.4, true)
+				draw_arc(wpl, wr, n.angle() - PI * 0.5, n.angle() + PI * 0.5, 16, Color(0.96, 0.96, 0.96, lerpf(0.54, 0.96, ph)), 2.2, true)
+				draw_line(wpl - tang * 24.0, wpl + tang * 24.0, dark_rail, 4.4, true)
 				draw_line(wpl - tang * 24.0, wpl + tang * 24.0, Color(0.98, 0.98, 0.98, lerpf(0.62, 0.98, ph)), 2.2, true)
 
 
@@ -1628,32 +1675,82 @@ func _draw_body_cracks() -> void:
 		draw_multiline(_scratch_line_pts, Color(0.96, 0.96, 0.96, 0.45 * intensity), 1.0, true)
 
 
+func _draw_staging_path(from_world: Vector2, to_world: Vector2, progress: float) -> void:
+	var a: Vector2 = from_world - global_position
+	var b: Vector2 = to_world - global_position
+	if a.distance_squared_to(b) <= 64.0:
+		return
+	var p: float = clampf(progress, 0.0, 1.0)
+	var line_col: Color = Color(0.76, 0.76, 0.76, lerpf(0.28, 0.56, p))
+	_scratch_line_pts.resize(0)
+	_scratch_line_pts = BossConstants.append_dashed_line_pts(_scratch_line_pts, a, b, 10.0, 9.0, p * 36.0)
+	if _scratch_line_pts.size() >= 2:
+		draw_multiline(_scratch_line_pts, Color(0.05, 0.05, 0.05, 0.55), 3.4, true)
+		draw_multiline(_scratch_line_pts, line_col, 1.4, true)
+	draw_arc(b, 14.0, 0.0, TAU, 16, Color(0.05, 0.05, 0.05, 0.55), 3.2, true)
+	draw_arc(b, 14.0, 0.0, TAU, 16, line_col, 1.3, true)
+
+
 func _draw_high_voltage_tether(lp: Vector2, rp: Vector2, active: bool) -> void:
 	var dist: float = lp.distance_to(rp)
 	var dir: Vector2 = (rp - lp) / dist if dist > 0.001 else Vector2.RIGHT
 	var perp: Vector2 = Vector2(-dir.y, dir.x)
+	var dark_rail: Color = Color(0.05, 0.05, 0.05, 0.65)
 	if not active:
 		var pt: float = clampf(float(_hands[0]["timer"]) / maxf(float(_hands[0]["duration"]), 0.001), 0.0, 1.0)
-		var dt: float = 0.0
-		var col: Color = Color(0.90, 0.90, 0.90, lerpf(0.50, 0.94, pt))
-		var gap_off: float = lerpf(10.0, 1.5, pt)
-		var est_segs: int = int(ceil(dist / 22.0)) + 1
-		_scratch_line_pts.resize(est_segs * 4)
-		var w_idx: int = 0
-		while dt < dist:
-			var s1: float = minf(dt + 14.0, dist)
-			var a_pt: Vector2 = lp + dir * dt
-			var b_pt: Vector2 = lp + dir * s1
-			_scratch_line_pts[w_idx] = a_pt + perp * gap_off
-			_scratch_line_pts[w_idx + 1] = b_pt + perp * gap_off
-			_scratch_line_pts[w_idx + 2] = a_pt - perp * gap_off
-			_scratch_line_pts[w_idx + 3] = b_pt - perp * gap_off
-			w_idx += 4
-			dt += 22.0
-		if w_idx >= 2:
-			_scratch_line_pts.resize(w_idx)
-			draw_multiline(_scratch_line_pts, col, 1.8, true)
+		var start_l: Vector2 = Vector2(_hands[0]["stage_pos"]) - global_position
+		var start_r: Vector2 = Vector2(_hands[1]["stage_pos"]) - global_position
+		var end_l: Vector2 = Vector2(_hands[0]["target_pos"]) - global_position
+		var end_r: Vector2 = Vector2(_hands[1]["target_pos"]) - global_position
+		var sweep_dy: float = end_l.y - start_l.y
+		var sweep_dir: Vector2 = Vector2.DOWN if sweep_dy >= 0.0 else Vector2.UP
+
+		if absf(sweep_dy) > 2.0:
+			_scratch_quad[0] = start_l
+			_scratch_quad[1] = start_r
+			_scratch_quad[2] = end_r
+			_scratch_quad[3] = end_l
+			draw_colored_polygon(_scratch_quad, Color(0.36, 0.36, 0.36, lerpf(0.10, 0.24, pt)))
+
+		var start_col: Color = Color(0.94, 0.94, 0.94, lerpf(0.55, 0.96, pt))
+		var end_col: Color = Color(0.76, 0.76, 0.76, lerpf(0.36, 0.72, pt))
+		var dash_phase: float = pt * 48.0
+		_scratch_line_pts.resize(0)
+		_scratch_line_pts = BossConstants.append_dashed_line_pts(_scratch_line_pts, start_l, start_r, 16.0, 10.0, dash_phase)
+		if _scratch_line_pts.size() >= 2:
+			draw_multiline(_scratch_line_pts, dark_rail, 4.2, true)
+			draw_multiline(_scratch_line_pts, start_col, 2.0, true)
+
+		_scratch_line_pts.resize(0)
+		_scratch_line_pts = BossConstants.append_dashed_line_pts(_scratch_line_pts, end_l, end_r, 14.0, 10.0, -dash_phase)
+		if absf(sweep_dy) > 2.0:
+			_scratch_line_pts = BossConstants.append_dashed_line_pts(_scratch_line_pts, start_l, end_l, 10.0, 10.0, 0.0)
+			_scratch_line_pts = BossConstants.append_dashed_line_pts(_scratch_line_pts, start_r, end_r, 10.0, 10.0, 0.0)
+		if _scratch_line_pts.size() >= 2:
+			draw_multiline(_scratch_line_pts, Color(0.05, 0.05, 0.05, 0.55), 3.4, true)
+			draw_multiline(_scratch_line_pts, end_col, 1.5, true)
+
+		if absf(sweep_dy) > 24.0:
+			_scratch_line_pts_b.resize(0)
+			var row_count: int = 1 if absf(sweep_dy) < 160.0 else 2
+			for row_i: int in range(row_count):
+				var rf: float = 0.5 if row_count == 1 else (0.32 if row_i == 0 else 0.68)
+				var y_row: float = lerpf(start_l.y, end_l.y, rf)
+				for xf: float in [0.25, 0.50, 0.75]:
+					var x_col: float = lerpf(start_l.x, start_r.x, xf)
+					_scratch_line_pts_b = BossConstants.append_double_chevron_pts(_scratch_line_pts_b, Vector2(x_col, y_row), sweep_dir, 9.0)
+			if _scratch_line_pts_b.size() >= 2:
+				draw_multiline(_scratch_line_pts_b, dark_rail, 3.8, true)
+				draw_multiline(_scratch_line_pts_b, start_col, 1.8, true)
 		return
+	var active_end_l: Vector2 = Vector2(_hands[0]["target_pos"]) - global_position
+	var active_end_r: Vector2 = Vector2(_hands[1]["target_pos"]) - global_position
+	_scratch_line_pts.resize(0)
+	_scratch_line_pts = BossConstants.append_dashed_line_pts(_scratch_line_pts, active_end_l, active_end_r, 14.0, 10.0, 0.0)
+	if _scratch_line_pts.size() >= 2:
+		draw_multiline(_scratch_line_pts, Color(0.05, 0.05, 0.05, 0.45), 3.2, true)
+		draw_multiline(_scratch_line_pts, Color(0.76, 0.76, 0.76, 0.36), 1.4, true)
+	draw_line(lp, rp, Color(0.05, 0.05, 0.05, 0.55), 11.0, true)
 	draw_line(lp, rp, Color(0.88, 0.88, 0.88, 0.24), 9.0, true)
 	draw_line(lp, rp, Color(0.98, 0.98, 0.98, 0.98), 3.2, true)
 	for strand: int in range(2):
@@ -1735,8 +1832,10 @@ func _draw_corridor_rail(from_pos: Vector2, to_pos: Vector2, half_width: float, 
 		_scratch_line_pts[l_idx + 3] = p_end - perp
 		l_idx += 4
 		t += 32.0
+	var dark_rail: Color = Color(0.05, 0.05, 0.05, 0.65)
 	if l_idx >= 2:
 		_scratch_line_pts.resize(l_idx)
+		draw_multiline(_scratch_line_pts, dark_rail, 4.2, true)
 		draw_multiline(_scratch_line_pts, col, 2.0, true)
 	_scratch_line_pts_b.resize(0)
 	var chev_step: float = 130.0
@@ -1746,9 +1845,13 @@ func _draw_corridor_rail(from_pos: Vector2, to_pos: Vector2, half_width: float, 
 		_scratch_line_pts_b = BossConstants.append_double_chevron_pts(_scratch_line_pts_b, a + dir * cd, dir, chev_sz)
 		cd += chev_step
 	if _scratch_line_pts_b.size() >= 2:
+		draw_multiline(_scratch_line_pts_b, dark_rail, 3.8, true)
 		draw_multiline(_scratch_line_pts_b, col, 1.7, true)
+	draw_arc(b, end_radius, 0.0, TAU, 22, dark_rail, 4.2, true)
 	draw_arc(b, end_radius, 0.0, TAU, 22, col, 2.0, true)
-	draw_arc(b, end_radius * lerpf(1.65, 1.0, p), 0.0, TAU, 22, Color(0.98, 0.98, 0.98, lerpf(0.45, 0.92, p)), 1.6, true)
+	var converge_r: float = end_radius * lerpf(1.65, 1.0, p)
+	draw_arc(b, converge_r, 0.0, TAU, 22, dark_rail, 3.8, true)
+	draw_arc(b, converge_r, 0.0, TAU, 22, Color(0.98, 0.98, 0.98, lerpf(0.45, 0.92, p)), 1.6, true)
 
 
 func _draw_jsab_hand_details(idx: int) -> void:
@@ -1762,8 +1865,9 @@ func _draw_jsab_hand_details(idx: int) -> void:
 	var side: float = 1.0 if idx == 0 else -1.0
 	var act: int = int(h["action"])
 	var flash: float = float(h["flash"])
-	var cb: Color = Color(0.96, 0.96, 0.96, sc)
-	var cm: Color = Color(0.86, 0.86, 0.86, 0.96 * sc)
+	var ha: float = 0.55 if (acting_state != ActingState.FAKE_OUT_COLLAPSE and (_teleport_grace_timer > 0.0 or _is_hand_staging_or_recovering(idx))) else 1.0
+	var cb: Color = Color(0.96, 0.96, 0.96, sc * ha)
+	var cm: Color = Color(0.86, 0.86, 0.86, 0.96 * sc * ha)
 	match int(h["pose"]):
 		HandPose.OPEN:
 			for i: int in range(4):
@@ -1795,7 +1899,7 @@ func _draw_jsab_hand_details(idx: int) -> void:
 					_scratch_line_pts[ci * 4 + 1] = p_mid
 					_scratch_line_pts[ci * 4 + 2] = p_mid
 					_scratch_line_pts[ci * 4 + 3] = p_bot
-				draw_multiline(_scratch_line_pts, Color(0.98, 0.98, 0.98, (0.88 if hot else 0.52) * sc), 2.0, true)
+				draw_multiline(_scratch_line_pts, Color(0.98, 0.98, 0.98, (0.88 if hot else 0.52) * sc * ha), 2.0, true)
 		HandPose.POINTER:
 			_draw_transformed_poly(_make_finger_poly(Vector2(13.0, -3.0 * side) * sc, Vector2.RIGHT, 20.2 * sc, 3.8 * sc, 1.8 * sc), hp, hr, cb)
 			_draw_transformed_poly(_make_finger_poly(Vector2(1.5, -10.8 * side) * sc, Vector2(0.5, -0.86 * side).normalized(), 10.8 * sc, 3.2 * sc, 1.6 * sc), hp, hr, cm)
@@ -1808,10 +1912,10 @@ func _draw_jsab_hand_details(idx: int) -> void:
 				_draw_transformed_poly(_scratch_quad, hp, hr, cm)
 			var tip: Vector2 = hp + Vector2(34.5 * sc, -3.0 * side * sc).rotated(hr)
 			if act == HandAction.POINTER_AIM or flash > 0.0:
-				draw_circle(tip, (5.5 + 3.0 * flash) * sc, Color(1.0, 1.0, 1.0, 0.92 * sc))
-				draw_arc(tip, 9.5 * sc, 0.0, TAU, 16, Color(0.94, 0.94, 0.94, 0.72 * sc), 1.5, true)
+				draw_circle(tip, (5.5 + 3.0 * flash) * sc, Color(1.0, 1.0, 1.0, 0.92 * sc * ha))
+				draw_arc(tip, 9.5 * sc, 0.0, TAU, 16, Color(0.94, 0.94, 0.94, 0.72 * sc * ha), 1.5, true)
 				if act == HandAction.POINTER_AIM:
-					draw_line(tip, tip + Vector2.from_angle(hr) * 1400.0, Color(0.92, 0.92, 0.92, 0.20), 1.1, true)
+					draw_line(tip, tip + Vector2.from_angle(hr) * 1400.0, Color(0.92, 0.92, 0.92, 0.20 * ha), 1.1, true)
 		HandPose.CLAW:
 			for i: int in range(5):
 				var a: float = -1.15 + float(i) * 0.575

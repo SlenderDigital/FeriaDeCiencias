@@ -95,6 +95,12 @@ func configure(
 	_arena_size = arena_size
 	_sweep_dir = direction.normalized() if direction.length_squared() > 0.0001 else Vector2.RIGHT
 	_perp_dir = Vector2(-_sweep_dir.y, _sweep_dir.x)
+	if absf(_sweep_dir.x) >= absf(_sweep_dir.y):
+		if _perp_dir.y < 0.0:
+			_perp_dir = -_perp_dir
+	else:
+		if _perp_dir.x < 0.0:
+			_perp_dir = -_perp_dir
 	_warning_time = maxf(warning_time, 0.001)
 	_sweep_time = maxf(sweep_time, 0.1)
 	_wave_thickness = maxf(wave_thickness, 24.0)
@@ -129,7 +135,7 @@ func configure(
 	var perp_span: float = maxf(_perp_max - _perp_min, _gap_size + 40.0)
 	var pad: float = minf(_gap_size * 0.62, perp_span * 0.42)
 	_base_gap_perp = lerpf(_perp_min + pad, _perp_max - pad, clampf(gap_center_ratio, 0.1, 0.9))
-	_current_gap_perp = _base_gap_perp
+	_current_gap_perp = _eval_gap_perp(0.0)
 
 	current_phase = Phase.TELEGRAPH
 	phase_timer = 0.0
@@ -180,10 +186,7 @@ func simulate_physics(delta: float, player_node: Node2D = null) -> void:
 		Phase.ACTIVE:
 			var progress: float = clampf(phase_timer / maxf(_sweep_time, 0.001), 0.0, 1.0)
 			_current_sweep = lerpf(_sweep_start, _sweep_end, progress)
-			var wobble: float = sin(progress * TAU * 1.25) * _gap_wobble
-			var min_gap_c: float = _perp_min + _gap_size * 0.56
-			var max_gap_c: float = _perp_max - _gap_size * 0.56
-			_current_gap_perp = clampf(_base_gap_perp + wobble, min_gap_c, max_gap_c)
+			_current_gap_perp = _eval_gap_perp(progress)
 			_check_player_overlap(player_node)
 			if phase_timer >= _sweep_time:
 				current_phase = Phase.FADE_OUT
@@ -272,6 +275,44 @@ func _make_oriented_quad(s0: float, s1: float, p0: float, p1: float, offset: Vec
 	return _scratch_quad
 
 
+func _eval_gap_perp(progress: float) -> float:
+	var p: float = clampf(progress, 0.0, 1.0)
+	var wobble: float = sin(p * TAU * 1.25) * _gap_wobble
+	var min_gap_c: float = _perp_min + _gap_size * 0.56
+	var max_gap_c: float = _perp_max - _gap_size * 0.56
+	return clampf(_base_gap_perp + wobble, min_gap_c, max_gap_c)
+
+
+func _eval_gap_perp_at_sweep(sweep_coord: float) -> float:
+	var p: float = clampf((sweep_coord - _sweep_start) / maxf(_sweep_end - _sweep_start, 0.001), 0.0, 1.0)
+	return _eval_gap_perp(p)
+
+
+func _append_wave_corridor_rails(segments: int, dash_len: float, gap_len: float, anim_phase: float) -> void:
+	_rail_pts.resize(0)
+	var half_gap: float = _gap_size * 0.5
+	var n_segs: int = maxi(segments, 1)
+	var arc_lo: float = 0.0
+	var arc_hi: float = 0.0
+	var prev_s: float = _sweep_min
+	var prev_c: float = _eval_gap_perp_at_sweep(prev_s)
+	var prev_lo: Vector2 = _sweep_dir * prev_s + _perp_dir * (prev_c - half_gap)
+	var prev_hi: Vector2 = _sweep_dir * prev_s + _perp_dir * (prev_c + half_gap)
+
+	for i: int in range(1, n_segs + 1):
+		var t: float = float(i) / float(n_segs)
+		var cur_s: float = lerpf(_sweep_min, _sweep_max, t)
+		var cur_c: float = _eval_gap_perp_at_sweep(cur_s)
+		var cur_lo: Vector2 = _sweep_dir * cur_s + _perp_dir * (cur_c - half_gap)
+		var cur_hi: Vector2 = _sweep_dir * cur_s + _perp_dir * (cur_c + half_gap)
+		_rail_pts = BossConstants.append_dashed_line_pts(_rail_pts, prev_lo, cur_lo, dash_len, gap_len, anim_phase + arc_lo)
+		_rail_pts = BossConstants.append_dashed_line_pts(_rail_pts, prev_hi, cur_hi, dash_len, gap_len, anim_phase + arc_hi)
+		arc_lo += prev_lo.distance_to(cur_lo)
+		arc_hi += prev_hi.distance_to(cur_hi)
+		prev_lo = cur_lo
+		prev_hi = cur_hi
+
+
 func _draw() -> void:
 	match current_phase:
 		Phase.TELEGRAPH:
@@ -287,8 +328,9 @@ func _draw() -> void:
 func _draw_telegraph() -> void:
 	var progress: float = clampf(phase_timer / maxf(_warning_time, 0.001), 0.0, 1.0)
 	var flicker: float = 0.68 + 0.32 * sin(_glitch_time * 52.0)
-	var gap_lo: float = _base_gap_perp - _gap_size * 0.5
-	var gap_hi: float = _base_gap_perp + _gap_size * 0.5
+	var entry_gap: float = _eval_gap_perp(0.0)
+	var gap_lo: float = entry_gap - _gap_size * 0.5
+	var gap_hi: float = entry_gap + _gap_size * 0.5
 
 	# RGB chromatic scanline rails across the entry band
 	var band_depth: float = lerpf(28.0, _wave_thickness * 0.95, ease(progress, 0.6))
@@ -331,27 +373,11 @@ func _draw_telegraph() -> void:
 	if _chev_pts.size() >= 2:
 		draw_multiline(_chev_pts, Color(1.0, 1.0, 1.0, 0.42 + 0.50 * progress), 1.6, true)
 
-	# Safe gap framing rails (batched)
+	# Exact sinusoidal safe-corridor wave rails (24 segments across _sweep_min.._sweep_max)
 	var gap_col: Color = Color(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, 0.45 + 0.45 * progress)
-	_rail_pts.resize(0)
-	_rail_pts = BossConstants.append_dashed_line_pts(
-		_rail_pts,
-		_sweep_dir * _sweep_min + _perp_dir * gap_lo,
-		_sweep_dir * _sweep_max + _perp_dir * gap_lo,
-		14.0,
-		10.0,
-		_glitch_time * 90.0
-	)
-	_rail_pts = BossConstants.append_dashed_line_pts(
-		_rail_pts,
-		_sweep_dir * _sweep_min + _perp_dir * gap_hi,
-		_sweep_dir * _sweep_max + _perp_dir * gap_hi,
-		14.0,
-		10.0,
-		_glitch_time * 90.0
-	)
+	_append_wave_corridor_rails(24, 14.0, 10.0, _glitch_time * 90.0)
 	if _rail_pts.size() >= 2:
-		draw_multiline(_rail_pts, gap_col, 1.6, true)
+		draw_multiline(_rail_pts, gap_col, 1.8, true)
 
 
 func _draw_active() -> void:
@@ -361,6 +387,11 @@ func _draw_active() -> void:
 	var gap_lo: float = _current_gap_perp - _gap_size * 0.5
 	var gap_hi: float = _current_gap_perp + _gap_size * 0.5
 	var wings: Array[Vector2] = [Vector2(_perp_min, gap_lo), Vector2(gap_hi, _perp_max)]
+
+	# 0. Persistent faint sinusoidal guide rails tracing exact corridor trajectory
+	_append_wave_corridor_rails(24, 14.0, 10.0, _glitch_time * 90.0)
+	if _rail_pts.size() >= 2:
+		draw_multiline(_rail_pts, Color(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, 0.30), 1.5, true)
 
 	# 1. Animated scanline echo trail behind crest
 	for echo_i: int in range(1, 5):

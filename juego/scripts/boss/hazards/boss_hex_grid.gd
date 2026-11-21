@@ -23,8 +23,13 @@ var _busy_indices: Array[int] = []
 var _active_tile_count: int = 0
 var _max_col: int = 0
 var _max_row: int = 0
+var _elapsed: float = 0.0
+var _corridor_axis: int = -1
+var _corridor_center: float = 0.0
+var _corridor_half_width: float = 0.0
 var _unit_hex: PackedVector2Array = PackedVector2Array()
 var _scratch_hex: PackedVector2Array = PackedVector2Array()
+var _corridor_pts: PackedVector2Array = PackedVector2Array()
 var _outer_rail_pts: PackedVector2Array = PackedVector2Array()
 var _outer_rail_cols: PackedColorArray = PackedColorArray()
 var _inner_rim_pts: PackedVector2Array = PackedVector2Array()
@@ -62,6 +67,12 @@ func set_arena_size(sz: Vector2) -> void:
 	queue_redraw()
 
 
+func _clear_corridor_metadata() -> void:
+	_corridor_axis = -1
+	_corridor_center = 0.0
+	_corridor_half_width = 0.0
+
+
 func clear() -> void:
 	for idx: int in _busy_indices:
 		var c: Dictionary = _cells[idx]
@@ -70,6 +81,8 @@ func clear() -> void:
 		c["delay"] = 0.0
 	_busy_indices.clear()
 	_active_tile_count = 0
+	_elapsed = 0.0
+	_clear_corridor_metadata()
 	is_hazard_active = false
 	queue_redraw()
 
@@ -105,6 +118,7 @@ func trigger_pattern(
 	var skip_r_sq: float = skip_radius * skip_radius
 	var col_step: float = 1.5 * HEX_RADIUS
 	var row_step: float = sqrt(3.0) * HEX_RADIUS
+	_clear_corridor_metadata()
 
 	match pattern:
 		BossConstants.HexPattern.WAVE_LR:
@@ -163,28 +177,36 @@ func trigger_pattern(
 			var safe_center: float = float(params.get("safe_center", arena_size.y * 0.5))
 			var safe_half: float = maxf(float(params.get("safe_half_width", 96.0)), MIN_CORRIDOR_HALF_WIDTH)
 			safe_center = clampf(safe_center, safe_half + 16.0, arena_size.y - safe_half - 16.0)
+			var exclude_half_h: float = safe_half + HEX_RADIUS * 0.85
+			_corridor_axis = 0
+			_corridor_center = safe_center
+			_corridor_half_width = safe_half
 			for idx: int in range(_cells.size()):
 				var c: Dictionary = _cells[idx]
 				var pos: Vector2 = c["pos"]
 				if _should_skip(pos, skip_center, skip_r_sq):
 					continue
 				var dy: float = absf(pos.y - safe_center)
-				if dy >= safe_half:
-					var d: float = maxf((dy - safe_half) / row_step, 0.0) * step_t
+				if dy >= exclude_half_h:
+					var d: float = maxf((dy - exclude_half_h) / row_step, 0.0) * step_t
 					_schedule_cell(idx, d, warn_t, act_t)
 
 		BossConstants.HexPattern.CORRIDOR_V:
 			var safe_center: float = float(params.get("safe_center", arena_size.x * 0.5))
 			var safe_half: float = maxf(float(params.get("safe_half_width", 96.0)), MIN_CORRIDOR_HALF_WIDTH)
 			safe_center = clampf(safe_center, safe_half + 16.0, arena_size.x - safe_half - 16.0)
+			var exclude_half_v: float = safe_half + HEX_RADIUS * 0.85
+			_corridor_axis = 1
+			_corridor_center = safe_center
+			_corridor_half_width = safe_half
 			for idx: int in range(_cells.size()):
 				var c: Dictionary = _cells[idx]
 				var pos: Vector2 = c["pos"]
 				if _should_skip(pos, skip_center, skip_r_sq):
 					continue
 				var dx: float = absf(pos.x - safe_center)
-				if dx >= safe_half:
-					var d: float = maxf((dx - safe_half) / col_step, 0.0) * step_t
+				if dx >= exclude_half_v:
+					var d: float = maxf((dx - exclude_half_v) / col_step, 0.0) * step_t
 					_schedule_cell(idx, d, warn_t, act_t)
 
 		BossConstants.HexPattern.SPIRAL:
@@ -213,8 +235,10 @@ func simulate_physics(delta: float, player_node: Node2D = null) -> void:
 	if _busy_indices.is_empty():
 		_active_tile_count = 0
 		is_hazard_active = false
+		_clear_corridor_metadata()
 		return
 
+	_elapsed += maxf(delta, 0.0)
 	var active_count: int = 0
 	var any_visible_or_changed: bool = false
 	var i: int = _busy_indices.size() - 1
@@ -337,6 +361,8 @@ func _rebuild_lattice() -> void:
 	_cells.clear()
 	_busy_indices.clear()
 	_active_tile_count = 0
+	_elapsed = 0.0
+	_clear_corridor_metadata()
 	is_hazard_active = false
 	_max_col = 0
 	_max_row = 0
@@ -438,8 +464,13 @@ func _draw() -> void:
 	var tri_v_i: int = 0
 	var tri_idx_i: int = 0
 
-	var active_fill_col: Color = Color(0.84, 0.84, 0.84, 0.96)
-	var active_seam_col: Color = Color(0.04, 0.04, 0.04, 0.95)
+	var active_fill_col: Color = Color(0.65, 0.65, 0.65, 0.92)
+	var active_seam_col: Color = Color(0.06, 0.06, 0.06, 0.95)
+	var active_inner_col: Color = Color(0.94, 0.94, 0.94, 0.90)
+	var active_inner_r: float = outer_r * 0.80
+	var any_telegraph: bool = false
+	var any_active: bool = false
+	var max_tele_prog: float = 0.0
 
 	# Pass 1: batch all hex polygon fills into triangle arrays while packing outline segments for Pass 2
 	for idx: int in _busy_indices:
@@ -451,21 +482,25 @@ func _draw() -> void:
 		var outer_edges: PackedVector2Array = c["outer_edges"]
 
 		if state == TileState.TELEGRAPH:
+			any_telegraph = true
 			var warn_t: float = maxf(float(c["warning_time"]), 0.001)
 			var progress: float = clampf(float(c["timer"]) / warn_t, 0.0, 1.0)
+			max_tele_prog = maxf(max_tele_prog, progress)
 
 			var inner_r: float = outer_r * lerpf(0.22, 0.94, ease(progress, 0.72))
 			for k: int in range(6):
 				var pt: Vector2 = pos + _unit_hex[k] * inner_r
 				_scratch_hex[k] = pt
 				_tri_pts[tri_v_i + k] = pt
-			var fill_g: float = lerpf(0.16, 0.38, progress)
-			_write_hex_meta(tri_v_i, tri_idx_i, Color(fill_g, fill_g, fill_g, lerpf(0.14, 0.34, progress)))
+			var fill_g: float = lerpf(0.18, 0.40, progress)
+			_write_hex_meta(tri_v_i, tri_idx_i, Color(fill_g, fill_g, fill_g, lerpf(0.16, 0.36, progress)))
 			tri_v_i += 6
 			tri_idx_i += 12
 
-			var out_col: Color = Color(0.42, 0.42, 0.42, lerpf(0.26, 0.56, progress))
-			var in_col: Color = Color(0.68, 0.68, 0.68, lerpf(0.34, 0.72, progress))
+			var out_g: float = lerpf(0.55, 0.85, progress)
+			var out_col: Color = Color(out_g, out_g, out_g, lerpf(0.38, 0.75, progress))
+			var in_g: float = lerpf(0.68, 0.92, progress)
+			var in_col: Color = Color(in_g, in_g, in_g, lerpf(0.45, 0.82, progress))
 			for k: int in range(6):
 				var k2: int = k * 2
 				if has_offset:
@@ -485,6 +520,7 @@ func _draw() -> void:
 				inner_col_i += 1
 
 		elif state == TileState.ACTIVE:
+			any_active = true
 			var outer_verts: PackedVector2Array = c["outer_verts"]
 			if has_offset:
 				for k: int in range(6):
@@ -497,6 +533,9 @@ func _draw() -> void:
 			tri_idx_i += 12
 
 			for k: int in range(6):
+				_scratch_hex[k] = pos + _unit_hex[k] * active_inner_r
+
+			for k: int in range(6):
 				var k2: int = k * 2
 				if has_offset:
 					_active_seam_pts[seam_pt_i] = outer_edges[k2] + local_origin
@@ -507,6 +546,12 @@ func _draw() -> void:
 				_active_seam_cols[seam_col_i] = active_seam_col
 				seam_pt_i += 2
 				seam_col_i += 1
+
+				_inner_rim_pts[inner_pt_i] = _scratch_hex[k]
+				_inner_rim_pts[inner_pt_i + 1] = _scratch_hex[(k + 1) % 6]
+				_inner_rim_cols[inner_col_i] = active_inner_col
+				inner_pt_i += 2
+				inner_col_i += 1
 
 		elif state == TileState.FADE:
 			var fade_t: float = clampf(float(c["timer"]) / maxf(TILE_FADE_DURATION, 0.001), 0.0, 1.0)
@@ -524,16 +569,77 @@ func _draw() -> void:
 		_tri_indices.resize(tri_idx_i)
 		RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), _tri_indices, _tri_pts, _tri_cols)
 
-	# Pass 2: batched outline multilines (max 3 draw calls total, antialiased=false for zero AA-edge triangle bloat)
+	# Pass 2: batched outline multilines (antialiased=false for zero AA-edge triangle bloat)
 	if outer_pt_i >= 2:
 		_outer_rail_pts.resize(outer_pt_i)
 		_outer_rail_cols.resize(outer_col_i)
-		draw_multiline_colors(_outer_rail_pts, _outer_rail_cols, 1.4, false)
+		draw_multiline_colors(_outer_rail_pts, _outer_rail_cols, 1.5, false)
 	if inner_pt_i >= 2:
 		_inner_rim_pts.resize(inner_pt_i)
 		_inner_rim_cols.resize(inner_col_i)
-		draw_multiline_colors(_inner_rim_pts, _inner_rim_cols, 1.3, false)
+		draw_multiline_colors(_inner_rim_pts, _inner_rim_cols, 1.5, false)
 	if seam_pt_i >= 2:
 		_active_seam_pts.resize(seam_pt_i)
 		_active_seam_cols.resize(seam_col_i)
 		draw_multiline_colors(_active_seam_pts, _active_seam_cols, 2.4, false)
+
+	_draw_corridor_rails(local_origin, any_telegraph, any_active, max_tele_prog)
+
+
+func _draw_corridor_rails(local_origin: Vector2, any_telegraph: bool, any_active: bool, max_tele_prog: float) -> void:
+	if _corridor_axis < 0 or (not any_telegraph and not any_active):
+		return
+
+	var lo: float = _corridor_center - _corridor_half_width
+	var hi: float = _corridor_center + _corridor_half_width
+	_corridor_pts.resize(0)
+
+	if any_telegraph and not any_active:
+		var anim_phase: float = _elapsed * 68.0
+		if _corridor_axis == 0:
+			var y0: float = lo + local_origin.y
+			var y1: float = hi + local_origin.y
+			var x0: float = local_origin.x
+			var x1: float = arena_size.x + local_origin.x
+			_corridor_pts = BossConstants.append_dashed_line_pts(_corridor_pts, Vector2(x0, y0), Vector2(x1, y0), 14.0, 10.0, anim_phase)
+			_corridor_pts = BossConstants.append_dashed_line_pts(_corridor_pts, Vector2(x0, y1), Vector2(x1, y1), 14.0, 10.0, -anim_phase)
+		else:
+			var x0: float = lo + local_origin.x
+			var x1: float = hi + local_origin.x
+			var y0: float = local_origin.y
+			var y1: float = arena_size.y + local_origin.y
+			_corridor_pts = BossConstants.append_dashed_line_pts(_corridor_pts, Vector2(x0, y0), Vector2(x0, y1), 14.0, 10.0, anim_phase)
+			_corridor_pts = BossConstants.append_dashed_line_pts(_corridor_pts, Vector2(x1, y0), Vector2(x1, y1), 14.0, 10.0, -anim_phase)
+		if _corridor_pts.size() >= 2:
+			draw_multiline(_corridor_pts, Color(0.06, 0.06, 0.06, lerpf(0.45, 0.72, max_tele_prog)), 3.6, false)
+			draw_multiline(_corridor_pts, Color(0.94, 0.94, 0.94, lerpf(0.55, 0.92, max_tele_prog)), 1.8, false)
+		return
+
+	# Active corridor edge ticks (pointing outward toward the hazard sides)
+	var tick_step: float = 64.0
+	var tick_len: float = 7.0
+	if _corridor_axis == 0:
+		var y_lo: float = lo + local_origin.y
+		var y_hi: float = hi + local_origin.y
+		var x: float = tick_step * 0.5
+		while x < arena_size.x:
+			var px: float = x + local_origin.x
+			_corridor_pts.append(Vector2(px, y_lo))
+			_corridor_pts.append(Vector2(px, y_lo - tick_len))
+			_corridor_pts.append(Vector2(px, y_hi))
+			_corridor_pts.append(Vector2(px, y_hi + tick_len))
+			x += tick_step
+	else:
+		var x_lo: float = lo + local_origin.x
+		var x_hi: float = hi + local_origin.x
+		var y: float = tick_step * 0.5
+		while y < arena_size.y:
+			var py: float = y + local_origin.y
+			_corridor_pts.append(Vector2(x_lo, py))
+			_corridor_pts.append(Vector2(x_lo - tick_len, py))
+			_corridor_pts.append(Vector2(x_hi, py))
+			_corridor_pts.append(Vector2(x_hi + tick_len, py))
+			y += tick_step
+	if _corridor_pts.size() >= 2:
+		draw_multiline(_corridor_pts, Color(0.06, 0.06, 0.06, 0.55), 3.2, false)
+		draw_multiline(_corridor_pts, Color(0.84, 0.84, 0.84, 0.48), 1.5, false)

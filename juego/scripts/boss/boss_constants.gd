@@ -17,7 +17,7 @@ const BOSS_BODY_RADIUS: float = 30.0
 const BOSS_HAND_RADIUS: float = 19.0
 
 const PARRY_WINDOW_SEC: float = 0.32
-const PARRY_COOLDOWN_SEC: float = 0.45
+const PARRY_COOLDOWN_SEC: float = 0.36
 const PARRY_SHIELD_REFUND: float = 0.35
 
 const BEAM_WIDTH: float = 26.0
@@ -72,8 +72,7 @@ static func apply_player_hit(player: Node2D, is_parryable: bool, kind: StringNam
 	if player == null or not is_instance_valid(player):
 		return
 	player.set_meta(&"last_hit_parryable", is_parryable)
-	if kind != &"":
-		player.set_meta(&"last_hit_hazard_kind", kind)
+	player.set_meta(&"last_hit_hazard_kind", kind)
 	if player.has_method(&"take_damage"):
 		player.take_damage(1)
 

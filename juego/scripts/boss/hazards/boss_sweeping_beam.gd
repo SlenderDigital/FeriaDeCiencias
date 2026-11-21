@@ -31,6 +31,7 @@ var _reversed: bool = false
 var _follow_node: Node2D = null
 var _queued_free: bool = false
 var _scratch_quad: PackedVector2Array = PackedVector2Array()
+var _wedge_poly: PackedVector2Array = PackedVector2Array()
 var _rail_pts: PackedVector2Array = PackedVector2Array()
 var _filament_pts: PackedVector2Array = PackedVector2Array()
 var _tick_pts: PackedVector2Array = PackedVector2Array()
@@ -39,6 +40,7 @@ var _chev_pts: PackedVector2Array = PackedVector2Array()
 
 func _init() -> void:
 	_scratch_quad.resize(4)
+	_wedge_poly.resize(10)
 	add_to_group("boss_hazards")
 
 
@@ -174,8 +176,25 @@ func _draw() -> void:
 			_rail_pts.resize(0)
 			_filament_pts.resize(0)
 			_tick_pts.resize(0)
+			_chev_pts.resize(0)
 
-			# Pass 1: emit all spoke quads while accumulating dashed rails, filaments & ticks
+			var has_rot: bool = absf(_angular_speed) > 0.01
+			var rot_sign: float = 1.0 if _angular_speed >= 0.0 else -1.0
+			var max_wedge: float = (PI / float(beam_count)) * 0.50
+			var preview_span: float = minf(absf(_angular_speed) * minf(_active_time, 1.4), max_wedge) if has_rot else 0.0
+			if has_rot and preview_span > 0.02:
+				var wedge_r: float = minf(vis_half_len, 900.0)
+				var wedge_col: Color = Color(0.74, 0.74, 0.74, lerpf(0.05, 0.14, progress))
+				var half_spokes: int = beam_count * 2
+				for k: int in range(half_spokes):
+					var a0: float = current_angle + float(k) * PI / float(beam_count)
+					_wedge_poly[0] = Vector2.ZERO
+					for step_i: int in range(9):
+						var a_cur: float = a0 + rot_sign * preview_span * (float(step_i) / 8.0)
+						_wedge_poly[1 + step_i] = Vector2.from_angle(a_cur) * wedge_r
+					draw_colored_polygon(_wedge_poly, wedge_col)
+
+			# Pass 1: emit all spoke quads while accumulating dashed rails, filaments, ticks & rotation chevrons
 			for i: int in range(beam_count):
 				var angle: float = get_spoke_angle(i)
 				var dir: Vector2 = Vector2.from_angle(angle)
@@ -201,6 +220,14 @@ func _draw() -> void:
 				# High-contrast dashed outer rails
 				_rail_pts = BossConstants.append_dashed_line_pts(_rail_pts, p0 - side * half_w, p1 - side * half_w, 16.0, 10.0, dash_phase)
 				_rail_pts = BossConstants.append_dashed_line_pts(_rail_pts, p0 + side * half_w, p1 + side * half_w, 16.0, 10.0, -dash_phase)
+
+				if has_rot:
+					for dist_d: float in [-320.0, -160.0, 160.0, 320.0]:
+						if absf(dist_d) > vis_half_len - 20.0:
+							continue
+						var tangent: Vector2 = side * (rot_sign if dist_d >= 0.0 else -rot_sign)
+						var c_pos: Vector2 = dir * dist_d + tangent * (half_w + 13.0)
+						_chev_pts = BossConstants.append_double_chevron_pts(_chev_pts, c_pos, tangent, 7.5)
 
 				# Converging inner filaments + cross-ticks locking onto centerline
 				if filament_offset > 1.2:
@@ -231,7 +258,7 @@ func _draw() -> void:
 					_filament_pts[f_idx] = p0
 					_filament_pts[f_idx + 1] = p1
 
-			# Pass 2: batched multilines + optional hub arc
+			# Pass 2: batched multilines, rotational arrow arcs & optional hub arc
 			if _rail_pts.size() >= 2:
 				draw_multiline(_rail_pts, rail_col, 1.8, true)
 			if _filament_pts.size() >= 2:
@@ -241,6 +268,23 @@ func _draw() -> void:
 					draw_multiline(_filament_pts, Color(1.0, 1.0, 1.0, 0.98), 3.0, true)
 			if _tick_pts.size() >= 2:
 				draw_multiline(_tick_pts, tick_col, 1.4, true)
+
+			if has_rot:
+				var arc_span: float = minf(maxf(preview_span * 0.85, 0.20), minf(max_wedge * 0.90, 0.48))
+				var arc_col: Color = Color(0.92, 0.92, 0.92, lerpf(0.48, 0.92, progress))
+				var half_spokes: int = beam_count * 2
+				for r_arc: float in [maxf(beam_width * 2.2, 58.0), 220.0]:
+					if r_arc > vis_half_len - 24.0:
+						continue
+					for k: int in range(half_spokes):
+						var a0: float = current_angle + float(k) * PI / float(beam_count) + rot_sign * 0.06
+						var a1: float = a0 + rot_sign * arc_span
+						draw_arc(Vector2.ZERO, r_arc, minf(a0, a1), maxf(a0, a1), 10, arc_col, 1.8, true)
+						var tip_dir: Vector2 = Vector2.from_angle(a1 + rot_sign * PI * 0.5)
+						_chev_pts = BossConstants.append_double_chevron_pts(_chev_pts, Vector2.from_angle(a1) * r_arc, tip_dir, 7.0)
+				if _chev_pts.size() >= 2:
+					draw_multiline(_chev_pts, Color(0.06, 0.06, 0.06, 0.65), 3.4, true)
+					draw_multiline(_chev_pts, Color(0.96, 0.96, 0.96, lerpf(0.55, 0.96, progress)), 1.8, true)
 
 			if beam_count > 1:
 				var hub_r: float = lerpf(beam_width * 1.25, beam_width * 0.65, progress)

@@ -4,19 +4,15 @@
 
 [resource]
 script = ExtResource("1_cqg7s")
-player_name = "tito"
+player_name = "ANA"
 records = {
-1: {
-"completed": true,
-"time": 45.0
-},
-2: {
+0: {
 "completed": false,
-"time": 35.316666666665945
+"time": 31.04999999999952
 },
 3: {
 "completed": false,
-"time": 97.5666666666624
+"time": 74.79999999999704
 }
 }
 player_profiles = {
@@ -30,6 +26,66 @@ player_profiles = {
 3: {
 "completed": false,
 "time": 53.1833333333316
+}
+}
+},
+"ana": {
+"display_name": "ANA",
+"records": {
+0: {
+"completed": false,
+"time": 31.04999999999952
+},
+3: {
+"completed": false,
+"time": 74.79999999999704
+}
+}
+},
+"facu": {
+"display_name": "FACU",
+"records": {
+0: {
+"completed": true,
+"time": 45.0
+},
+2: {
+"completed": false,
+"time": 36.833333333332526
+},
+3: {
+"completed": true,
+"time": 120.0
+}
+}
+},
+"jhones": {
+"display_name": "jhones",
+"records": {
+0: {
+"completed": true,
+"time": 45.0
+},
+3: {
+"completed": false,
+"time": 79.69999999999676
+}
+}
+},
+"loyo": {
+"display_name": "LOYO",
+"records": {
+0: {
+"completed": false,
+"time": 41.04999999999895
+},
+1: {
+"completed": false,
+"time": 35.73333333333259
+},
+3: {
+"completed": false,
+"time": 84.01666666666318
 }
 }
 },
@@ -50,12 +106,71 @@ player_profiles = {
 }
 }
 },
+"milanesa 1-b": {
+"display_name": "milanesa 1-B",
+"records": {
+0: {
+"completed": true,
+"time": 45.0
+},
+1: {
+"completed": false,
+"time": 43.24999999999883
+},
+3: {
+"completed": true,
+"time": 120.0
+}
+}
+},
+"otero": {
+"display_name": "otero",
+"records": {
+1: {
+"completed": false,
+"time": 23.083333333333304
+},
+3: {
+"completed": false,
+"time": 53.066666666664936
+}
+}
+},
 "player": {
 "display_name": "PLAYER",
 "records": {
+0: {
+"completed": true,
+"time": 45.0
+},
+1: {
+"completed": false,
+"time": 23.733333333333267
+},
+2: {
+"completed": false,
+"time": 21.716666666666715
+},
 3: {
 "completed": false,
 "time": 107.6833333333285
+}
+}
+},
+"player7": {
+"display_name": "PLAYER7",
+"records": {
+0: {
+"completed": true,
+"time": 45.0
+},
+1: {
+"completed": false,
+"time": 21.450000000000063
+},
+3: {
+"completed": false,
+"time": 87.23333333332967
 }
 }
 },
@@ -69,6 +184,27 @@ player_profiles = {
 3: {
 "completed": false,
 "time": 100.33333333332892
+}
+}
+},
+"simon": {
+"display_name": "SIMON",
+"records": {
+0: {
+"completed": true,
+"time": 45.0
+},
+1: {
+"completed": true,
+"time": 45.0
+},
+2: {
+"completed": true,
+"time": 45.0
+},
+3: {
+"completed": true,
+"time": 120.0
 }
 }
 },
@@ -89,6 +225,15 @@ player_profiles = {
 }
 }
 },
+"toti": {
+"display_name": "TOTI",
+"records": {
+1: {
+"completed": false,
+"time": 35.69999999999926
+}
+}
+},
 "tu mama": {
 "display_name": "tu mama",
 "records": {
@@ -99,6 +244,27 @@ player_profiles = {
 3: {
 "completed": false,
 "time": 80.36666666666339
+}
+}
+},
+"tu nombree": {
+"display_name": "tu nombree",
+"records": {
+0: {
+"completed": true,
+"time": 45.0
+},
+1: {
+"completed": true,
+"time": 45.0
+},
+2: {
+"completed": false,
+"time": 16.300000000000356
+},
+3: {
+"completed": true,
+"time": 120.0
 }
 }
 }

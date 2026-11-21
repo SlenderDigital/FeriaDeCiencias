@@ -141,9 +141,6 @@ func _on_beat_tick(beat_idx: int, arena_size: Vector2, player: Node2D) -> void:
 			if beat_idx in [71, 77]:
 				_orbit_spike_ring.release_tangential_spikes(_bullet_manager, 215.0, 3)
 				seen_hazard_kinds[&"boss_bullets"] = true
-			elif beat_idx in [227, 231, 235]:
-				_orbit_spike_ring.release_tangential_spikes(_bullet_manager, 240.0, 3)
-				seen_hazard_kinds[&"boss_bullets"] = true
 
 
 func _prune_transients() -> void:
@@ -181,6 +178,14 @@ func _scale_vec(arena_size: Vector2) -> Vector2:
 
 func _sp(ref_pos: Vector2, s: Vector2) -> Vector2:
 	return Vector2(ref_pos.x * s.x, ref_pos.y * s.y)
+
+
+func _spawn_bullet_ring_fx(origin: Vector2) -> void:
+	"""Emit a crisp monochrome contracting + expanding ring pulse when a bullet ring spawns."""
+	if _arena_fx == null:
+		return
+	_arena_fx.spawn_ring(origin, 48.0, 12.0, 0.22, Color(0.86, 0.86, 0.86, 0.72), 1.6)
+	_arena_fx.spawn_ring(origin, 14.0, 88.0, 0.32, Color(0.96, 0.96, 0.96, 0.85), 2.2)
 
 
 func _execute_cue(cue: Dictionary, song_beat: float, arena_size: Vector2, player: Node2D) -> void:
@@ -408,6 +413,7 @@ func _execute_cue(cue: Dictionary, song_beat: float, arena_size: Vector2, player
 					7.0,
 					StringName(params.get("shape", &"diamond"))
 				)
+				_spawn_bullet_ring_fx(boss_pos)
 				seen_hazard_kinds[&"boss_bullets"] = true
 				BossConstants.play_sfx(_level, &"enemy_fire", -5.0)
 
@@ -423,6 +429,7 @@ func _execute_cue(cue: Dictionary, song_beat: float, arena_size: Vector2, player
 					7.5,
 					StringName(params.get("shape", &"orb"))
 				)
+				_spawn_bullet_ring_fx(origin)
 				seen_hazard_kinds[&"boss_bullets"] = true
 				BossConstants.play_sfx(_level, &"enemy_fire", -6.0)
 
@@ -489,13 +496,15 @@ func _execute_cue(cue: Dictionary, song_beat: float, arena_size: Vector2, player
 				_beam_container.add_child(wave)
 				var side: StringName = StringName(params.get("side", &"left"))
 				var is_h: bool = (side == &"left" or side == &"right")
-				var gap_center: float = float(params.get("gap_center", 324.0)) * (s.y if is_h else s.x)
+				var perp_scale: float = s.y if is_h else s.x
+				var gap_center: float = float(params.get("gap_center", 324.0)) * perp_scale
+				var gap_size: float = maxf(float(params.get("gap_size", 152.0)) * perp_scale, BossShockwaveRing.MIN_TIDAL_GAP)
 				wave.configure_tidal_wave(
 					arena_size,
 					side,
 					float(params.get("thickness", 30.0)),
 					gap_center,
-					float(params.get("gap_size", 152.0)),
+					gap_size,
 					time_to_impact,
 					float(params.get("travel_time", 1.38)),
 					bool(params.get("parryable", true))
@@ -531,11 +540,13 @@ func _execute_cue(cue: Dictionary, song_beat: float, arena_size: Vector2, player
 				_hex_grid.set_arena_size(arena_size)
 				var hp: Dictionary = (params.get("params", {}) as Dictionary).duplicate()
 				var pat: int = int(params.get("pattern", BossConstants.HexPattern.WAVE_LR))
+				var corridor_scale: float = s.y if pat == BossConstants.HexPattern.CORRIDOR_H else s.x
 				if hp.has("origin"):
 					hp["origin"] = _sp(Vector2(hp["origin"]), s)
 				if hp.has("safe_center"):
-					var sc: float = float(hp["safe_center"])
-					hp["safe_center"] = sc * (s.y if pat == BossConstants.HexPattern.CORRIDOR_H else s.x)
+					hp["safe_center"] = float(hp["safe_center"]) * corridor_scale
+				if hp.has("safe_half_width"):
+					hp["safe_half_width"] = maxf(float(hp["safe_half_width"]) * corridor_scale, BossHexGrid.MIN_CORRIDOR_HALF_WIDTH)
 				_hex_grid.trigger_pattern(
 					pat,
 					time_to_impact,
@@ -643,15 +654,20 @@ func _execute_cue(cue: Dictionary, song_beat: float, arena_size: Vector2, player
 			if _beam_container != null:
 				var wave: BossGlitchWave = BossGlitchWave.new()
 				_beam_container.add_child(wave)
+				var gw_dir: Vector2 = Vector2(params.get("direction", Vector2.RIGHT))
+				var gw_norm: Vector2 = gw_dir.normalized() if gw_dir.length_squared() > 0.0001 else Vector2.RIGHT
+				var gw_perp_scale: float = Vector2(absf(gw_norm.y) * s.x, absf(gw_norm.x) * s.y).length()
+				var gw_gap_size: float = maxf(float(params.get("gap_size", 152.0)) * gw_perp_scale, BossGlitchWave.MIN_GAP_SIZE)
+				var gw_gap_wobble: float = maxf(float(params.get("gap_wobble", 62.0)) * gw_perp_scale, 0.0)
 				wave.configure(
 					arena_size,
-					Vector2(params.get("direction", Vector2.RIGHT)),
+					gw_dir,
 					time_to_impact,
 					float(params.get("sweep_time", 1.65)),
 					float(params.get("wave_thickness", 74.0)),
 					float(params.get("gap_center_ratio", 0.5)),
-					float(params.get("gap_size", 152.0)),
-					float(params.get("gap_wobble", 62.0)),
+					gw_gap_size,
+					gw_gap_wobble,
 					bool(params.get("parryable", true))
 				)
 				_active_glitch_waves.append(wave)

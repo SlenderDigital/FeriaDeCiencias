@@ -487,12 +487,11 @@ static func _append_phase_6(cues: Array[Dictionary]) -> void:
 
 # ------------------------------------------------------------------------------
 # PHASE 7 (Beats 192-223, 90-105s): EXHAUSTED_PANTING / STOMP_COLOSSUS
-# Half-Time Industrial Stomp Groove:
-#   - Every Beat 0 (192, 196, 200, 204, 208, 212, 216, 220) = HEAVY STOMP:
-#     alternating H/V BossShockwaveRing TIDAL_WAVE (gap=160px, parryable) + pistons/wall slams.
-#   - Every Beat 2 (194, 198, 202, 206, 210, 214, 218, 222) = CRISP SNARE:
-#     BossHexGrid CORRIDOR_H/V / CHECKER + claw swipes / pincer + surgical 4-way beam snaps.
-#   - Odd-bar beat 1.5 pickup (197.5, 205.5, 213.5, 221.5): 8-particle mouth burst (235 px/s).
+# Half-Time Industrial Stomp Groove (clean transition clear, lead_beats >= 2.0):
+#   - Alternating Stomp & Snare bars eliminate tidal-wave vs hex-corridor collisions:
+#     * Bars 0, 2, 4, 6: Pistons / 4-way Beam Snaps + Hex Corridor/Checker (no crossing tidal wave).
+#     * Bars 1, 3, 5, 7: Parryable Tidal Wave (gap=185px) + flanking Wall Slam + post-wave Hand Strike.
+#   - Bars 1 & 4 beat 2.5/1.5 pickup (198.5, 209.5): 8-particle mouth burst (215 px/s).
 # ------------------------------------------------------------------------------
 static func _append_phase_7(cues: Array[Dictionary]) -> void:
 	_add(cues, 7, 192.0, 0.0, &"phase_transition", {
@@ -500,90 +499,110 @@ static func _append_phase_7(cues: Array[Dictionary]) -> void:
 		"form": 5, # STOMP_COLOSSUS
 		"target": Vector2(576.0, 168.0),
 		"move_speed": 6.8,
+		"clear_hazards": true,
 	}, -10)
 
-	var tidal_sides: Array[StringName] = [&"left", &"top", &"right", &"bottom", &"left", &"bottom", &"right", &"top"]
-	var tidal_gaps: Array[float] = [324.0, 576.0, 240.0, 760.0, 440.0, 380.0, 280.0, 620.0]
-	var slam_sides: Array[StringName] = [&"left", &"right", &"bottom", &"top"]
-	var hex_cycle: Array[int] = [
-		BossConstants.HexPattern.CORRIDOR_H,
-		BossConstants.HexPattern.CORRIDOR_V,
-		BossConstants.HexPattern.CHECKER_A,
-		BossConstants.HexPattern.CORRIDOR_H,
-		BossConstants.HexPattern.CORRIDOR_V,
-		BossConstants.HexPattern.CHECKER_B,
-		BossConstants.HexPattern.CORRIDOR_H,
-		BossConstants.HexPattern.WAVE_TB,
-	]
+	# Bar 0 (b192-195): Transition breath -> horizontal corridor + upper-left piston outside lane
+	_add(cues, 7, 194.0, 2.0, &"hex_grid", {
+		"pattern": BossConstants.HexPattern.CORRIDOR_H, "active_time": 0.36, "cascade_step": 0.025,
+		"params": {"safe_center": 380.0, "safe_half_width": 130.0},
+	})
+	_add(cues, 7, 194.0, 2.0, &"piston_wall", {
+		"side": &"left", "span_start": 0.0, "span_end": 210.0, "reach": 165.0,
+		"slam_time": 0.14, "hold_time": 0.34, "retract_time": 0.26,
+	})
 
-	for bar: int in range(8):
-		var b0: float = 192.0 + float(bar) * 4.0
-		var b2: float = b0 + 2.0
-		var side: StringName = tidal_sides[bar]
-		var gap_c: float = tidal_gaps[bar]
+	# Bar 1 (b196-199): Heavy Stomp #1 -> L->R Tidal Wave + flanking Left Wall Slam + 8-diamond burst
+	_add(cues, 7, 196.0, 2.25, &"tidal_wave", {
+		"side": &"left", "thickness": 30.0, "gap_center": 360.0, "gap_size": 185.0,
+		"travel_time": 1.35, "parryable": true,
+	})
+	_add(cues, 7, 196.0, 2.0, &"wall_slam", {
+		"is_left": true, "side": &"left", "coord": 160.0, "strength": 0.88,
+	})
+	_add(cues, 7, 198.5, 0.0, &"mouth_burst", {
+		"count": 8, "speed": 215.0, "angle_offset": 0.35, "shape": &"diamond",
+	})
 
-		# BEAT 0: HEAVY STOMP -> Parryable Tidal Wave + Piston or Wall Slam
-		_add(cues, 7, b0, 2.0 if bar > 0 else 1.75, &"tidal_wave", {
-			"side": side, "thickness": 30.0, "gap_center": gap_c, "gap_size": 160.0,
-			"travel_time": 1.48, "parryable": true,
-		})
-		if bar % 2 == 0:
-			var p_side: StringName = &"left" if (bar % 4 == 0) else &"right"
-			_add(cues, 7, b0, 2.0 if bar > 0 else 1.75, &"piston_wall", {
-				"side": p_side, "span_start": 160.0, "span_end": 520.0, "reach": 175.0,
-				"slam_time": 0.14, "hold_time": 0.34, "retract_time": 0.26,
-			})
-		else:
-			var ws_idx: int = (bar / 2) % 4
-			var ws_side: StringName = slam_sides[ws_idx]
-			var ws_coord: float = 340.0 if (ws_side == &"left" or ws_side == &"right") else 576.0
-			_add(cues, 7, b0, 1.75, &"wall_slam", {
-				"is_left": (ws_idx % 2 == 0), "side": ws_side, "coord": ws_coord, "strength": 0.88,
-			})
+	# Bar 2 (b200-203): Right Piston + Checkerboard Hex Snare (zero beam overlap)
+	_add(cues, 7, 200.0, 2.0, &"piston_wall", {
+		"side": &"right", "span_start": 180.0, "span_end": 480.0, "reach": 165.0,
+		"slam_time": 0.14, "hold_time": 0.34, "retract_time": 0.26,
+	})
+	_add(cues, 7, 202.0, 2.0, &"hex_grid", {
+		"pattern": BossConstants.HexPattern.CHECKER_A, "active_time": 0.36, "cascade_step": 0.025,
+	})
 
-		# BEAT 2: CRISP SNARE -> HexGrid + Hand Strike / 4-way Beam Snap
-		var h_pat: int = hex_cycle[bar]
-		var h_params: Dictionary = {}
-		if h_pat == BossConstants.HexPattern.CORRIDOR_H:
-			h_params = {"safe_center": 324.0 if (bar % 4 == 0) else 440.0, "safe_half_width": 102.0}
-		elif h_pat == BossConstants.HexPattern.CORRIDOR_V:
-			h_params = {"safe_center": 576.0 if (bar % 4 == 1) else 380.0, "safe_half_width": 102.0}
-		_add(cues, 7, b2, 2.0, &"hex_grid", {
-			"pattern": h_pat, "active_time": 0.38, "cascade_step": 0.035, "params": h_params,
-		})
+	# Bar 3 (b204-207): Heavy Stomp #2 -> B->T Tidal Wave + Right Wall Slam + Clear-Lane Pincer
+	_add(cues, 7, 204.0, 2.25, &"tidal_wave", {
+		"side": &"bottom", "thickness": 30.0, "gap_center": 720.0, "gap_size": 185.0,
+		"travel_time": 1.35, "parryable": true,
+	})
+	_add(cues, 7, 204.0, 2.0, &"wall_slam", {
+		"is_left": false, "side": &"right", "coord": 220.0, "strength": 0.88,
+	})
+	_add(cues, 7, 207.0, 2.0, &"pincer", {
+		"mid": Vector2(460.0, 420.0), "clap_time": 0.18,
+	})
 
-		if bar % 2 == 0:
-			_add(cues, 7, b2, 1.75, &"sweeping_beam", {
-				"origin": Vector2(576.0, 324.0), "angle": 0.0 if (bar % 4 == 0) else PI * 0.25,
-				"beam_count": 2, "width": 24.0, "active_time": 0.38,
-			})
-		else:
-			if bar == 3:
-				_add(cues, 7, b2, 1.75, &"pincer", {"mid": Vector2(576.0, 360.0), "clap_time": 0.18})
-			else:
-				var ws_idx_odd: int = (bar / 2) % 4
-				var dash_left: bool = (ws_idx_odd % 2 != 0) # Opposite hand from bar's b0 wall_slam!
-				_add(cues, 7, b2, 1.75, &"hand_dash", {
-					"is_left": dash_left,
-					"from": Vector2(110.0, 340.0) if dash_left else Vector2(1042.0, 480.0),
-					"to": Vector2(1042.0, 340.0) if dash_left else Vector2(110.0, 480.0),
-					"dash_time": 0.52, "style": 1 if (bar != 7) else 2,
-				})
+	# Bar 4 (b208-211): Left Piston + Mouth Burst + Solo 4-Way '+' Beam Snap
+	_add(cues, 7, 208.0, 2.0, &"piston_wall", {
+		"side": &"left", "span_start": 180.0, "span_end": 480.0, "reach": 165.0,
+		"slam_time": 0.14, "hold_time": 0.34, "retract_time": 0.26,
+	})
+	_add(cues, 7, 209.5, 0.0, &"mouth_burst", {
+		"count": 8, "speed": 215.0, "angle_offset": 1.05, "shape": &"diamond",
+	})
+	_add(cues, 7, 210.0, 2.0, &"sweeping_beam", {
+		"origin": Vector2(576.0, 324.0), "angle": 0.0, "beam_count": 2,
+		"width": 24.0, "active_time": 0.38,
+	})
 
-		# Odd-bar beat 1.5 syncopated pickup (197.5, 205.5, 213.5, 221.5): 8-particle mouth burst
-		if bar % 2 == 1:
-			_add(cues, 7, b0 + 1.5, 0.0, &"mouth_burst", {
-				"count": 8, "speed": 235.0, "angle_offset": float(bar) * 0.35, "shape": &"diamond",
-			})
+	# Bar 5 (b212-215): Heavy Stomp #3 -> R->L Tidal Wave + Bottom Wall Slam + Post-Wave Claw Swipe
+	_add(cues, 7, 212.0, 2.25, &"tidal_wave", {
+		"side": &"right", "thickness": 30.0, "gap_center": 324.0, "gap_size": 185.0,
+		"travel_time": 1.35, "parryable": true,
+	})
+	_add(cues, 7, 212.0, 2.0, &"wall_slam", {
+		"is_left": true, "side": &"bottom", "coord": 420.0, "strength": 0.88,
+	})
+	_add(cues, 7, 215.0, 2.0, &"hand_dash", {
+		"is_left": false, "from": Vector2(1042.0, 480.0), "to": Vector2(110.0, 480.0),
+		"dash_time": 0.52, "style": 1, # CLAW_SWIPE
+	})
+
+	# Bar 6 (b216-219): Solo 4-Way 'X' Beam Snap followed cleanly by Vertical Corridor
+	_add(cues, 7, 216.0, 2.0, &"sweeping_beam", {
+		"origin": Vector2(576.0, 324.0), "angle": PI * 0.25, "beam_count": 2,
+		"width": 24.0, "active_time": 0.38,
+	})
+	_add(cues, 7, 218.0, 2.0, &"hex_grid", {
+		"pattern": BossConstants.HexPattern.CORRIDOR_V, "active_time": 0.36, "cascade_step": 0.025,
+		"params": {"safe_center": 576.0, "safe_half_width": 130.0},
+	})
+
+	# Bar 7 (b220-223): Heavy Stomp #4 -> T->B Tidal Wave + Top Wall Slam + Floor Rake Finale
+	_add(cues, 7, 220.0, 2.25, &"tidal_wave", {
+		"side": &"top", "thickness": 30.0, "gap_center": 576.0, "gap_size": 185.0,
+		"travel_time": 1.25, "parryable": true,
+	})
+	_add(cues, 7, 220.0, 2.0, &"wall_slam", {
+		"is_left": false, "side": &"top", "coord": 740.0, "strength": 0.88,
+	})
+	_add(cues, 7, 222.5, 2.0, &"hand_dash", {
+		"is_left": true, "from": Vector2(110.0, 480.0), "to": Vector2(1042.0, 480.0),
+		"dash_time": 0.48, "style": 2, # FLOOR_RAKE
+	})
 
 
 # ------------------------------------------------------------------------------
 # PHASE 8 (Beats 224-255, 105-120s): TEMPLE_CLUTCH_PANIC / OVERDRIVE_PANIC -> SILENT_SHATTER
-# Beats 224-239: tightening BossSpikeRing + 6-beam wheel + 4-wall pinball slams + BORDER_RING hex.
-# Bar 58 (Beat 232.0, telegraphed b230.0): CHROMATIC GLITCH WAVE #1 (L->R)!
-# Beats 240-243 (Bar 60 dip): sweeping tether + 16-particle spiral breathing pocket.
-# Beats 244-247: rapid 4-wall slams + hex wave.
-# Bar 62 Finale (Beats 248-251): 4 escalating parryable shockwaves + CHROMATIC GLITCH WAVE #2 (R->L)!
+# Act 8A (b224-231.5): 10-saw BossSpikeRing + 4-beam rotating wheel + 12-orb ring (all end b231.5).
+# Act 8B (b232-235.5): Boss steps clear to top -> CHROMATIC GLITCH WAVE #1 (L->R, gap=180) + 2 wall slams.
+# Act 8C (b236-239): BORDER_RING hex + 14-spike ring + 2 wall slams.
+# Act 8D (b240-243): Eye-of-the-storm dip -> 12-diamond ring + sweeping tether.
+# Act 8E (b244-247.75): Rapid 4-wall slams (2.0-beat telegraphs) + CORRIDOR_H hex.
+# Act 8F (b248-252): Boss steps clear to top -> CHROMATIC GLITCH WAVE #2 (R->L) + 2 parryable shockwaves.
 # Beat 252 (118.125s): SILENT_SHATTER — clear ALL active hazards!
 # ------------------------------------------------------------------------------
 static func _append_phase_8(cues: Array[Dictionary]) -> void:
@@ -592,70 +611,75 @@ static func _append_phase_8(cues: Array[Dictionary]) -> void:
 		"form": 6, # OVERDRIVE_PANIC
 		"target": Vector2(576.0, 324.0),
 		"move_speed": 9.0,
+		"clear_hazards": true,
 	}, -10)
 
-	# Tightening outer BossSpikeRing orbit cage (1.75-beat telegraph starting at b224.0)
-	_add(cues, 8, 225.75, 1.75, &"spike_ring", {
+	# Act 8A (b224-231.5): 10-saw orbit ring + 4-beam wheel + 12-orb ring (ends before Glitch Wave #1)
+	_add(cues, 8, 226.0, 2.0, &"spike_ring", {
 		"mode": BossSpikeRing.RingMode.ORBIT_RING,
-		"origin": Vector2(576.0, 324.0), "follow_boss": false, "count": 12,
-		"start_radius": 325.0, "end_radius": 242.0, "spike_radius": 17.0,
-		"angular_speed": 1.25, "duration": 13.5 * BEAT,
+		"origin": Vector2(576.0, 324.0), "follow_boss": false, "count": 10,
+		"start_radius": 295.0, "end_radius": 250.0, "spike_radius": 17.0,
+		"angular_speed": 0.95, "duration": 5.5 * BEAT,
 	})
-
-	# 6-beam rotating panic wheel (2.0-beat telegraph, smooth 0.34 rad/s rotation)
 	_add(cues, 8, 226.0, 2.0, &"sweeping_beam", {
-		"origin": Vector2(576.0, 324.0), "angle": 0.12, "beam_count": 3,
-		"width": BossConstants.WHEEL_BEAM_WIDTH, "active_time": 12.0 * BEAT,
-		"angular_speed": 0.34,
+		"origin": Vector2(576.0, 324.0), "angle": 0.12, "beam_count": 2,
+		"width": 22.0, "active_time": 5.5 * BEAT, "angular_speed": 0.36,
+	})
+	_add(cues, 8, 228.0, 0.0, &"bullet_ring", {
+		"origin": Vector2(576.0, 324.0), "count": 12, "speed": 225.0, "angle_offset": 0.0, "shape": &"orb",
 	})
 
-	# 4-wall pinball slams + radial bursts + BORDER_RING hex squeezes
-	_add(cues, 8, 226.0, 1.75, &"wall_slam", {"is_left": true, "side": &"left", "coord": 260.0, "strength": 0.90})
-	_add(cues, 8, 228.0, 1.75, &"wall_slam", {"is_left": false, "side": &"right", "coord": 420.0, "strength": 0.90})
-	_add(cues, 8, 228.0, 0.0, &"bullet_ring", {"origin": Vector2(576.0, 324.0), "count": 20, "speed": 245.0, "angle_offset": 0.0, "shape": &"orb"})
-	_add(cues, 8, 228.0, 2.0, &"hex_grid", {
-		"pattern": BossConstants.HexPattern.BORDER_RING, "active_time": 0.42, "cascade_step": 0.03,
-		"params": {"depth": 1},
+	# Act 8B (b232-235.5): Boss yields center lane -> SIGNATURE SPECIAL #1 CHROMATIC GLITCH WAVE (L->R)
+	_add(cues, 8, 231.0, 0.0, &"body_move", {"target": Vector2(576.0, 152.0), "speed": 8.5})
+	_add(cues, 8, 232.0, 2.25, &"glitch_wave", {
+		"direction": Vector2.RIGHT, "sweep_time": 1.55, "wave_thickness": 74.0,
+		"gap_center_ratio": 0.54, "gap_size": 180.0, "gap_wobble": 32.0, "parryable": true,
 	})
+	_add(cues, 8, 234.0, 2.0, &"wall_slam", {"is_left": true, "side": &"top", "coord": 420.0, "strength": 0.90})
+	_add(cues, 8, 235.5, 2.0, &"wall_slam", {"is_left": false, "side": &"bottom", "coord": 730.0, "strength": 0.90})
 
-	# SIGNATURE SPECIAL #1 — Bar 58 (Beat 232.0, 108.75s, telegraphed at b230.0): CHROMATIC GLITCH WAVE L->R!
-	_add(cues, 8, 232.0, 2.0, &"glitch_wave", {
-		"direction": Vector2.RIGHT, "sweep_time": 1.65, "wave_thickness": 74.0,
-		"gap_center_ratio": 0.52, "gap_size": 156.0, "gap_wobble": 58.0, "parryable": true,
-	})
-
-	_add(cues, 8, 234.0, 1.75, &"wall_slam", {"is_left": true, "side": &"top", "coord": 440.0, "strength": 0.92})
-	_add(cues, 8, 236.0, 0.0, &"bullet_ring", {"origin": Vector2(576.0, 324.0), "count": 20, "speed": 250.0, "angle_offset": 0.18, "shape": &"spike"})
+	# Act 8C (b236-239): BORDER_RING hex squeeze + 14-spike ring + flanking wall slams
 	_add(cues, 8, 236.0, 2.0, &"hex_grid", {
-		"pattern": BossConstants.HexPattern.BORDER_RING, "active_time": 0.42, "cascade_step": 0.03,
+		"pattern": BossConstants.HexPattern.BORDER_RING, "active_time": 0.40, "cascade_step": 0.025,
 		"params": {"depth": 1},
 	})
-	_add(cues, 8, 238.0, 1.75, &"wall_slam", {"is_left": false, "side": &"bottom", "coord": 710.0, "strength": 0.92})
-
-	# Bar 60 (Beats 240-243) eye-of-the-storm dip: sweeping tether (1.75-beat telegraph) + 16-particle spirals
-	_add(cues, 8, 240.5, 1.75, &"tether_sweep", {"start_y": 170.0, "end_y": 490.0, "sweep_time": 1.75 * BEAT})
-	_add(cues, 8, 240.0, 0.0, &"bullet_ring", {"origin": Vector2(576.0, 324.0), "count": 16, "speed": 235.0, "angle_offset": 0.12, "shape": &"diamond"})
-	_add(cues, 8, 242.0, 0.0, &"bullet_ring", {"origin": Vector2(576.0, 324.0), "count": 16, "speed": 240.0, "angle_offset": 0.36, "shape": &"orb"})
-
-	# Bar 61 (Beats 244-247): rapid 4-wall slams (1.65-beat telegraphs) + hex wave
-	_add(cues, 8, 244.0, 1.65, &"wall_slam", {"is_left": true, "side": &"left", "coord": 360.0, "strength": 0.94})
-	_add(cues, 8, 245.0, 1.65, &"wall_slam", {"is_left": false, "side": &"right", "coord": 360.0, "strength": 0.94})
-	_add(cues, 8, 245.0, 2.0, &"hex_grid", {
-		"pattern": BossConstants.HexPattern.WAVE_LR, "active_time": 0.36, "cascade_step": 0.032,
+	_add(cues, 8, 236.5, 0.0, &"bullet_ring", {
+		"from_boss": true, "count": 14, "speed": 225.0, "angle_offset": 0.18, "shape": &"spike",
 	})
-	_add(cues, 8, 246.0, 1.65, &"wall_slam", {"is_left": true, "side": &"bottom", "coord": 420.0, "strength": 0.94})
-	_add(cues, 8, 247.0, 1.65, &"wall_slam", {"is_left": false, "side": &"top", "coord": 730.0, "strength": 0.96})
+	_add(cues, 8, 237.0, 2.0, &"wall_slam", {"is_left": true, "side": &"left", "coord": 260.0, "strength": 0.92})
+	_add(cues, 8, 238.25, 2.0, &"wall_slam", {"is_left": false, "side": &"right", "coord": 390.0, "strength": 0.92})
+	_add(cues, 8, 239.0, 0.0, &"body_move", {"target": Vector2(576.0, 324.0), "speed": 8.5})
 
-	# Bar 62 Finale Countdown (Beats 248-251): 4 escalating parryable shockwaves + CHROMATIC GLITCH WAVE #2 (R->L)!
-	_add(cues, 8, 248.0, 2.0, &"glitch_wave", {
-		"direction": Vector2.LEFT, "sweep_time": 1.60, "wave_thickness": 74.0,
-		"gap_center_ratio": 0.44, "gap_size": 156.0, "gap_wobble": 58.0, "parryable": true,
+	# Act 8D (b240-243): Eye-of-the-storm dip -> 12-diamond ring + sweeping tether
+	_add(cues, 8, 240.0, 0.0, &"bullet_ring", {
+		"origin": Vector2(576.0, 324.0), "count": 12, "speed": 220.0, "angle_offset": 0.12, "shape": &"diamond",
 	})
-	for k: int in range(4):
-		_add(cues, 8, 248.0 + float(k), 1.75, &"shockwave_ring", {
-			"origin": Vector2(576.0, 324.0), "start_radius": 34.0, "end_radius": 860.0,
-			"thickness": 26.0 + float(k) * 2.0, "travel_time": 1.35, "parryable": true,
-		})
+	_add(cues, 8, 240.75, 2.0, &"tether_sweep", {"start_y": 170.0, "end_y": 490.0, "sweep_time": 1.40 * BEAT})
 
-	# Beat 252.0 (118.125s): SILENT_SHATTER — clear ALL active hazards immediately!
+	# Act 8E (b244-247.75): 4-wall panic slam barrage + clean horizontal hex corridor
+	_add(cues, 8, 244.25, 2.0, &"wall_slam", {"is_left": true, "side": &"left", "coord": 324.0, "strength": 0.94})
+	_add(cues, 8, 245.25, 2.0, &"wall_slam", {"is_left": false, "side": &"right", "coord": 324.0, "strength": 0.94})
+	_add(cues, 8, 245.5, 2.0, &"hex_grid", {
+		"pattern": BossConstants.HexPattern.CORRIDOR_H, "active_time": 0.36, "cascade_step": 0.025,
+		"params": {"safe_center": 324.0, "safe_half_width": 135.0},
+	})
+	_add(cues, 8, 246.75, 2.0, &"wall_slam", {"is_left": true, "side": &"bottom", "coord": 420.0, "strength": 0.94})
+	_add(cues, 8, 247.75, 2.0, &"wall_slam", {"is_left": false, "side": &"top", "coord": 730.0, "strength": 0.96})
+
+	# Act 8F (b248-252): Boss yields center lane -> SIGNATURE SPECIAL #2 CHROMATIC GLITCH WAVE (R->L) + 2 Shockwaves
+	_add(cues, 8, 247.5, 0.0, &"body_move", {"target": Vector2(576.0, 152.0), "speed": 8.5})
+	_add(cues, 8, 248.0, 2.25, &"glitch_wave", {
+		"direction": Vector2.LEFT, "sweep_time": 1.45, "wave_thickness": 74.0,
+		"gap_center_ratio": 0.58, "gap_size": 180.0, "gap_wobble": 32.0, "parryable": true,
+	})
+	_add(cues, 8, 249.5, 2.0, &"shockwave_ring", {
+		"origin": Vector2(576.0, 324.0), "start_radius": 34.0, "end_radius": 860.0,
+		"thickness": 28.0, "travel_time": 1.35, "parryable": true,
+	})
+	_add(cues, 8, 251.0, 2.0, &"shockwave_ring", {
+		"origin": Vector2(576.0, 324.0), "start_radius": 34.0, "end_radius": 860.0,
+		"thickness": 32.0, "travel_time": 1.35, "parryable": true,
+	})
+
+	# Act 8G (b252.0, 118.125s): SILENT_SHATTER — clear ALL active hazards immediately!
 	_add(cues, 8, 252.0, 0.0, &"silent_shatter", {}, -10)

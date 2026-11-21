@@ -35,6 +35,7 @@ var shield_block_flash: float = 0.0
 var hit_invincibility_timer: float = 0.0
 var hit_flash_timer: float = 0.0
 var shield_activation_flash: float = 0.0
+var shield_active_elapsed: float = 0.0
 var _shield_require_release: bool = false
 var _pulse_time: float = 0.0
 var _lost_slice_idx: int = -1
@@ -89,6 +90,7 @@ func _notification(what: int) -> void:
 			_shield_require_release = true
 		if is_shielding:
 			is_shielding = false
+			shield_active_elapsed = 0.0
 			shield_changed.emit(false)
 
 
@@ -155,13 +157,17 @@ func _step_shield_state(held: bool, delta: float) -> void:
 	if held and not shield_exhausted and shield_energy > 0.0:
 		if not is_shielding:
 			shield_activation_flash = 1.0
+			shield_active_elapsed = 0.0
 			SoundManager.play_sfx(&"shield_on", -3.0)
 			shield_changed.emit(true)
+		else:
+			shield_active_elapsed += maxf(delta, 0.0)
 		is_shielding = true
 		shield_energy = maxf(0.0, shield_energy - SHIELD_DRAIN_PER_SEC * delta)
 		shield_recharge_timer = SHIELD_RECHARGE_DELAY
 		if shield_energy <= 0.0:
 			is_shielding = false
+			shield_active_elapsed = 0.0
 			shield_exhausted = true
 			_shield_break_flash = 1.0
 			hit_invincibility_timer = maxf(hit_invincibility_timer, SHIELD_BREAK_GRACE)
@@ -172,6 +178,7 @@ func _step_shield_state(held: bool, delta: float) -> void:
 
 	if is_shielding:
 		is_shielding = false
+		shield_active_elapsed = 0.0
 		shield_changed.emit(false)
 	if held:
 		return
@@ -225,6 +232,7 @@ func release_external_tracking() -> void:
 	velocity = Vector2.ZERO
 	if is_shielding:
 		is_shielding = false
+		shield_active_elapsed = 0.0
 		shield_changed.emit(false)
 	use_target_position = false
 	target_position = global_position
@@ -240,9 +248,16 @@ func take_damage(amount: int = 1) -> void:
 		return
 	if is_shielding:
 		shield_block_flash = 1.0
-		if shield_block_feedback_timer <= 0.0:
-			shield_block_feedback_timer = SHIELD_BLOCK_FEEDBACK_COOLDOWN
+		var can_play_feedback: bool = shield_block_feedback_timer <= 0.0
+		var hit_parryable: bool = bool(get_meta(&"last_hit_parryable", false))
+		var qualifies_for_parry: bool = hit_parryable and (
+			shield_active_elapsed <= BossConstants.PARRY_WINDOW_SEC
+			or shield_activation_flash > 0.20
+		)
+		if can_play_feedback:
 			SoundManager.play_sfx(&"shield_block", -3.0)
+		if can_play_feedback or qualifies_for_parry:
+			shield_block_feedback_timer = SHIELD_BLOCK_FEEDBACK_COOLDOWN
 			shield_blocked.emit()
 		return
 	if hit_invincibility_timer > 0.0:
@@ -260,6 +275,7 @@ func take_damage(amount: int = 1) -> void:
 	if current_hp <= 0:
 		is_active = false
 		is_shielding = false
+		shield_active_elapsed = 0.0
 		shield_held = false
 		velocity = Vector2.ZERO
 		died.emit()
@@ -300,6 +316,7 @@ func reset_player(spawn_position: Vector2) -> void:
 	shield_block_feedback_timer = 0.0
 	shield_block_flash = 0.0
 	shield_activation_flash = 0.0
+	shield_active_elapsed = 0.0
 	hit_invincibility_timer = 0.0
 	hit_flash_timer = 0.0
 	_pulse_time = 0.0

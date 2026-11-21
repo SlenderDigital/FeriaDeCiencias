@@ -1766,6 +1766,969 @@ func test_boss_intro_animation_safety_and_handoff() -> void:
 	GameManager.save_game()
 
 
+func test_boss_phase7_and_8_telegraph_and_transition_hygiene() -> void:
+	var backup_save: SaveData = GameManager.save_data
+	var backup_diff: int = GameManager.selected_difficulty
+	GameManager.save_data = SaveData.new()
+
+	var cues: Array[Dictionary] = BossScore.build_score()
+	var telegraphed_spatial_kinds: Array[StringName] = [
+		&"tidal_wave",
+		&"piston_wall",
+		&"wall_slam",
+		&"hex_grid",
+		&"sweeping_beam",
+		&"pincer",
+		&"hand_dash",
+		&"spike_ring",
+		&"glitch_wave",
+		&"tether_sweep",
+		&"shockwave_ring",
+		&"ceiling_spike",
+		&"gravity_well",
+		&"filling_circle",
+		&"beat_minion",
+		&"floor_slam",
+		&"body_lunge",
+	]
+
+	var found_p7_transition: bool = false
+	var found_p8_transition: bool = false
+	var p7_cue_count: int = 0
+	var p8_cue_count: int = 0
+
+	for cue: Dictionary in cues:
+		var phase: int = int(cue.get("phase", 0))
+		if phase != 7 and phase != 8:
+			continue
+		var kind: StringName = cue.get("kind", &"")
+		var impact_beat: float = float(cue.get("impact_beat", 0.0))
+		var lead_beats: float = float(cue.get("lead_beats", 0.0))
+		var trigger_beat: float = float(cue.get("trigger_beat", 0.0))
+		var params: Dictionary = cue.get("params", {}) as Dictionary
+
+		if phase == 7:
+			p7_cue_count += 1
+			assert_true(
+				trigger_beat >= 192.0 - 0.0001,
+				"Phase 7 cue '%s' (impact=%.2f) trigger_beat=%.2f must be >= 192.0" % [String(kind), impact_beat, trigger_beat]
+			)
+			if kind == &"phase_transition" and absf(impact_beat - 192.0) < 0.001:
+				found_p7_transition = true
+				assert_true(bool(params.get("clear_hazards", false)), "Phase 7 phase_transition at beat 192.0 must set clear_hazards == true")
+		else:
+			p8_cue_count += 1
+			assert_true(
+				trigger_beat >= 224.0 - 0.0001,
+				"Phase 8 cue '%s' (impact=%.2f) trigger_beat=%.2f must be >= 224.0" % [String(kind), impact_beat, trigger_beat]
+			)
+			if kind == &"phase_transition" and absf(impact_beat - 224.0) < 0.001:
+				found_p8_transition = true
+				assert_true(bool(params.get("clear_hazards", false)), "Phase 8 phase_transition at beat 224.0 must set clear_hazards == true")
+
+		if lead_beats > 0.0 or kind in telegraphed_spatial_kinds:
+			assert_true(
+				lead_beats >= 2.0 - 0.0001,
+				"Phase %d telegraphed lethal cue '%s' at impact=%.2f must have lead_beats >= 2.0 (got %.2f)" % [phase, String(kind), impact_beat, lead_beats]
+			)
+
+	assert_true(found_p7_transition, "BossScore must contain Phase 7 phase_transition at beat 192.0")
+	assert_true(found_p8_transition, "BossScore must contain Phase 8 phase_transition at beat 224.0")
+	assert_gt(p7_cue_count, 0, "Phase 7 must have scheduled cues")
+	assert_gt(p8_cue_count, 0, "Phase 8 must have scheduled cues")
+
+	# Step BossLevel cleanly through Phase 7 & Phase 8 transitions and verify:
+	# - clean hazard purge at 90.0s (P7) and 105.0s (P8)
+	# - zero unwarned tangential spikes fired by BossSpikeRing during Phase 8 (b224..252)
+	var boss_level: Node2D = _spawn(BOSS_LEVEL_SCENE) as Node2D
+	var boss: Area2D = boss_level.get_node("BossContainer/Boss") as Area2D
+	var player: CharacterBody2D = boss_level.get_node("Player") as CharacterBody2D
+	var beam_container: Node2D = boss_level.get_node("BeamContainer") as Node2D
+	_advance_boss_level_safely(boss_level, player, 90.0, 0.125)
+
+	assert_eq(int(boss.current_phase), 7, "Boss must reach Phase 7 at t=90.0s")
+	assert_eq(_count_active_boss_hazards(boss_level), 0, "Phase 7 transition at 90.0s must clear prior active hazards")
+	assert_eq(boss_level.boss_bullet_manager.get_active_count(), 0, "Phase 7 transition must clear bullets")
+	assert_eq(boss_level.boss_hex_grid.get_active_tile_count(), 0, "Phase 7 transition must clear hex tiles")
+
+	_advance_boss_level_safely(boss_level, player, 105.0, 0.125)
+	assert_eq(int(boss.current_phase), 8, "Boss must reach Phase 8 at t=105.0s")
+	assert_eq(_count_active_boss_hazards(boss_level), 0, "Phase 8 transition at 105.0s must clear prior active hazards")
+	assert_eq(boss_level.boss_bullet_manager.get_active_count(), 0, "Phase 8 transition must clear bullets")
+	assert_eq(boss_level.boss_hex_grid.get_active_tile_count(), 0, "Phase 8 transition must clear hex tiles")
+
+	var dt: float = 1.0 / 30.0
+	var p8_spike_ring_seen: bool = false
+	var p8_tangential_release_count: int = 0
+	var p8_act8a_spike_bullets: int = 0
+	while boss_level.is_level_running and boss_level.elapsed_time < 118.125:
+		player.hit_invincibility_timer = 1.0
+		boss_level.simulate_physics(dt)
+		var song_beat: float = boss_level.elapsed_time / BossConstants.BEAT_DURATION
+		for child: Node in beam_container.get_children():
+			if child is BossSpikeRing and is_instance_valid(child) and not child.is_queued_for_deletion():
+				var sr: BossSpikeRing = child as BossSpikeRing
+				p8_spike_ring_seen = true
+				if float(sr._release_flash) > 0.001:
+					p8_tangential_release_count += 1
+		if song_beat < 236.0:
+			for b: Dictionary in boss_level.boss_bullet_manager._bullets:
+				if StringName(b.get("shape", &"orb")) == &"spike":
+					p8_act8a_spike_bullets += 1
+
+	assert_true(p8_spike_ring_seen, "Phase 8 Act 8A must spawn its BossSpikeRing")
+	assert_eq(p8_tangential_release_count, 0, "Phase 8 BossSpikeRing must never fire unwarned tangential spikes (b224..252)")
+	assert_eq(p8_act8a_spike_bullets, 0, "Phase 8 Act 8A (b224..236) must contain zero tangential spike bullets")
+
+	GameManager.set_state(GameManager.State.MENU)
+	GameManager.set_difficulty(backup_diff)
+	GameManager.save_data = backup_save
+	GameManager.save_game()
+
+
+func test_boss_phase7_and_8_concurrency_and_reachable_safe_space() -> void:
+	var backup_save: SaveData = GameManager.save_data
+	var backup_diff: int = GameManager.selected_difficulty
+	GameManager.save_data = SaveData.new()
+
+	var boss_level: Node2D = _spawn(BOSS_LEVEL_SCENE) as Node2D
+	var boss: Area2D = boss_level.get_node("BossContainer/Boss") as Area2D
+	var player: CharacterBody2D = boss_level.get_node("Player") as CharacterBody2D
+	_advance_boss_level_safely(boss_level, player, 90.0, 0.125)
+	assert_eq(int(boss.current_phase), 7, "Setup must enter Phase 7 at t=90.0s")
+
+	var grid_cols: int = 24
+	var grid_rows: int = 14
+	var cell_count: int = grid_cols * grid_rows
+	var min_x: float = 14.0
+	var max_x: float = 1138.0
+	var min_y: float = 14.0
+	var max_y: float = 634.0
+	var step_x: float = (max_x - min_x) / float(grid_cols - 1)
+	var step_y: float = (max_y - min_y) / float(grid_rows - 1)
+	var grid_pts: PackedVector2Array = PackedVector2Array()
+	grid_pts.resize(cell_count)
+	for gy: int in range(grid_rows):
+		for gx: int in range(grid_cols):
+			grid_pts[gy * grid_cols + gx] = Vector2(min_x + float(gx) * step_x, min_y + float(gy) * step_y)
+
+	var player_r: float = BossConstants.get_player_hit_radius(player)
+	assert_true(absf(player_r - 9.36) < 0.01, "Boss Mode player hit radius must be 9.36px")
+
+	# Continuous wavefront reachability (dist[i] = remaining px to reach cell center i; 0.0 = occupied)
+	var reach_dist: PackedFloat32Array = PackedFloat32Array()
+	reach_dist.resize(cell_count)
+	var start_snap: Dictionary = _snapshot_active_spatial_hazards(boss_level, boss)
+	for i: int in range(cell_count):
+		reach_dist[i] = INF if _is_point_in_spatial_snapshot(grid_pts[i], player_r, start_snap, true) else 0.0
+
+	var dt: float = 1.0 / 30.0
+	var move_budget: float = 360.0 * dt # Conservative 360 px/s under keyboard 420 px/s
+	var half_cell_step: float = 0.5 * minf(step_x, step_y)
+	var neighbor_offsets: Array[Vector2i] = [
+		Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1),
+		Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(1, 1),
+	]
+	var neighbor_lens: PackedFloat32Array = PackedFloat32Array([
+		step_x, step_x, step_y, step_y,
+		sqrt(step_x * step_x + step_y * step_y), sqrt(step_x * step_x + step_y * step_y),
+		sqrt(step_x * step_x + step_y * step_y), sqrt(step_x * step_x + step_y * step_y),
+	])
+
+	var total_frames: int = 0
+	var frames_le_2_spatial: int = 0
+	var max_spatial_concurrent: int = 0
+	var max_spatial_time: float = 90.0
+	var min_safe_cells: int = cell_count
+	var min_safe_time: float = 90.0
+	var min_reachable_cells: int = cell_count
+	var min_reachable_time: float = 90.0
+	var zero_reachable_report: String = ""
+
+	while boss_level.is_level_running and boss_level.elapsed_time < 118.125:
+		player.hit_invincibility_timer = 1.0
+		boss_level.simulate_physics(dt)
+		if not boss_level.is_level_running or boss_level.elapsed_time >= 118.125:
+			break
+
+		total_frames += 1
+		var snap: Dictionary = _snapshot_active_spatial_hazards(boss_level, boss)
+		var spatial_count: int = int(snap["spatial_count"])
+		if spatial_count <= 2:
+			frames_le_2_spatial += 1
+		if spatial_count > max_spatial_concurrent:
+			max_spatial_concurrent = spatial_count
+			max_spatial_time = boss_level.elapsed_time
+
+		var safe_mask: PackedByteArray = PackedByteArray()
+		safe_mask.resize(cell_count)
+		var safe_now: int = 0
+		for i: int in range(cell_count):
+			# Exempt parryable 360-deg expanding ShockwaveRings from blocking reachability
+			# (they cover 360 deg around arena by design and are crossed via timed parry/shield).
+			var blocked: bool = _is_point_in_spatial_snapshot(grid_pts[i], player_r, snap, true)
+			if blocked:
+				safe_mask[i] = 0
+				reach_dist[i] = INF
+			else:
+				safe_mask[i] = 1
+				safe_now += 1
+
+		if safe_now < min_safe_cells:
+			min_safe_cells = safe_now
+			min_safe_time = boss_level.elapsed_time
+
+		# Step 1: seed immediate safe neighbors from occupied cells (reach_dist == 0.0)
+		var next_dist: PackedFloat32Array = reach_dist.duplicate()
+		for gy: int in range(grid_rows):
+			for gx: int in range(grid_cols):
+				var idx: int = gy * grid_cols + gx
+				if safe_mask[idx] == 0 or reach_dist[idx] > 0.0001:
+					continue
+				for k: int in range(8):
+					var nx: int = gx + neighbor_offsets[k].x
+					var ny: int = gy + neighbor_offsets[k].y
+					if nx < 0 or nx >= grid_cols or ny < 0 or ny >= grid_rows:
+						continue
+					var n_idx: int = ny * grid_cols + nx
+					if safe_mask[n_idx] == 1 and neighbor_lens[k] < next_dist[n_idx]:
+						next_dist[n_idx] = neighbor_lens[k]
+
+		# Step 2: prune in-flight cells whose predecessor became unsafe before midpoint crossing
+		for gy: int in range(grid_rows):
+			for gx: int in range(grid_cols):
+				var idx: int = gy * grid_cols + gx
+				var d: float = next_dist[idx]
+				if d <= half_cell_step or is_inf(d):
+					continue
+				var has_closer_safe_pred: bool = false
+				for k: int in range(8):
+					var nx: int = gx + neighbor_offsets[k].x
+					var ny: int = gy + neighbor_offsets[k].y
+					if nx < 0 or nx >= grid_cols or ny < 0 or ny >= grid_rows:
+						continue
+					var n_idx: int = ny * grid_cols + nx
+					if safe_mask[n_idx] == 1 and next_dist[n_idx] + 0.01 < d:
+						has_closer_safe_pred = true
+						break
+				if not has_closer_safe_pred:
+					next_dist[idx] = INF
+
+		# Step 3: advance surviving safe wavefront by conservative keyboard step (360 px/s * dt)
+		var reachable_now: int = 0
+		for i: int in range(cell_count):
+			if safe_mask[i] == 1 and not is_inf(next_dist[i]):
+				var advanced: float = maxf(0.0, next_dist[i] - move_budget)
+				reach_dist[i] = advanced
+				if advanced <= half_cell_step:
+					reachable_now += 1
+			else:
+				reach_dist[i] = INF
+
+		if reachable_now < min_reachable_cells:
+			min_reachable_cells = reachable_now
+			min_reachable_time = boss_level.elapsed_time
+		if reachable_now == 0 and zero_reachable_report.is_empty():
+			var beat_now: float = boss_level.elapsed_time / BossConstants.BEAT_DURATION
+			zero_reachable_report = "t=%.3fs (beat %.2f), spatial=%d, safe=%d" % [boss_level.elapsed_time, beat_now, spatial_count, safe_now]
+
+	var pct_le_2: float = (100.0 * float(frames_le_2_spatial)) / maxf(float(total_frames), 1.0)
+	print("[PHASE7-8 REACHABILITY] frames=%d max_spatial=%d(at %.2fs) <=2_pct=%.1f%% min_safe=%d(at %.2fs) min_reachable=%d(at %.2fs)" % [
+		total_frames, max_spatial_concurrent, max_spatial_time, pct_le_2, min_safe_cells, min_safe_time, min_reachable_cells, min_reachable_time,
+	])
+
+	assert_gt(total_frames, 800, "Reachability sweep must cover full Phase 7 & 8 window")
+	assert_true(
+		max_spatial_concurrent <= 3,
+		"Max concurrent active non-bullet spatial hazards must be <= 3 (got %d at %.2fs)" % [max_spatial_concurrent, max_spatial_time]
+	)
+	assert_true(
+		pct_le_2 >= 95.0,
+		"At least 95%% of Phase 7 & 8 frames must have <= 2 concurrent active spatial hazards (got %.1f%%)" % pct_le_2
+	)
+	assert_gt(min_safe_cells, 0, "Non-empty safe space must exist on every frame (hit 0 at %.2fs)" % min_safe_time)
+	assert_gt(
+		min_reachable_cells,
+		0,
+		"Keyboard-speed (<=360 px/s) reachable safe frontier must never become empty (%s)" % zero_reachable_report
+	)
+
+	GameManager.set_state(GameManager.State.MENU)
+	GameManager.set_difficulty(backup_diff)
+	GameManager.save_data = backup_save
+	GameManager.save_game()
+
+
+func test_boss_phase7_and_8_scripted_keyboard_player_survival() -> void:
+	var backup_save: SaveData = GameManager.save_data
+	var backup_diff: int = GameManager.selected_difficulty
+	GameManager.save_data = SaveData.new()
+
+	var boss_level: Node2D = _spawn(BOSS_LEVEL_SCENE) as Node2D
+	var boss: Area2D = boss_level.get_node("BossContainer/Boss") as Area2D
+	var player: CharacterBody2D = boss_level.get_node("Player") as CharacterBody2D
+	_advance_boss_level_safely(boss_level, player, 90.0, 0.125)
+	assert_eq(int(boss.current_phase), 7, "Keyboard survival test must begin cleanly at Phase 7 (t=90.0s)")
+
+	# Clean starting state at t = 90.0s: 3 HP, full shield, strict keyboard control (use_target_position = false)
+	player.release_external_tracking()
+	player.use_target_position = false
+	player.external_tracking_active = false
+	player.global_position = Vector2(576.0, 380.0)
+	player.velocity = Vector2.ZERO
+	player.current_hp = player.MAX_HP
+	player.shield_energy = player.SHIELD_MAX_ENERGY
+	player.shield_exhausted = false
+	player.shield_recharge_timer = 0.0
+	player.hit_invincibility_timer = 0.0
+	player.set_shield_held(false)
+	boss_level.total_parries = 0
+	boss.total_parries = 0
+	boss_level._parry_cooldown = 0.0
+
+	var hits_taken: Array[int] = [0]
+	var hit_log: Array[String] = []
+	player.damaged.connect(func(_amount: int) -> void:
+		hits_taken[0] += 1
+		var b_now: float = boss_level.elapsed_time / BossConstants.BEAT_DURATION
+		var kind_str: String = String(player.get_meta(&"last_hit_hazard_kind", &"unknown"))
+		var extra: String = ""
+		if kind_str == "boss_hand":
+			extra = ",l_act=%d,r_act=%d,grace=%.2f" % [
+				int(boss.get_hand_action(true)), int(boss.get_hand_action(false)), float(boss._teleport_grace_timer),
+			]
+		hit_log.append("t=%.2fs(b%.1f,p%d,kind=%s,pos=%s%s)" % [
+			boss_level.elapsed_time, b_now, int(boss.current_phase), kind_str, str(player.global_position.round()), extra,
+		])
+	)
+
+	var grid_cols: int = 20
+	var grid_rows: int = 12
+	var cand_pts: PackedVector2Array = PackedVector2Array()
+	cand_pts.resize(grid_cols * grid_rows)
+	for gy: int in range(grid_rows):
+		for gx: int in range(grid_cols):
+			cand_pts[gy * grid_cols + gx] = Vector2(
+				lerpf(36.0, 1116.0, float(gx) / float(grid_cols - 1)),
+				lerpf(36.0, 612.0, float(gy) / float(grid_rows - 1))
+			)
+
+	var dt: float = 1.0 / 30.0
+	var player_r: float = BossConstants.get_player_hit_radius(player)
+	var max_observed_speed: float = 0.0
+	var shield_hold_frames: int = 0
+
+	while boss_level.is_level_running and boss_level.elapsed_time < 120.0:
+		var plan: Dictionary = _compute_keyboard_bot_plan(boss_level, boss, player, cand_pts, player_r, dt)
+		var target_pt: Vector2 = Vector2(plan["target"])
+		var want_shield: bool = bool(plan["shield"])
+
+		var delta_vec: Vector2 = target_pt - player.global_position
+		_set_simulated_move_inputs(
+			delta_vec.x < -4.0,
+			delta_vec.x > 4.0,
+			delta_vec.y < -4.0,
+			delta_vec.y > 4.0
+		)
+		player.set_shield_held(want_shield)
+		if want_shield:
+			shield_hold_frames += 1
+
+		var prev_pos: Vector2 = player.global_position
+		player._physics_process(dt)
+		var step_speed: float = prev_pos.distance_to(player.global_position) / dt
+		max_observed_speed = maxf(max_observed_speed, step_speed)
+		boss_level.simulate_physics(dt)
+
+	# Always release all simulated inputs before assertions so no state leaks
+	_release_all_simulated_inputs()
+	player.set_shield_held(false)
+
+	print("[PHASE7-8 KEYBOARD BOT] final_t=%.2fs hp=%d/%d hits=%d parries=%d max_speed=%.1fpx/s shield_frames=%d hit_log=%s" % [
+		boss_level.elapsed_time, player.current_hp, player.MAX_HP, hits_taken[0],
+		int(boss_level.total_parries), max_observed_speed, shield_hold_frames, ", ".join(hit_log),
+	])
+
+	assert_false(player.use_target_position, "Keyboard survival bot must keep use_target_position == false")
+	assert_true(
+		max_observed_speed <= player.MOVE_SPEED + 2.0,
+		"Keyboard survival bot speed %.1f px/s must not exceed MOVE_SPEED (%.1f px/s)" % [max_observed_speed, player.MOVE_SPEED]
+	)
+	assert_true(
+		boss_level.elapsed_time >= 120.0 - 0.001,
+		"Keyboard player must survive to victory at 120.0s (died at %.2fs, hits: %s)" % [boss_level.elapsed_time, ", ".join(hit_log)]
+	)
+	assert_true(player.current_hp >= 1, "Keyboard player must finish alive with >= 1 HP (got %d)" % player.current_hp)
+	assert_false(boss_level.is_level_running, "BossLevel must finish cleanly at victory (120.0s)")
+	assert_true(bool(boss._shattered), "Boss must shatter on keyboard-player victory")
+
+	GameManager.set_state(GameManager.State.MENU)
+	GameManager.set_difficulty(backup_diff)
+	GameManager.save_data = backup_save
+	GameManager.save_game()
+
+
+func test_boss_parry_under_overlap_and_tether_fixes() -> void:
+	var backup_save: SaveData = GameManager.save_data
+	var backup_diff: int = GameManager.selected_difficulty
+	GameManager.save_data = SaveData.new()
+
+	var boss_level: Node2D = _spawn(BOSS_LEVEL_SCENE) as Node2D
+	var beam_container: Node2D = boss_level.get_node("BeamContainer") as Node2D
+	var boss: Area2D = boss_level.get_node("BossContainer/Boss") as Area2D
+	var player: CharacterBody2D = boss_level.get_node("Player") as CharacterBody2D
+
+	# (a) Blocking a non-parryable bullet < 0.12s before BossGlitchWave must still trigger parry + SHATTER_PURGE
+	boss_level.elapsed_time = 2.0
+	boss._elapsed_time = 2.0
+	boss_level.total_parries = 0
+	boss.total_parries = 0
+	boss_level._parry_cooldown = 0.0
+	player.global_position = Vector2(576.0, 460.0)
+	player.shield_energy = 0.70
+	player.shield_exhausted = false
+	player.shield_block_feedback_timer = 0.0
+	player.set_shield_held(true)
+	player._physics_process(0.016)
+	assert_true(player.is_shielding, "Player must raise shield before overlapped bullet + glitch wave test")
+
+	# Non-parryable bullet strikes shield first and arms the 0.12s SHIELD_BLOCK_FEEDBACK_COOLDOWN
+	boss_level.boss_bullet_manager.spawn_bullet(player.global_position - Vector2(4.0, 0.0), Vector2.RIGHT, 240.0, 6.5, 4.0, &"orb")
+	boss_level.boss_bullet_manager.simulate_physics(0.016, Vector2(1152.0, 648.0), player)
+	assert_gt(player.shield_block_feedback_timer, 0.05, "Blocking non-parryable bullet must start shield_block_feedback_timer cooldown")
+	assert_eq(int(boss_level.total_parries), 0, "Non-parryable bullet must not trigger a parry")
+
+	# Advance only 0.02s (< 0.12s cooldown), then hit shield with a parryable BossGlitchWave
+	player._physics_process(0.02)
+	assert_gt(player.shield_block_feedback_timer, 0.02, "Feedback cooldown must still be active (<0.12s) when GlitchWave hits")
+	var glitch_wave: BossGlitchWave = BossGlitchWave.new()
+	beam_container.add_child(glitch_wave)
+	glitch_wave.configure(Vector2(1152.0, 648.0), Vector2.RIGHT, 0.01, 1.50, 74.0, 0.5, 160.0, 0.0, true)
+	glitch_wave.simulate_physics(0.02, null)
+	assert_true(glitch_wave.is_hazard_active, "BossGlitchWave must be active")
+	player.global_position = Vector2(glitch_wave._current_sweep, 70.0)
+	glitch_wave.simulate_physics(0.016, player)
+
+	assert_eq(int(boss_level.total_parries), 1, "Parryable GlitchWave <0.12s after non-parryable bullet block must still trigger parry")
+	assert_eq(int(boss.total_parries), 1, "Boss total_parries must increment to 1 on overlapped GlitchWave parry")
+	assert_false(glitch_wave.is_hazard_active, "Parried GlitchWave must deactivate immediately even during block feedback cooldown")
+	assert_eq(int(glitch_wave.current_phase), int(BossGlitchWave.Phase.SHATTER_PURGE), "Parried GlitchWave must enter SHATTER_PURGE")
+	glitch_wave.queue_free()
+
+	# (b) BossConstants.apply_player_hit and Boss contacts (body/hand/tether) must overwrite stale &"glitch_wave" kind
+	player.set_shield_held(false)
+	player._physics_process(0.016)
+	player.hit_invincibility_timer = 1.0
+	player.set_meta(&"last_hit_hazard_kind", &"glitch_wave")
+	BossConstants.apply_player_hit(player, false, &"")
+	assert_eq(StringName(player.get_meta(&"last_hit_hazard_kind", &"stale")), &"", "apply_player_hit with empty kind must still overwrite stale glitch_wave metadata")
+
+	boss.set_phase_state(7, boss.ActingState.EXHAUSTED_PANTING, boss.BossForm.STOMP_COLOSSUS, Vector2(576.0, 152.0), 8.0)
+	boss.simulate_boss(0.60, 91.0, Vector2(1152.0, 648.0), null)
+	player.set_meta(&"last_hit_hazard_kind", &"glitch_wave")
+	player.global_position = boss.global_position
+	boss.simulate_boss(0.016, 91.02, Vector2(1152.0, 648.0), player)
+	assert_eq(StringName(player.get_meta(&"last_hit_hazard_kind", &"")), &"boss_body", "Boss body contact must overwrite last_hit_hazard_kind with &'boss_body'")
+
+	player.set_meta(&"last_hit_hazard_kind", &"glitch_wave")
+	player.global_position = boss.left_hand.global_position
+	boss.simulate_boss(0.016, 91.04, Vector2(1152.0, 648.0), player)
+	assert_eq(StringName(player.get_meta(&"last_hit_hazard_kind", &"")), &"boss_hand", "Boss hand contact must overwrite last_hit_hazard_kind with &'boss_hand'")
+
+	boss.command_tether_sweep(340.0, 490.0, 0.0, 0.80)
+	boss.simulate_boss(0.016, 91.06, Vector2(1152.0, 648.0), null)
+	assert_true(bool(boss._tether_active), "Zero-telegraph tether sweep must activate immediately")
+	player.set_meta(&"last_hit_hazard_kind", &"glitch_wave")
+	player.global_position = Vector2(576.0, boss.left_hand.global_position.y)
+	boss.simulate_boss(0.016, 91.08, Vector2(1152.0, 648.0), player)
+	assert_eq(StringName(player.get_meta(&"last_hit_hazard_kind", &"")), &"boss_tether", "Boss tether contact must overwrite last_hit_hazard_kind with &'boss_tether'")
+
+	# (c) Phase 6->7 emerging hands (retract_blend > 0.45) and staging/windup/recovering hands must be non-hazardous
+	boss.set_phase_state(6, boss.ActingState.HOLLOW_REBIRTH, boss.BossForm.TRIPLE_CANNON, Vector2(576.0, 324.0), 8.0)
+	for _i: int in range(12):
+		boss.simulate_boss(0.05, 80.0, Vector2(1152.0, 648.0), null)
+	assert_true(float(boss._hands[0]["retract_blend"]) > 0.80, "Phase 6 TRIPLE_CANNON must retract hands")
+
+	boss.set_phase_state(7, boss.ActingState.EXHAUSTED_PANTING, boss.BossForm.STOMP_COLOSSUS, Vector2(576.0, 168.0), 6.8)
+	assert_true(float(boss._hands[0]["retract_blend"]) > 0.45, "Hands must still be retracted immediately on Phase 6->7 transition")
+	assert_false(bool(boss.is_left_hand_hazardous) or bool(boss.is_right_hand_hazardous), "Emerging Phase 6->7 hands with retract_blend > 0.45 must be non-hazardous")
+	assert_true(boss.left_hand_collision.disabled and boss.right_hand_collision.disabled, "Emerging Phase 6->7 hand collisions must be disabled")
+
+	for _i: int in range(14):
+		boss.simulate_boss(0.05, 90.8, Vector2(1152.0, 648.0), null)
+	assert_true(bool(boss.is_left_hand_hazardous) and bool(boss.is_right_hand_hazardous), "Fully emerged idle hands must become hazardous again")
+
+	# WALL_SLAM_WINDUP -> WALL_SLAM_STRIKE -> WALL_SLAM_RECOVER
+	boss.command_wall_slam(true, &"left", 324.0, 0.50, 0.16, 0.88)
+	boss.simulate_boss(0.05, 91.0, Vector2(1152.0, 648.0), null)
+	assert_eq(int(boss.get_hand_action(true)), int(boss.HandAction.WALL_SLAM_WINDUP), "Left hand must be in WALL_SLAM_WINDUP")
+	assert_false(bool(boss.is_left_hand_hazardous), "WALL_SLAM_WINDUP hand must be non-hazardous")
+	assert_true(boss.left_hand_collision.disabled, "WALL_SLAM_WINDUP collision must be disabled")
+	boss.simulate_boss(0.47, 91.47, Vector2(1152.0, 648.0), null)
+	assert_eq(int(boss.get_hand_action(true)), int(boss.HandAction.WALL_SLAM_STRIKE), "Left hand must enter WALL_SLAM_STRIKE")
+	assert_true(bool(boss.is_left_hand_hazardous), "WALL_SLAM_STRIKE hand must be hazardous")
+	boss.simulate_boss(0.18, 91.65, Vector2(1152.0, 648.0), null)
+	assert_eq(int(boss.get_hand_action(true)), int(boss.HandAction.WALL_SLAM_RECOVER), "Left hand must enter WALL_SLAM_RECOVER")
+	assert_false(bool(boss.is_left_hand_hazardous), "WALL_SLAM_RECOVER hand must be non-hazardous")
+
+	# PINCER_TELEGRAPH -> PINCER_CLAP -> return_grace -> resting IDLE
+	boss.command_pincer(Vector2(576.0, 360.0), 0.50, 0.18)
+	boss.simulate_boss(0.05, 92.0, Vector2(1152.0, 648.0), null)
+	assert_eq(int(boss.get_hand_action(true)), int(boss.HandAction.PINCER_TELEGRAPH), "Hands must enter PINCER_TELEGRAPH")
+	assert_false(bool(boss.is_left_hand_hazardous) or bool(boss.is_right_hand_hazardous), "PINCER_TELEGRAPH hands must be non-hazardous")
+	boss.simulate_boss(0.46, 92.46, Vector2(1152.0, 648.0), null)
+	assert_eq(int(boss.get_hand_action(true)), int(boss.HandAction.PINCER_CLAP), "Hands must enter PINCER_CLAP")
+	assert_true(bool(boss.is_left_hand_hazardous) and bool(boss.is_right_hand_hazardous), "Active PINCER_CLAP hands must be hazardous")
+	boss.simulate_boss(0.20, 92.66, Vector2(1152.0, 648.0), null)
+	assert_eq(int(boss.get_hand_action(true)), int(boss.HandAction.IDLE), "Finished PINCER_CLAP must return hands to IDLE")
+	assert_gt(float(boss._hands[0]["return_grace"]), 0.0, "Finished PINCER_CLAP must grant return_grace")
+	assert_false(bool(boss.is_left_hand_hazardous) or bool(boss.is_right_hand_hazardous), "Post-PINCER_CLAP returning hands must stay non-hazardous during return_grace")
+	boss.simulate_boss(0.45, 93.11, Vector2(1152.0, 648.0), null)
+	assert_true(bool(boss.is_left_hand_hazardous) and bool(boss.is_right_hand_hazardous), "Resting IDLE hands must become hazardous again once return_grace expires")
+
+	# DASH_ACTIVE -> return_grace -> resting IDLE
+	boss.command_hand_dash(true, Vector2(110.0, 480.0), Vector2(1042.0, 480.0), 0.20, 0.30, 1)
+	boss.simulate_boss(0.25, 93.36, Vector2(1152.0, 648.0), null)
+	assert_eq(int(boss.get_hand_action(true)), int(boss.HandAction.DASH_ACTIVE), "Left hand must enter DASH_ACTIVE")
+	assert_true(bool(boss.is_left_hand_hazardous), "Active DASH_ACTIVE hand must be hazardous")
+	boss.simulate_boss(0.30, 93.66, Vector2(1152.0, 648.0), null)
+	assert_eq(int(boss.get_hand_action(true)), int(boss.HandAction.IDLE), "Finished DASH_ACTIVE must return hand to IDLE")
+	assert_gt(float(boss._hands[0]["return_grace"]), 0.0, "Finished DASH_ACTIVE must grant return_grace")
+	assert_false(bool(boss.is_left_hand_hazardous), "Post-DASH_ACTIVE returning hand must stay non-hazardous during return_grace")
+	boss.simulate_boss(0.45, 94.11, Vector2(1152.0, 648.0), null)
+	assert_true(bool(boss.is_left_hand_hazardous), "Resting IDLE hand must become hazardous again after DASH_ACTIVE return_grace expires")
+
+	# Phase 8 transition grace must make both body & hands non-hazardous during _teleport_grace_timer > 0.0, then re-enable
+	boss.set_phase_state(8, boss.ActingState.TEMPLE_CLUTCH_PANIC, boss.BossForm.OVERDRIVE_PANIC, Vector2(576.0, 560.0), 50.0)
+	assert_gt(float(boss._teleport_grace_timer), 0.0, "Phase 8 large reposition must activate _teleport_grace_timer")
+	assert_false(bool(boss.is_body_hazardous), "Phase 8 transition grace must keep body non-hazardous")
+	assert_false(bool(boss.is_left_hand_hazardous) or bool(boss.is_right_hand_hazardous), "Phase 8 transition grace must keep both hands non-hazardous")
+	assert_true(boss.left_hand_collision.disabled and boss.right_hand_collision.disabled, "Phase 8 transition grace must disable hand collisions")
+	boss.simulate_boss(0.50, 106.0, Vector2(1152.0, 648.0), null)
+	assert_true(bool(boss.is_body_hazardous) and bool(boss.is_left_hand_hazardous) and bool(boss.is_right_hand_hazardous), "Body and hands must re-enable after Phase 8 transition grace expires")
+
+	# Pre-active TETHER_SWEEP + (d) zero 1-frame phantom sweep from stale prev_pos & active tether hands parryable
+	boss._hands[0]["pos"] = Vector2(200.0, 60.0)
+	boss._hands[0]["prev_pos"] = Vector2(200.0, 60.0)
+	boss._hands[1]["pos"] = Vector2(950.0, 60.0)
+	boss._hands[1]["prev_pos"] = Vector2(950.0, 60.0)
+	boss.command_tether_sweep(260.0, 480.0, 0.50, 0.80)
+	boss.simulate_boss(0.25, 106.25, Vector2(1152.0, 648.0), null)
+	assert_false(bool(boss._tether_active), "Pre-active TETHER_SWEEP must keep _tether_active == false")
+	assert_false(bool(boss.is_left_hand_hazardous) or bool(boss.is_right_hand_hazardous), "Pre-active TETHER_SWEEP hands must be non-hazardous")
+
+	# Exact-boundary transition (0.25 + 0.25 == 0.50 -> ov == 0.0) with unshielded player in stale corridor y=130
+	player.current_hp = 3
+	player.hit_invincibility_timer = 0.0
+	player.set_shield_held(false)
+	player._physics_process(0.016)
+	player.global_position = Vector2(576.0, 130.0)
+	boss.simulate_boss(0.25, 106.50, Vector2(1152.0, 648.0), player)
+	assert_true(bool(boss._tether_active), "TETHER_SWEEP must activate at exact telegraph boundary")
+	assert_eq(player.current_hp, 3, "Exact-boundary TETHER_SWEEP activation must not cause a 1-frame phantom sweep hit at y=130")
+	assert_true(Vector2(boss._hands[0]["prev_pos"]).y >= 259.0, "TETHER_SWEEP hand prev_pos.y must reset to stage_pos.y (260) on activation")
+
+	# Active tether hands must be parryable
+	assert_true(boss._is_hand_action_parryable(0) and boss._is_hand_action_parryable(1), "Active TETHER_SWEEP hands must be parryable")
+	boss_level._parry_cooldown = 0.0
+	boss_level.elapsed_time = 106.55
+	var parries_before_tether_hand: int = int(boss_level.total_parries)
+	player.shield_energy = player.SHIELD_MAX_ENERGY
+	player.shield_exhausted = false
+	player.shield_block_feedback_timer = 0.0
+	player.set_shield_held(true)
+	player._physics_process(0.016)
+	player.global_position = boss.left_hand.global_position
+	boss.simulate_boss(0.016, 106.56, Vector2(1152.0, 648.0), player)
+	assert_eq(int(boss_level.total_parries), parries_before_tether_hand + 1, "Shielding on active TETHER_SWEEP hand must trigger timed parry")
+
+	GameManager.set_state(GameManager.State.MENU)
+	GameManager.set_difficulty(backup_diff)
+	GameManager.save_data = backup_save
+	GameManager.save_game()
+
+
+func _advance_boss_level_safely(boss_level: Node2D, player: CharacterBody2D, target_time: float, dt: float) -> void:
+	while boss_level.is_level_running and boss_level.elapsed_time + 0.0001 < target_time:
+		var step: float = minf(dt, target_time - boss_level.elapsed_time)
+		player.global_position = Vector2(100.0, 580.0)
+		player.hit_invincibility_timer = 1.0
+		boss_level.simulate_physics(step)
+
+
+func _snapshot_active_spatial_hazards(boss_level: Node2D, boss: Area2D) -> Dictionary:
+	var spatial_count: int = 0
+	var active_hex_centers: PackedVector2Array = PackedVector2Array()
+	if boss_level.boss_hex_grid != null and bool(boss_level.boss_hex_grid.is_hazard_active):
+		spatial_count += 1
+		var hex_grid: BossHexGrid = boss_level.boss_hex_grid
+		for idx: int in hex_grid._busy_indices:
+			var c: Dictionary = hex_grid._cells[idx]
+			if int(c["state"]) == BossHexGrid.TileState.ACTIVE:
+				active_hex_centers.append(Vector2(c["pos"]))
+
+	var beams: Array[BossSweepingBeam] = []
+	var rings: Array[BossShockwaveRing] = []
+	var tidal_rects: Array[Rect2] = []
+	var piston_rects: Array[Rect2] = []
+	var spike_rings: Array[BossSpikeRing] = []
+	var glitch_waves: Array[BossGlitchWave] = []
+
+	var beam_container: Node2D = boss_level.get_node_or_null("BeamContainer") as Node2D
+	if beam_container != null:
+		for child: Node in beam_container.get_children():
+			if not is_instance_valid(child) or child.is_queued_for_deletion():
+				continue
+			if not ("is_hazard_active" in child) or not bool(child.is_hazard_active):
+				continue
+			spatial_count += 1
+			if child is BossSweepingBeam:
+				beams.append(child as BossSweepingBeam)
+			elif child is BossShockwaveRing:
+				var sw: BossShockwaveRing = child as BossShockwaveRing
+				if sw.wave_mode == BossShockwaveRing.WaveMode.RING:
+					rings.append(sw)
+				else:
+					for r: Rect2 in sw._get_tidal_rects(sw.current_wave_coord):
+						tidal_rects.append(r)
+			elif child is BossPistonWall:
+				var pw: BossPistonWall = child as BossPistonWall
+				if pw.current_extension > 0.5:
+					piston_rects.append(pw.get_piston_rect())
+			elif child is BossSpikeRing:
+				spike_rings.append(child as BossSpikeRing)
+			elif child is BossGlitchWave:
+				glitch_waves.append(child as BossGlitchWave)
+
+	return {
+		"spatial_count": spatial_count,
+		"hex_centers": active_hex_centers,
+		"beams": beams,
+		"rings": rings,
+		"tidal_rects": tidal_rects,
+		"piston_rects": piston_rects,
+		"spike_rings": spike_rings,
+		"glitch_waves": glitch_waves,
+		"boss": boss,
+	}
+
+
+func _is_point_in_spatial_snapshot(pt: Vector2, player_r: float, snap: Dictionary, ignore_parryable_rings: bool) -> bool:
+	var hex_centers: PackedVector2Array = snap["hex_centers"]
+	var eff_hex_r: float = BossHexGrid.HEX_RADIUS * 0.92
+	for h_pos: Vector2 in hex_centers:
+		if BossConstants.circle_flat_hex_overlap(pt - h_pos, eff_hex_r, player_r):
+			return true
+
+	for beam: BossSweepingBeam in snap["beams"]:
+		var half_len: float = beam.beam_length * 0.5
+		var half_w: float = beam.beam_width * 0.5
+		var rel: Vector2 = pt - beam.global_position
+		for i: int in range(beam.beam_count):
+			var dir: Vector2 = Vector2.from_angle(beam.get_spoke_angle(i))
+			if absf(rel.dot(dir)) <= half_len + player_r and absf(rel.cross(dir)) <= half_w + player_r:
+				return true
+
+	for rect: Rect2 in snap["tidal_rects"]:
+		if BossConstants.circle_rect_overlap(pt, player_r, rect):
+			return true
+
+	for rect: Rect2 in snap["piston_rects"]:
+		if BossConstants.circle_rect_overlap(pt, player_r, rect):
+			return true
+
+	for sw: BossShockwaveRing in snap["rings"]:
+		if ignore_parryable_rings and sw.parryable:
+			continue
+		if absf(pt.distance_to(sw.global_position) - sw.current_radius) <= sw._thickness * 0.5 + player_r:
+			return true
+
+	for sr: BossSpikeRing in snap["spike_rings"]:
+		var hit_r: float = sr._spike_radius * 0.88 + player_r
+		var hit_r_sq: float = hit_r * hit_r
+		for s_pos: Vector2 in sr._spike_world_positions:
+			if pt.distance_squared_to(s_pos) <= hit_r_sq:
+				return true
+
+	for gw: BossGlitchWave in snap["glitch_waves"]:
+		var half_t: float = gw._wave_thickness * 0.5
+		var half_gap: float = gw._gap_size * 0.5
+		var s_coord: float = pt.dot(gw._sweep_dir)
+		if absf(s_coord - gw._current_sweep) <= half_t + player_r:
+			var p_coord: float = pt.dot(gw._perp_dir)
+			if absf(p_coord - gw._current_gap_perp) > maxf(half_gap - player_r, 0.0):
+				return true
+
+	var boss: Area2D = snap["boss"] as Area2D
+	if boss != null and is_instance_valid(boss):
+		if bool(boss.is_body_hazardous):
+			var cb: Vector2 = Geometry2D.get_closest_point_to_segment(pt, Vector2(boss._lunge["prev"]), boss.global_position) if bool(boss._lunge["swept"]) else boss.global_position
+			if cb.distance_to(pt) <= float(boss.BODY_RADIUS) + player_r:
+				return true
+		for idx: int in range(2):
+			if not (bool(boss.is_left_hand_hazardous) if idx == 0 else bool(boss.is_right_hand_hazardous)):
+				continue
+			var h: Dictionary = boss._hands[idx]
+			var hp: Vector2 = boss.left_hand.global_position if idx == 0 else boss.right_hand.global_position
+			var ch: Vector2 = Geometry2D.get_closest_point_to_segment(pt, Vector2(h["prev_pos"]), hp) if bool(h["swept"]) else hp
+			if ch.distance_to(pt) <= float(boss.HAND_RADIUS) + player_r:
+				return true
+		if bool(boss._tether_active):
+			var lp: Vector2 = boss.left_hand.global_position
+			var rp: Vector2 = boss.right_hand.global_position
+			var tether_r: float = 5.0 + player_r
+			var hit_t: bool = Geometry2D.get_closest_point_to_segment(pt, lp, rp).distance_to(pt) <= tether_r
+			if not hit_t and pt.x >= minf(lp.x, rp.x) - player_r and pt.x <= maxf(lp.x, rp.x) + player_r:
+				var prev_y: float = Vector2(boss._hands[0]["prev_pos"]).y
+				hit_t = pt.y >= minf(prev_y, lp.y) - tether_r and pt.y <= maxf(prev_y, lp.y) + tether_r
+			if hit_t:
+				return true
+
+	return false
+
+
+func _compute_keyboard_bot_plan(
+	boss_level: Node2D,
+	boss: Area2D,
+	player: CharacterBody2D,
+	cand_pts: PackedVector2Array,
+	player_r: float,
+	dt: float
+) -> Dictionary:
+	var p_pos: Vector2 = player.global_position
+	var margin_r: float = player_r + 12.0
+	var active_snap: Dictionary = _snapshot_active_spatial_hazards(boss_level, boss)
+
+	# Collect active + telegraphing hazards once per frame for lookahead steering
+	var hex_grid: BossHexGrid = boss_level.boss_hex_grid
+	var tele_hex_centers: PackedVector2Array = PackedVector2Array()
+	var eval_pts: PackedVector2Array = cand_pts.duplicate()
+	eval_pts.append(p_pos)
+	if hex_grid != null and not hex_grid._busy_indices.is_empty():
+		for c: Dictionary in hex_grid._cells:
+			var st: int = int(c["state"])
+			if st == BossHexGrid.TileState.TELEGRAPH or (st == BossHexGrid.TileState.DELAYED and float(c["delay"]) < 0.35):
+				tele_hex_centers.append(Vector2(c["pos"]))
+			elif st == BossHexGrid.TileState.IDLE:
+				var hp: Vector2 = Vector2(c["pos"])
+				if hp.x >= 36.0 and hp.x <= 1116.0 and hp.y >= 36.0 and hp.y <= 612.0:
+					eval_pts.append(hp)
+
+	var all_beams: Array[BossSweepingBeam] = []
+	var all_rings: Array[BossShockwaveRing] = []
+	var all_tidals: Array[BossShockwaveRing] = []
+	var all_pistons: Array[BossPistonWall] = []
+	var all_spikes: Array[BossSpikeRing] = []
+	var all_glitches: Array[BossGlitchWave] = []
+	var beam_container: Node2D = boss_level.get_node_or_null("BeamContainer") as Node2D
+	if beam_container != null:
+		for child: Node in beam_container.get_children():
+			if not is_instance_valid(child) or child.is_queued_for_deletion():
+				continue
+			if child is BossSweepingBeam:
+				var bm: BossSweepingBeam = child as BossSweepingBeam
+				if bm.current_phase == BossSweepingBeam.Phase.TELEGRAPH or bm.current_phase == BossSweepingBeam.Phase.ACTIVE:
+					all_beams.append(bm)
+			elif child is BossShockwaveRing:
+				var sw: BossShockwaveRing = child as BossShockwaveRing
+				if sw.current_phase == BossShockwaveRing.Phase.TELEGRAPH or sw.current_phase == BossShockwaveRing.Phase.ACTIVE:
+					if sw.wave_mode == BossShockwaveRing.WaveMode.RING:
+						all_rings.append(sw)
+					else:
+						all_tidals.append(sw)
+			elif child is BossPistonWall:
+				var pw: BossPistonWall = child as BossPistonWall
+				if pw.current_phase == BossPistonWall.Phase.TELEGRAPH or pw.current_phase == BossPistonWall.Phase.SLAM or pw.current_phase == BossPistonWall.Phase.HOLD:
+					all_pistons.append(pw)
+			elif child is BossSpikeRing:
+				var sr: BossSpikeRing = child as BossSpikeRing
+				if sr.current_phase == BossSpikeRing.Phase.TELEGRAPH or sr.current_phase == BossSpikeRing.Phase.ACTIVE:
+					all_spikes.append(sr)
+			elif child is BossGlitchWave:
+				var gw: BossGlitchWave = child as BossGlitchWave
+				if gw.current_phase == BossGlitchWave.Phase.TELEGRAPH or gw.current_phase == BossGlitchWave.Phase.ACTIVE:
+					all_glitches.append(gw)
+
+	var bullets: Array[Dictionary] = boss_level.boss_bullet_manager._bullets if boss_level.boss_bullet_manager != null else []
+
+	# Shield/parry trigger: raise shield right before an expanding ShockwaveRing or unavoidable immediate impact
+	var want_shield: bool = false
+	for sw: BossShockwaveRing in all_rings:
+		if not sw.is_hazard_active:
+			continue
+		var ring_speed: float = (sw._end_radius - sw._start_radius) / maxf(sw._travel_time, 0.05)
+		var dist_p: float = p_pos.distance_to(sw.global_position)
+		var gap_r: float = dist_p - sw.current_radius
+		var band: float = sw._thickness * 0.5 + player_r
+		if gap_r >= -band - 4.0 and gap_r <= band + ring_speed * (dt * 3.0):
+			want_shield = true
+			break
+
+	if not want_shield:
+		for b: Dictionary in bullets:
+			var b_pos: Vector2 = Vector2(b["pos"])
+			var b_vel: Vector2 = Vector2(b["vel"])
+			var b_next: Vector2 = b_pos + b_vel * (dt * 2.2)
+			var hit_r: float = float(b["radius"]) + player_r + 5.0
+			if Geometry2D.get_closest_point_to_segment(p_pos, b_pos, b_next).distance_to(p_pos) <= hit_r:
+				want_shield = true
+				break
+
+	if not want_shield and _is_point_in_spatial_snapshot(p_pos, player_r + 2.0, active_snap, true):
+		want_shield = true
+
+	var eff_hex_r: float = BossHexGrid.HEX_RADIUS * 0.92
+	var hex_margin_r: float = player_r + 5.0
+	var best_pt: Vector2 = p_pos
+	var best_cost: float = INF
+
+	for pt: Vector2 in eval_pts:
+		var cost: float = 0.0
+
+		# 1. Active spatial hazards (highest priority; tight margin for stationary hexes)
+		if _is_point_in_spatial_snapshot(pt, player_r + 5.0, active_snap, true):
+			cost += 1200.0
+		elif _is_point_in_spatial_snapshot(pt, margin_r, active_snap, true):
+			cost += 240.0
+
+		# 2. Telegraphed hex tiles (stationary lattice -> 5px margin preserves 44px CHECKER safe pockets)
+		for h_pos: Vector2 in tele_hex_centers:
+			if BossConstants.circle_flat_hex_overlap(pt - h_pos, eff_hex_r, hex_margin_r):
+				cost += 420.0
+				break
+
+		# 3. Beams (telegraph + forward angular sweep wedge)
+		for bm: BossSweepingBeam in all_beams:
+			var rel: Vector2 = pt - bm.global_position
+			var half_w: float = bm.beam_width * 0.5 + margin_r + 14.0
+			var look_angles: Array[float] = [bm.current_angle]
+			if absf(bm._angular_speed) > 0.01:
+				look_angles.append(bm.current_angle + bm._angular_speed * 0.30)
+				look_angles.append(bm.current_angle + bm._angular_speed * 0.65)
+				look_angles.append(bm.current_angle + bm._angular_speed * 1.00)
+			var hit_bm: bool = false
+			for base_a: float in look_angles:
+				for si: int in range(bm.beam_count):
+					var dir: Vector2 = Vector2.from_angle(base_a + PI * float(si) / float(bm.beam_count))
+					if absf(rel.cross(dir)) <= half_w:
+						hit_bm = true
+						break
+				if hit_bm:
+					break
+			if hit_bm:
+				cost += 540.0 if bm.is_hazard_active else 380.0
+
+		# 4. Pistons (full reach target rect during telegraph/active)
+		for pw: BossPistonWall in all_pistons:
+			if BossConstants.circle_rect_overlap(pt, margin_r, pw.get_piston_rect(pw._reach)):
+				cost += 320.0
+
+		# 5. Tidal waves (align into safe gap band before wave passes pt)
+		for tw: BossShockwaveRing in all_tidals:
+			var is_h: bool = (tw._side == &"left" or tw._side == &"right")
+			var pt_sweep: float = pt.x if is_h else pt.y
+			var pt_perp: float = pt.y if is_h else pt.x
+			var moving_pos: bool = (tw._end_coord > tw._start_coord)
+			var wave_ahead: bool = (pt_sweep >= tw.current_wave_coord - tw._thickness) if moving_pos else (pt_sweep <= tw.current_wave_coord + tw._thickness)
+			if wave_ahead:
+				var half_safe: float = maxf(tw._gap_size * 0.5 - margin_r - 12.0, 20.0)
+				var off_gap: float = absf(pt_perp - tw._gap_center)
+				if off_gap > half_safe:
+					cost += 480.0 + (off_gap - half_safe) * 1.2
+
+		# 6. Glitch waves (align into exact sinusoidal corridor before wave passes pt)
+		for gw: BossGlitchWave in all_glitches:
+			var s_pt: float = pt.dot(gw._sweep_dir)
+			var p_pt: float = pt.dot(gw._perp_dir)
+			if s_pt >= gw._current_sweep - gw._wave_thickness:
+				var gap_here: float = gw._eval_gap_perp_at_sweep(s_pt)
+				var half_safe: float = maxf(gw._gap_size * 0.5 - margin_r - 16.0, 20.0)
+				var off_gap: float = absf(p_pt - gap_here)
+				if off_gap > half_safe:
+					cost += 540.0 + (off_gap - half_safe) * 1.4
+
+		# 7. Orbit spike ring: stay cleanly outside or well inside the ring band
+		for sr: BossSpikeRing in all_spikes:
+			if sr.ring_mode == BossSpikeRing.RingMode.ORBIT_RING:
+				var r_pt: float = pt.distance_to(sr.global_position)
+				var r_lo: float = minf(sr._start_radius, sr._end_radius) - sr._spike_radius - margin_r - 10.0
+				var r_hi: float = maxf(sr._start_radius, sr._end_radius) + sr._spike_radius + margin_r + 10.0
+				if r_pt >= r_lo and r_pt <= r_hi:
+					cost += 360.0
+
+		# 8. Boss body clearance & telegraphed hand attacks (dash, pincer, wall slam, tether)
+		if boss != null and is_instance_valid(boss):
+			var body_d: float = pt.distance_to(boss.global_position)
+			if body_d < float(boss.BODY_RADIUS) + margin_r + 32.0:
+				cost += 380.0
+			for idx: int in range(2):
+				var h: Dictionary = boss._hands[idx]
+				var act: int = int(h["action"])
+				if act == int(boss.HandAction.DASH_TELEGRAPH) or act == int(boss.HandAction.DASH_ACTIVE):
+					var seg_d: float = Geometry2D.get_closest_point_to_segment(pt, Vector2(h["stage_pos"]), Vector2(h["target_pos"])).distance_to(pt)
+					if seg_d <= float(boss.HAND_RADIUS) + margin_r + 18.0:
+						cost += 420.0
+				elif act == int(boss.HandAction.PINCER_TELEGRAPH) or act == int(boss.HandAction.PINCER_CLAP):
+					var seg_p: float = Geometry2D.get_closest_point_to_segment(pt, Vector2(h["stage_pos"]), Vector2(h["target_pos"])).distance_to(pt)
+					if seg_p <= float(boss.HAND_RADIUS) + margin_r + 22.0:
+						cost += 420.0
+				elif act == int(boss.HandAction.WALL_SLAM_WINDUP) or act == int(boss.HandAction.WALL_SLAM_STRIKE):
+					var seg_w: float = Geometry2D.get_closest_point_to_segment(pt, Vector2(h["stage_pos"]), Vector2(h["target_pos"])).distance_to(pt)
+					if seg_w <= float(boss.HAND_RADIUS) + margin_r + 18.0:
+						cost += 360.0
+				elif act == int(boss.HandAction.TETHER_SWEEP):
+					var lx: float = Vector2(boss._hands[0]["stage_pos"]).x
+					var rx: float = Vector2(boss._hands[1]["stage_pos"]).x
+					var sy: float = float(h["tether_start_y"])
+					var ey: float = float(h["tether_end_y"])
+					if pt.x >= lx - margin_r - 16.0 and pt.x <= rx + margin_r + 16.0 and pt.y >= minf(sy, ey) - margin_r - 18.0 and pt.y <= maxf(sy, ey) + margin_r + 18.0:
+						cost += 460.0
+
+		# 9. Bullet trajectory lookahead (0.0s .. 0.45s)
+		for b: Dictionary in bullets:
+			var b_pos: Vector2 = Vector2(b["pos"])
+			var b_vel: Vector2 = Vector2(b["vel"])
+			var b_end: Vector2 = b_pos + b_vel * 0.45
+			var b_r: float = float(b["radius"]) + margin_r + 6.0
+			if Geometry2D.get_closest_point_to_segment(pt, b_pos, b_end).distance_to(pt) <= b_r:
+				cost += 220.0
+
+		# 10. Mild travel-distance & edge-margin tiebreakers for smooth keyboard steering
+		cost += pt.distance_to(p_pos) * 0.08
+		if pt.x < 70.0 or pt.x > 1082.0 or pt.y < 70.0 or pt.y > 578.0:
+			cost += 12.0
+
+		if cost < best_cost:
+			best_cost = cost
+			best_pt = pt
+
+	return {"target": best_pt, "shield": want_shield}
+
+
+func _set_simulated_move_inputs(left: bool, right: bool, up: bool, down: bool) -> void:
+	if left:
+		Input.action_press("move_left")
+	else:
+		Input.action_release("move_left")
+	if right:
+		Input.action_press("move_right")
+	else:
+		Input.action_release("move_right")
+	if up:
+		Input.action_press("move_up")
+	else:
+		Input.action_release("move_up")
+	if down:
+		Input.action_press("move_down")
+	else:
+		Input.action_release("move_down")
+
+
+func _release_all_simulated_inputs() -> void:
+	for action: String in ["move_left", "move_right", "move_up", "move_down", "shield"]:
+		Input.action_release(action)
+
+
 func _count_active_boss_hazards(boss_level: Node2D) -> int:
 	var count: int = 0
 	if boss_level.boss_hex_grid != null and bool(boss_level.boss_hex_grid.is_hazard_active):
